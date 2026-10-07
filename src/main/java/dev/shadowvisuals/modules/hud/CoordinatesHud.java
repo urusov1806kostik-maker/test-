@@ -1,0 +1,52 @@
+package dev.shadowvisuals.modules.hud;
+
+import java.util.Locale;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.level.Level;
+
+import dev.shadowvisuals.hud.HudAnchor;
+import dev.shadowvisuals.hud.HudContext;
+import dev.shadowvisuals.hud.InfoHudModule;
+import dev.shadowvisuals.setting.BooleanSetting;
+import dev.shadowvisuals.ui.Icon;
+
+/** Player position with optional Nether/Overworld conversion. Hidden by recording mode. */
+public final class CoordinatesHud extends InfoHudModule {
+	private final BooleanSetting decimals = settings().add(new BooleanSetting("decimals", false));
+	private final BooleanSetting netherConversion = settings().add(new BooleanSetting("nether_conversion", true));
+
+	public CoordinatesHud() {
+		super("coordinates", Icon.PIN, HudAnchor.BOTTOM_LEFT, 4, -24);
+	}
+
+	@Override
+	protected String value(HudContext context, Minecraft client) {
+		if (client.player == null || client.level == null) {
+			return null;
+		}
+		if (context.privacy().hideCoordinates()) {
+			return context.tr("ui.profile.hidden");
+		}
+		double x = client.player.getX();
+		double y = client.player.getY();
+		double z = client.player.getZ();
+		String main = format(x, y, z);
+		if (!netherConversion.get()) {
+			return main;
+		}
+		if (client.level.dimension() == Level.NETHER) {
+			return main + "  (" + format(x * 8, y, z * 8) + ")";
+		}
+		if (client.level.dimension() == Level.OVERWORLD) {
+			return main + "  (" + format(x / 8, y, z / 8) + ")";
+		}
+		return main;
+	}
+
+	private String format(double x, double y, double z) {
+		return decimals.get()
+			? String.format(Locale.ROOT, "%.1f, %.1f, %.1f", x, y, z)
+			: String.format(Locale.ROOT, "%d, %d, %d", (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
+	}
+}

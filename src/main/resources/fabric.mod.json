@@ -15,6 +15,7 @@
 			"dev.shadowvisuals.ShadowVisuals"
 		]
 	},
+	"accessWidener": "shadowvisuals.accesswidener",
 	"mixins": [
 		"shadowvisuals.mixins.json"
 	],

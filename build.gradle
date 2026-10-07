@@ -36,6 +36,8 @@ fabricApi {
 }
 
 loom {
+	accessWidenerPath = file("src/main/resources/shadowvisuals.accesswidener")
+
 	runs {
 		client {
 			client()

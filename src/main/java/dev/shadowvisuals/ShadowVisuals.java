@@ -43,6 +43,7 @@ public final class ShadowVisuals implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> client.onLeave());
 
 		HudElementRegistry.addLast(id("hud"), client::renderHud);
+		dev.shadowvisuals.hud.VanillaHudOverrides.register(client);
 		WorldRenderEvents.END_MAIN.register(context -> {
 			Minecraft minecraft = Minecraft.getInstance();
 			if (minecraft.level == null) {

@@ -49,6 +49,11 @@ public abstract class HudModule extends Module {
 		return true;
 	}
 
+	/** Private elements are hidden when recording mode's "hide private HUD" is on. */
+	protected boolean isPrivate() {
+		return false;
+	}
+
 	protected final void setSize(float contentWidth, float contentHeight) {
 		this.width = Math.max(4, contentWidth);
 		this.height = Math.max(4, contentHeight);
@@ -110,7 +115,8 @@ public abstract class HudModule extends Module {
 
 	/** Called by the HUD manager each frame; handles visibility animation, placement and scaling. */
 	final void render(HudContext context, float screenWidth, float screenHeight) {
-		boolean visible = isEnabled() && (context.editing() || hasContent(context));
+		boolean hiddenByRecording = isPrivate() && context.privacy().hidePrivateHud();
+		boolean visible = isEnabled() && (context.editing() || !hiddenByRecording && hasContent(context));
 		presence.animateTo(visible ? 1f : 0f);
 		float amount = presence.value();
 		if (amount <= 0.001f) {

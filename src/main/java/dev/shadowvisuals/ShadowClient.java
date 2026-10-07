@@ -68,6 +68,7 @@ public final class ShadowClient {
 	private final WorldProjection projection = new WorldProjection();
 	private final FrameState frame = new FrameState();
 	private final SessionState session = new SessionState();
+	private final dev.shadowvisuals.core.CombatTracker combat = new dev.shadowvisuals.core.CombatTracker(events);
 	private final UiSounds sounds = new UiSounds(settings);
 	private final ConfigManager config;
 	private final ProfileManager profiles;
@@ -357,6 +358,10 @@ public final class ShadowClient {
 
 	public FrameState frame() {
 		return frame;
+	}
+
+	public dev.shadowvisuals.core.CombatTracker combat() {
+		return combat;
 	}
 
 	public SessionState session() {

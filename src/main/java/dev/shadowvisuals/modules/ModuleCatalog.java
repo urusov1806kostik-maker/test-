@@ -1,16 +1,62 @@
 package dev.shadowvisuals.modules;
 
 import dev.shadowvisuals.ShadowClient;
+import dev.shadowvisuals.hud.HudAnchor;
+import dev.shadowvisuals.module.Category;
 import dev.shadowvisuals.module.ModuleManager;
+import dev.shadowvisuals.modules.funtime.CooldownHud;
+import dev.shadowvisuals.modules.funtime.WarningsHud;
+import dev.shadowvisuals.modules.hud.ActiveModulesHud;
+import dev.shadowvisuals.modules.hud.ArmorHud;
+import dev.shadowvisuals.modules.hud.CompassHud;
+import dev.shadowvisuals.modules.hud.CoordinatesHud;
+import dev.shadowvisuals.modules.hud.FpsHud;
+import dev.shadowvisuals.modules.hud.InventoryHud;
+import dev.shadowvisuals.modules.hud.ItemCounterHud;
+import dev.shadowvisuals.modules.hud.KeybindsHud;
+import dev.shadowvisuals.modules.hud.PingHud;
+import dev.shadowvisuals.modules.hud.PotionEffectsHud;
+import dev.shadowvisuals.modules.hud.ServerInfoHud;
+import dev.shadowvisuals.modules.hud.SessionInfoHud;
+import dev.shadowvisuals.modules.hud.SpeedHud;
+import dev.shadowvisuals.modules.hud.TargetHud;
+import dev.shadowvisuals.modules.hud.WatermarkHud;
 import dev.shadowvisuals.modules.utility.RecordingMode;
 
-/** The single place where every built-in module is registered, in sidebar display order. */
+/** The single place where every built-in module is registered, in display order. */
 public final class ModuleCatalog {
 	private ModuleCatalog() {
 	}
 
 	public static void registerAll(ShadowClient client) {
 		ModuleManager modules = client.modules();
+
+		// HUD
+		modules.register(new WatermarkHud(client));
+		modules.register(new ActiveModulesHud(client));
+		modules.register(new KeybindsHud(client));
+		modules.register(new FpsHud());
+		modules.register(new PingHud());
+		modules.register(new CoordinatesHud());
+		modules.register(new SpeedHud());
+		modules.register(new CompassHud());
+		modules.register(new PotionEffectsHud());
+		modules.register(new ArmorHud());
+		modules.register(new InventoryHud());
+		modules.register(new TargetHud(client));
+		modules.register(new SessionInfoHud(client));
+		modules.register(new ServerInfoHud(client));
+
+		// FunTime Helper
+		modules.register(new ItemCounterHud("totem_counter", Category.FUNTIME, "minecraft:totem_of_undying", HudAnchor.BOTTOM_CENTER, -130, -48));
+		modules.register(new ItemCounterHud("pearl_counter", Category.FUNTIME, "minecraft:ender_pearl", HudAnchor.BOTTOM_CENTER, -130, -70));
+		modules.register(new ItemCounterHud("crystal_counter", Category.FUNTIME, "minecraft:end_crystal", HudAnchor.BOTTOM_CENTER, -130, -92));
+		modules.register(new ItemCounterHud("item_counters", Category.FUNTIME,
+			"minecraft:golden_apple, minecraft:enchanted_golden_apple, minecraft:experience_bottle", HudAnchor.MIDDLE_RIGHT, -4, 0));
+		modules.register(new CooldownHud());
+		modules.register(new WarningsHud());
+
+		// Utility
 		modules.register(new RecordingMode());
 	}
 }
