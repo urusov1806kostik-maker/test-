@@ -26,6 +26,9 @@
 - Модуль FunTime «Item Binds» (`modules/funtime/ItemBinds.java`): 5 KeybindSetting (Дезориентация, Пласт, Трапка, Явная пыль, Огненный смерч), по умолчанию NONE; поиск по названию (настраивается), хотбар → левая рука → инвентарь (SWAP), слот возвращается.
 - Категория Player: JumpCircle, Trails, HitParticles, HitSound, HitColor, ViewModel, SwingAnimation (пакет `modules/player`).
 
+- Иконка мода (S), README, CI GitHub Actions (`.github/workflows/build.yml`: build + юнит-тесты, артефакт jar) — зелёный.
+- `util/Numbers` вместо String.format в HUD (32 юнит-теста).
+
 ## Осталось
 - Ничего обязательного. Дальше — по запросам пользователя.
 
