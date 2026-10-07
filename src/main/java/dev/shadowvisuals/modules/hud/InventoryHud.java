@@ -20,7 +20,7 @@ public final class InventoryHud extends PanelHudModule {
 	private final BooleanSetting slotBackgrounds = settings().add(new BooleanSetting("slot_backgrounds", true));
 
 	public InventoryHud() {
-		super("inventory", Category.HUD, false, HudAnchor.BOTTOM_LEFT, 4, -40);
+		super("inventory", Category.HUD, false, HudAnchor.BOTTOM_RIGHT, -4, -4);
 	}
 
 	@Override

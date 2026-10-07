@@ -50,6 +50,10 @@ public final class Renderer2D {
 
 	/** Binds the frame's graphics context. Must be called before drawing. */
 	public Renderer2D begin(GuiGraphics context) {
+		if (context == graphics) {
+			// Nested use within the same frame (e.g. a tooltip inside a client screen): keep the current state.
+			return this;
+		}
 		this.graphics = context;
 		this.alpha = 1f;
 		this.alphaDepth = 0;

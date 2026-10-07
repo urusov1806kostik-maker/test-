@@ -9,7 +9,13 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 
 import dev.shadowvisuals.ShadowClient;
+import dev.shadowvisuals.modules.Hooks;
 import dev.shadowvisuals.modules.hud.PotionEffectsHud;
+import dev.shadowvisuals.modules.iface.CustomBossBar;
+import dev.shadowvisuals.modules.iface.CustomCrosshair;
+import dev.shadowvisuals.modules.iface.CustomHotbar;
+import dev.shadowvisuals.modules.iface.CustomScoreboard;
+import dev.shadowvisuals.modules.iface.CustomTab;
 
 /**
  * Wraps vanilla HUD layers through Fabric's HUD registry instead of mixins: a layer is skipped (or drawn by
@@ -24,6 +30,14 @@ public final class VanillaHudOverrides {
 			PotionEffectsHud effects = client.modules().get(PotionEffectsHud.class);
 			return effects != null && effects.hidesVanilla();
 		});
+		hideWhen(VanillaHudElements.SCOREBOARD, () -> Hooks.enabled(CustomScoreboard.class) != null);
+		hideWhen(VanillaHudElements.BOSS_BAR, () -> Hooks.enabled(CustomBossBar.class) != null);
+		replaceWhen(VanillaHudElements.CROSSHAIR, () -> Hooks.enabled(CustomCrosshair.class) != null,
+			(graphics, delta) -> client.modules().get(CustomCrosshair.class).render(graphics, delta));
+		replaceWhen(VanillaHudElements.HOTBAR, () -> Hooks.enabled(CustomHotbar.class) != null,
+			(graphics, delta) -> client.modules().get(CustomHotbar.class).render(graphics, delta));
+		replaceWhen(VanillaHudElements.PLAYER_LIST, () -> Hooks.enabled(CustomTab.class) != null,
+			(graphics, delta) -> client.modules().get(CustomTab.class).render(graphics, delta));
 	}
 
 	/** Skips the vanilla layer while {@code condition} holds. */

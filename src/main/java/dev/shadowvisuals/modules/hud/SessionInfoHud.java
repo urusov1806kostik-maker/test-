@@ -17,7 +17,7 @@ public final class SessionInfoHud extends PanelHudModule {
 	private int deaths;
 
 	public SessionInfoHud(ShadowClient client) {
-		super("session_info", Category.HUD, false, HudAnchor.TOP_LEFT, 4, 80);
+		super("session_info", Category.HUD, false, HudAnchor.TOP_LEFT, 4, 78);
 		this.client = client;
 		client.events().subscribe(WorldJoinEvent.class, this, event -> deaths = 0);
 		client.events().subscribe(DeathEvent.class, this, event -> deaths++);

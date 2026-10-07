@@ -36,7 +36,7 @@ public final class KeybindsHud extends PanelHudModule {
 	private final SmoothValue height = new SmoothValue(0f, 16f);
 
 	public KeybindsHud(ShadowClient client) {
-		super("keybinds", Category.HUD, false, HudAnchor.MIDDLE_LEFT, 4, 0);
+		super("keybinds", Category.HUD, false, HudAnchor.BOTTOM_LEFT, 4, -42);
 		this.client = client;
 	}
 

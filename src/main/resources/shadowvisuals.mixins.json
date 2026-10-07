@@ -3,10 +3,24 @@
 	"package": "dev.shadowvisuals.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
+		"CameraMixin",
+		"ChatBackgroundMixin",
+		"ChatComponentMixin",
+		"ClientLevelDataMixin",
+		"FogRendererMixin",
 		"GameRendererMixin",
+		"GuiOverlayMixin",
+		"ItemInHandRendererMixin",
 		"KeyboardHandlerMixin",
+		"LevelMixin",
 		"LevelRendererMixin",
-		"MouseHandlerMixin"
+		"LightTextureMixin",
+		"MouseHandlerMixin",
+		"MouseTurnMixin",
+		"ParticleEngineMixin",
+		"ScreenEffectRendererMixin",
+		"SkyRendererMixin",
+		"TooltipRenderUtilMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

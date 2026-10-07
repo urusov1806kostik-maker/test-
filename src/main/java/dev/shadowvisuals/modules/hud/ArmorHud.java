@@ -32,7 +32,7 @@ public final class ArmorHud extends PanelHudModule {
 	private final NumberSetting lowThreshold = settings().add(new NumberSetting("low_threshold", 20, 1, 60, 1).suffix("%"));
 
 	public ArmorHud() {
-		super("armor", Category.HUD, false, HudAnchor.BOTTOM_CENTER, 98, -4);
+		super("armor", Category.HUD, false, HudAnchor.BOTTOM_CENTER, 0, -52);
 	}
 
 	@Override

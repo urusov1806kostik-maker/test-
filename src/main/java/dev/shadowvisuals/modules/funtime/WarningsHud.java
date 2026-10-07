@@ -95,7 +95,7 @@ public final class WarningsHud extends PanelHudModule {
 	private final Map<Identifier, ItemStack> cooldownIcons = new HashMap<>();
 
 	public WarningsHud() {
-		super("warnings", Category.FUNTIME, false, HudAnchor.TOP_CENTER, 0, 40);
+		super("warnings", Category.FUNTIME, false, HudAnchor.TOP_CENTER, 0, 70);
 		for (Kind kind : Kind.values()) {
 			banners.put(kind, new Banner(kind));
 		}

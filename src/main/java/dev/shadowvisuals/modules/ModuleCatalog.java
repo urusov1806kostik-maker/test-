@@ -47,10 +47,44 @@ public final class ModuleCatalog {
 		modules.register(new SessionInfoHud(client));
 		modules.register(new ServerInfoHud(client));
 
+		// Visual
+		modules.register(new dev.shadowvisuals.modules.visual.FullBright());
+		modules.register(new dev.shadowvisuals.modules.visual.HitColor());
+		modules.register(new dev.shadowvisuals.modules.visual.ViewModel());
+		modules.register(new dev.shadowvisuals.modules.visual.SwingAnimation());
+		modules.register(new dev.shadowvisuals.modules.visual.FireOverlay());
+		modules.register(new dev.shadowvisuals.modules.visual.OverlayControl());
+		modules.register(new dev.shadowvisuals.modules.visual.ParticleModifier());
+
+		// World
+		modules.register(new dev.shadowvisuals.modules.world.TimeChanger());
+		modules.register(new dev.shadowvisuals.modules.world.WeatherControl());
+		modules.register(new dev.shadowvisuals.modules.world.FogControl());
+		modules.register(new dev.shadowvisuals.modules.world.WorldColor());
+		modules.register(new dev.shadowvisuals.modules.world.SkyColor());
+		modules.register(new dev.shadowvisuals.modules.world.AmbientColor());
+
+		// Camera
+		modules.register(new dev.shadowvisuals.modules.camera.Zoom());
+		modules.register(new dev.shadowvisuals.modules.camera.FreeLook());
+		modules.register(new dev.shadowvisuals.modules.camera.CameraSettings());
+		modules.register(new dev.shadowvisuals.modules.camera.HurtCamera());
+		modules.register(new dev.shadowvisuals.modules.camera.ViewBobbing());
+		modules.register(new dev.shadowvisuals.modules.camera.FovControl());
+
+		// Interface
+		modules.register(new dev.shadowvisuals.modules.iface.CustomCrosshair(client));
+		modules.register(new dev.shadowvisuals.modules.iface.CustomHotbar(client));
+		modules.register(new dev.shadowvisuals.modules.iface.CustomScoreboard());
+		modules.register(new dev.shadowvisuals.modules.iface.CustomTab(client));
+		modules.register(new dev.shadowvisuals.modules.iface.CustomBossBar());
+		modules.register(new dev.shadowvisuals.modules.iface.ChatVisuals(client));
+		modules.register(new dev.shadowvisuals.modules.iface.CustomTooltips(client));
+
 		// FunTime Helper
-		modules.register(new ItemCounterHud("totem_counter", Category.FUNTIME, "minecraft:totem_of_undying", HudAnchor.BOTTOM_CENTER, -130, -48));
-		modules.register(new ItemCounterHud("pearl_counter", Category.FUNTIME, "minecraft:ender_pearl", HudAnchor.BOTTOM_CENTER, -130, -70));
-		modules.register(new ItemCounterHud("crystal_counter", Category.FUNTIME, "minecraft:end_crystal", HudAnchor.BOTTOM_CENTER, -130, -92));
+		modules.register(new ItemCounterHud("totem_counter", Category.FUNTIME, "minecraft:totem_of_undying", HudAnchor.BOTTOM_CENTER, -140, -48));
+		modules.register(new ItemCounterHud("pearl_counter", Category.FUNTIME, "minecraft:ender_pearl", HudAnchor.BOTTOM_CENTER, -140, -70));
+		modules.register(new ItemCounterHud("crystal_counter", Category.FUNTIME, "minecraft:end_crystal", HudAnchor.BOTTOM_CENTER, -140, -92));
 		modules.register(new ItemCounterHud("item_counters", Category.FUNTIME,
 			"minecraft:golden_apple, minecraft:enchanted_golden_apple, minecraft:experience_bottle", HudAnchor.MIDDLE_RIGHT, -4, 0));
 		modules.register(new CooldownHud());

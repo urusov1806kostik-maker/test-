@@ -82,6 +82,8 @@ public final class FontManager implements AutoCloseable {
 		if (layout == null) {
 			layout = TextLayout.build(fonts.get(weight), text);
 			cache.put(text, layout);
+			// New glyphs may have been rasterized: upload now so this frame already draws them.
+			fonts.get(weight).uploadPending();
 		}
 		return layout;
 	}

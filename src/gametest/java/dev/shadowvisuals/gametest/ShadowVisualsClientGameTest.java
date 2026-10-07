@@ -31,6 +31,8 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 		try (TestSingleplayerContext world = context.worldBuilder().create()) {
 			world.getClientWorld().waitForChunksRender();
 			context.waitTicks(20);
+			context.runOnClient(client -> enableShowcaseModules());
+			context.waitTicks(20);
 			context.takeScreenshot("02_hud_in_world");
 
 			for (int i = 0; i < 6; i++) {
@@ -86,11 +88,23 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 			context.waitTicks(60);
 			context.takeScreenshot("09_after_reload");
 		}
-		context.waitTicks(10);
+		context.waitTicks(100);
 		try (TestSingleplayerContext world = context.worldBuilder().create()) {
 			world.getClientWorld().waitForChunksRender();
 			context.waitTicks(10);
 			context.takeScreenshot("10_rejoined_world");
+		}
+	}
+
+	/** Turns on a representative set of modules so screenshots show real HUD and visuals. */
+	private static void enableShowcaseModules() {
+		var modules = ShadowClient.get().modules();
+		for (String id : new String[] {"watermark", "active_modules", "keybinds", "fps", "ping", "coordinates", "bps", "compass",
+			"armor", "inventory", "session_info", "server_info", "totem_counter", "warnings", "fullbright", "time_changer"}) {
+			var module = modules.byId(id);
+			if (module != null) {
+				module.setEnabled(true);
+			}
 		}
 	}
 

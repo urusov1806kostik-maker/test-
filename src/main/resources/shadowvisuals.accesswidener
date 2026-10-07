@@ -4,3 +4,11 @@ accessWidener v2 named
 accessible class net/minecraft/world/item/ItemCooldowns$CooldownInstance
 accessible field net/minecraft/world/item/ItemCooldowns cooldowns Ljava/util/Map;
 accessible field net/minecraft/world/item/ItemCooldowns tickCount I
+
+# Hit Color recolors the entity hurt overlay rows.
+accessible field net/minecraft/client/renderer/texture/OverlayTexture texture Lnet/minecraft/client/renderer/texture/DynamicTexture;
+
+# Custom Tab and Custom Boss Bar read the same data the vanilla overlays show.
+accessible field net/minecraft/client/gui/components/PlayerTabOverlay header Lnet/minecraft/network/chat/Component;
+accessible field net/minecraft/client/gui/components/PlayerTabOverlay footer Lnet/minecraft/network/chat/Component;
+accessible field net/minecraft/client/gui/components/BossHealthOverlay events Ljava/util/Map;

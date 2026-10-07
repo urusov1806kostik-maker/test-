@@ -182,6 +182,11 @@ public final class Localization {
 	public static String humanize(String key) {
 		int dot = key.lastIndexOf('.');
 		String last = dot >= 0 ? key.substring(dot + 1) : key;
+		if ((last.equals("name") || last.equals("description")) && dot > 0) {
+			// module.<id>.name -> humanized id
+			int previous = key.lastIndexOf('.', dot - 1);
+			last = key.substring(previous + 1, dot);
+		}
 		if (last.isEmpty()) {
 			return key;
 		}

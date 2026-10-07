@@ -16,7 +16,7 @@ public final class ServerInfoHud extends PanelHudModule {
 	private final ShadowClient client;
 
 	public ServerInfoHud(ShadowClient client) {
-		super("server_info", Category.HUD, false, HudAnchor.TOP_LEFT, 4, 120);
+		super("server_info", Category.HUD, false, HudAnchor.TOP_LEFT, 4, 136);
 		this.client = client;
 	}
 
