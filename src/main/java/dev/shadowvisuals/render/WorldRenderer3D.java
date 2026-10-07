@@ -3,10 +3,13 @@ package dev.shadowvisuals.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -132,5 +135,60 @@ public final class WorldRenderer3D {
 			consumer.addVertex(pose, cx + cos1 * outerRadius, cy, cz + sin1 * outerRadius).setColor(outerColor);
 			consumer.addVertex(pose, cx + cos1 * innerRadius, cy, cz + sin1 * innerRadius).setColor(innerColor);
 		}
+	}
+
+	/** Font units per block at scale 1; the same density as vanilla name tags. */
+	public static final float TEXT_UNIT = 0.025f;
+	/** Extrusion length in font units at depth 1. */
+	private static final float TEXT_DEPTH_UNITS = 4f;
+	/** Spacing between extrusion layers in font units; small enough that the sides read as solid. */
+	private static final float TEXT_LAYER_STEP = 0.45f;
+
+	/**
+	 * Solid 3D text standing upright at a world position and turned towards the camera around the vertical
+	 * axis. The letters are extruded backwards (and slightly down-right, so the volume is visible even when
+	 * looked at head-on) with progressively darker layers; no outline and no background plate. {@code depth}
+	 * 0 draws flat text. Colors are ARGB; nearly transparent text is skipped because the font would treat it as
+	 * opaque.
+	 */
+	public static void text3d(Frame frame, Font font, java.util.List<FormattedCharSequence> rows, double x, double y, double z,
+		float scale, int color, float depth, boolean throughWalls) {
+		if (rows.isEmpty() || (color >>> 24) < 6) {
+			return;
+		}
+		double dx = x - frame.camera().x;
+		double dy = y - frame.camera().y;
+		double dz = z - frame.camera().z;
+		// Same rotation the camera uses for a yaw looking at the text, without pitch, so the text stays upright.
+		float yawToText = (float) Math.atan2(-dx, dz);
+		PoseStack poses = frame.poses();
+		poses.pushPose();
+		poses.translate(dx, dy, dz);
+		poses.mulPose(new org.joml.Quaternionf().rotationY((float) Math.PI - yawToText));
+		float unit = TEXT_UNIT * scale;
+		poses.scale(unit, -unit, unit);
+		Font.DisplayMode mode = throughWalls ? Font.DisplayMode.SEE_THROUGH : Font.DisplayMode.NORMAL;
+		float lineHeight = font.lineHeight + 1;
+		float top = -rows.size() * lineHeight / 2f;
+		int layers = depth <= 0 ? 0 : Math.clamp(Math.round(depth * TEXT_DEPTH_UNITS / TEXT_LAYER_STEP), 2, 16);
+		float step = layers == 0 ? 0 : depth * TEXT_DEPTH_UNITS / layers;
+		for (int layer = layers; layer >= 0; layer--) {
+			// Back layers first; the front face is drawn last at full brightness.
+			float shade = layer == 0 ? 1f : 0.42f + 0.28f * (1f - (float) layer / layers);
+			int layerColor = layer == 0 ? color : (color & 0xFF000000)
+				| Math.round(((color >> 16) & 0xFF) * shade) << 16
+				| Math.round(((color >> 8) & 0xFF) * shade) << 8
+				| Math.round((color & 0xFF) * shade);
+			poses.pushPose();
+			poses.translate(layer * step * 0.3f, layer * step * 0.3f, -layer * step);
+			org.joml.Matrix4f matrix = poses.last().pose();
+			for (int i = 0; i < rows.size(); i++) {
+				FormattedCharSequence row = rows.get(i);
+				font.drawInBatch(row, -font.width(row) / 2f, top + i * lineHeight, layerColor, false, matrix, frame.buffers(), mode, 0,
+					LightTexture.FULL_BRIGHT);
+			}
+			poses.popPose();
+		}
+		poses.popPose();
 	}
 }

@@ -92,7 +92,26 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 			context.waitTicks(10);
 			context.takeScreenshot("02e_item_binds");
 			context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);
-			context.waitTicks(10);
+			context.waitTicks(5);
+			context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);
+			context.waitForScreen(null);
+			context.waitTicks(5);
+
+			// Music lyrics: the preview drives the 3D lyric effect without a media player.
+			context.runOnClient(client -> {
+				client.player.setXRot(5f);
+				ShadowClient.get().modules().get(dev.shadowvisuals.modules.visual.MusicLyrics.class).startPreview();
+			});
+			context.waitTicks(150);
+			context.takeScreenshot("02f_lyrics_first_person");
+			context.runOnClient(client -> client.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK));
+			context.runOnClient(client -> ShadowClient.get().modules().get(dev.shadowvisuals.modules.visual.MusicLyrics.class).startPreview());
+			context.waitTicks(150);
+			context.takeScreenshot("02g_lyrics_third_person");
+			context.runOnClient(client -> {
+				client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+				ShadowClient.get().modules().byId("music_lyrics").setEnabled(false);
+			});
 
 			// Death records a death point; respawning must keep every module working.
 			world.getServer().runCommand("kill @a");

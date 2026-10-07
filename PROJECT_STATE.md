@@ -29,6 +29,9 @@
 - Иконка мода (S), README, CI GitHub Actions (`.github/workflows/build.yml`: build + юнит-тесты, артефакт jar) — зелёный.
 - `util/Numbers` вместо String.format в HUD (32 юнит-теста).
 
+- MusicLyrics (`modules/visual/MusicLyrics.java`, пакет `media`): трек из Windows SMTC через фоновый PowerShell-хелпер (`WindowsMediaSession`), тексты LRCLIB → lyrics.ovh (`media/lyrics`), кеш память+диск, 3D-текст `WorldRenderer3D.text3d` (выдавленный, без обводки/фона), режимы Around/Left-Right/Top/Dynamic, предпросмотр. На Windows вживую не проверено (контейнер Linux).
+- Известно: gametest изредка падает внутри Fabric NetworkSynchronizer под нагрузкой (повтор проходит).
+
 ## Осталось
 - Ничего обязательного. Дальше — по запросам пользователя.
 

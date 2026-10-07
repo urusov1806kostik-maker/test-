@@ -54,6 +54,7 @@ public final class ModuleCatalog {
 		modules.register(new dev.shadowvisuals.modules.visual.ContainerVisuals());
 		modules.register(new dev.shadowvisuals.modules.visual.BlockOutline());
 		modules.register(new dev.shadowvisuals.modules.visual.GlintColor());
+		modules.register(new dev.shadowvisuals.modules.visual.MusicLyrics(client));
 		modules.register(new dev.shadowvisuals.modules.visual.FullBright());
 		modules.register(new dev.shadowvisuals.modules.visual.FireOverlay());
 		modules.register(new dev.shadowvisuals.modules.visual.OverlayControl());

@@ -24,6 +24,11 @@
 - **HUD**: Watermark, FPS, Ping, Coordinates, BPS, Keybinds, Active Modules, Potion Effects, Armor, Inventory, Target HUD, Session Info, Server Info, Compass.
 - **Редактор HUD**: перетаскивание, масштаб колесом, привязка к краям и элементам, сброс позиций. Элементы не уходят за экран.
 - **Visual**: Player ESP, Name Tags, Item ESP, Container Visuals, Block Outline (обводка и заливка), Glint Color, FullBright, Fire Overlay, Overlay Control, Particles.
+- **Music Lyrics**: показывает текст песни, которая играет в Windows (Spotify, браузер, Яндекс Музыка и другие), объёмными 3D-строками вокруг игрока.
+  - Режимы размещения: Around, Left/Right, Top, Dynamic.
+  - Тексты берутся из LRCLIB (синхронизированные по времени) и lyrics.ovh и кешируются в `config/shadowvisuals/lyrics/`.
+  - Если текст не найден, показывается «Lyrics not found».
+  - Кнопка «Предпросмотр» показывает демо-строки, чтобы настроить вид без музыки.
 - **Player**: Jump Circle, Trails, Hit Particles, Hit Sound, Hit Color, View Model, Swing Animation.
 - **World**: Time Changer, Weather, Fog, World/Sky/Ambient Color, Waypoints, Death Point.
 - **Camera**: Zoom (C), FreeLook (Left Alt), дистанция третьего лица, Hurt Camera, View Bobbing, FOV.
