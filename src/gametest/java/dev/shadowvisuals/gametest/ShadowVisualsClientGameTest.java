@@ -32,8 +32,18 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 			world.getClientWorld().waitForChunksRender();
 			context.waitTicks(20);
 			context.runOnClient(client -> enableShowcaseModules());
+			world.getServer().runCommand("time set noon");
+			world.getServer().runCommand("give @a minecraft:diamond_sword[minecraft:enchantments={\"minecraft:sharpness\":1}]");
+			world.getServer().runCommand("execute at @a run setblock ~2 ~ ~3 minecraft:chest");
+			world.getServer().runCommand("execute at @a run setblock ~-2 ~ ~3 minecraft:barrel");
+			world.getServer().runCommand("execute at @a run summon minecraft:item ~ ~1 ~4 {Item:{id:\"minecraft:diamond\",count:3}}");
+			context.waitTicks(10);
+			context.runOnClient(client -> addShowcaseWaypoint(client));
 			context.waitTicks(20);
 			context.takeScreenshot("02_hud_in_world");
+			context.getInput().holdKeyFor(GLFW.GLFW_KEY_SPACE, 2);
+			context.waitTicks(3);
+			context.takeScreenshot("02b_jump_circle");
 
 			for (int i = 0; i < 6; i++) {
 				context.getInput().pressKey(GLFW.GLFW_KEY_RIGHT_SHIFT);
@@ -100,11 +110,20 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 	private static void enableShowcaseModules() {
 		var modules = ShadowClient.get().modules();
 		for (String id : new String[] {"watermark", "active_modules", "keybinds", "fps", "ping", "coordinates", "bps", "compass",
-			"armor", "inventory", "session_info", "server_info", "totem_counter", "warnings", "fullbright", "time_changer"}) {
+			"armor", "inventory", "session_info", "server_info", "totem_counter", "warnings", "fullbright", "time_changer",
+			"jump_circle", "trails", "glint_color", "container_visuals", "item_esp", "block_outline", "waypoints"}) {
 			var module = modules.byId(id);
 			if (module != null) {
 				module.setEnabled(true);
 			}
+		}
+	}
+
+	private static void addShowcaseWaypoint(Minecraft client) {
+		var shadow = ShadowClient.get();
+		if (client.player != null && shadow.session().inWorld()) {
+			shadow.waypoints().create("Base", client.player.getBlockX() + 30, client.player.getBlockY(), client.player.getBlockZ() + 40,
+				shadow.session().dimension(), shadow.session().worldKey(), 0xFF5BD8F2);
 		}
 	}
 

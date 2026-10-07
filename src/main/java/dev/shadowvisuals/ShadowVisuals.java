@@ -23,6 +23,8 @@ import dev.shadowvisuals.core.ClientInfo;
 import dev.shadowvisuals.core.Log;
 import dev.shadowvisuals.event.events.AttackEntityEvent;
 import dev.shadowvisuals.event.events.WorldRenderEvent;
+import dev.shadowvisuals.modules.Hooks;
+import dev.shadowvisuals.modules.visual.BlockOutline;
 import dev.shadowvisuals.render.WorldRenderer3D;
 
 /** Fabric entrypoint: creates the client and connects it to Fabric API callbacks. */
@@ -54,6 +56,10 @@ public final class ShadowVisuals implements ClientModInitializer {
 				context.worldState().cameraRenderState.pos,
 				minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false));
 			client.events().post(new WorldRenderEvent(frame));
+		});
+		WorldRenderEvents.BEFORE_BLOCK_OUTLINE.register((context, outline) -> {
+			BlockOutline blockOutline = Hooks.enabled(BlockOutline.class);
+			return blockOutline == null || blockOutline.render(context, outline);
 		});
 		ScreenEvents.AFTER_INIT.register((minecraft, screen, width, height) ->
 			ScreenEvents.afterRender(screen).register((current, graphics, mouseX, mouseY, delta) ->

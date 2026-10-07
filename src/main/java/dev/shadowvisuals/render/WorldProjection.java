@@ -73,4 +73,34 @@ public final class WorldProjection {
 		out.depth = scratch.w;
 		return true;
 	}
+
+	private final ScreenPoint corner = new ScreenPoint();
+
+	/**
+	 * Projects an axis-aligned box and writes its screen bounds {@code minX, minY, maxX, maxY} into
+	 * {@code out}. Returns false if any corner is behind the camera (the box is then not drawn).
+	 */
+	public boolean projectBox(double minX, double minY, double minZ, double maxX, double maxY, double maxZ, float[] out) {
+		float left = Float.MAX_VALUE;
+		float top = Float.MAX_VALUE;
+		float right = -Float.MAX_VALUE;
+		float bottom = -Float.MAX_VALUE;
+		for (int i = 0; i < 8; i++) {
+			double x = (i & 1) == 0 ? minX : maxX;
+			double y = (i & 2) == 0 ? minY : maxY;
+			double z = (i & 4) == 0 ? minZ : maxZ;
+			if (!project(x, y, z, corner)) {
+				return false;
+			}
+			left = Math.min(left, corner.x);
+			top = Math.min(top, corner.y);
+			right = Math.max(right, corner.x);
+			bottom = Math.max(bottom, corner.y);
+		}
+		out[0] = left;
+		out[1] = top;
+		out[2] = right;
+		out[3] = bottom;
+		return true;
+	}
 }

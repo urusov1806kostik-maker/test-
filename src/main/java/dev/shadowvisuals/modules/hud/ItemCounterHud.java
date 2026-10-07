@@ -40,6 +40,7 @@ public final class ItemCounterHud extends PanelHudModule {
 	private final List<Item> parsed = new ArrayList<>();
 	private final List<ItemStack> icons = new ArrayList<>();
 	private int[] counts = new int[0];
+	private int[] shown = new int[0];
 	private String parsedFrom;
 	private long lastCountTick = -1;
 
@@ -82,6 +83,7 @@ public final class ItemCounterHud extends PanelHudModule {
 			});
 		}
 		counts = new int[parsed.size()];
+		shown = new int[parsed.size()];
 		lastCountTick = -1;
 	}
 
@@ -154,23 +156,24 @@ public final class ItemCounterHud extends PanelHudModule {
 		boolean horizontal = layout.get() == Layout.HORIZONTAL;
 		float icon = 14;
 		float gap = 6;
-		List<Integer> shown = new ArrayList<>(parsed.size());
+		int shownCount = 0;
 		float contentWidth = 0;
 		for (int i = 0; i < parsed.size(); i++) {
 			if (hideZero.get() && counts[i] == 0 && !context.editing()) {
 				continue;
 			}
-			shown.add(i);
+			shown[shownCount++] = i;
 			float entryWidth = icon + 3 + boldWidth(context, Integer.toString(counts[i]));
-			contentWidth = horizontal ? contentWidth + entryWidth + (shown.size() > 1 ? gap : 0) : Math.max(contentWidth, entryWidth);
+			contentWidth = horizontal ? contentWidth + entryWidth + (shownCount > 1 ? gap : 0) : Math.max(contentWidth, entryWidth);
 		}
 		float rowHeight = icon + 2;
 		float width = Math.max(20, contentWidth) + PADDING * 2 + 2;
-		float height = (horizontal ? rowHeight : Math.max(1, shown.size()) * rowHeight) + PADDING * 2 - 2;
+		float height = (horizontal ? rowHeight : Math.max(1, shownCount) * rowHeight) + PADDING * 2 - 2;
 		panel(context, width, height);
 		float x = PADDING + 2;
 		float y = PADDING;
-		for (int index : shown) {
+		for (int n = 0; n < shownCount; n++) {
+			int index = shown[n];
 			renderer.item(icons.get(index), x, y, icon);
 			String value = Integer.toString(counts[index]);
 			int color = counts[index] < warnBelow.getInt() ? theme.error() : counts[index] == warnBelow.getInt() ? theme.warning() : theme.textPrimary();
@@ -181,7 +184,7 @@ public final class ItemCounterHud extends PanelHudModule {
 				y += rowHeight;
 			}
 		}
-		if (shown.isEmpty()) {
+		if (shownCount == 0) {
 			text(context, context.tr("hud.label.no_items"), PADDING + 2, height / 2f - renderer.fonts().visualCenter(TEXT), ColorUtil.withAlpha(theme.textSecondary(), 200));
 		}
 		setSize(width, height);

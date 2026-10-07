@@ -48,6 +48,16 @@ public final class ModuleCatalog {
 		modules.register(new ServerInfoHud(client));
 
 		// Visual
+		modules.register(new dev.shadowvisuals.modules.visual.PlayerEsp(client));
+		modules.register(new dev.shadowvisuals.modules.visual.NameTags(client));
+		modules.register(new dev.shadowvisuals.modules.visual.ItemEsp(client));
+		modules.register(new dev.shadowvisuals.modules.visual.ContainerVisuals());
+		modules.register(new dev.shadowvisuals.modules.visual.BlockOutline());
+		modules.register(new dev.shadowvisuals.modules.visual.JumpCircle());
+		modules.register(new dev.shadowvisuals.modules.visual.Trails());
+		modules.register(new dev.shadowvisuals.modules.visual.HitParticles());
+		modules.register(new dev.shadowvisuals.modules.visual.HitSound());
+		modules.register(new dev.shadowvisuals.modules.visual.GlintColor());
 		modules.register(new dev.shadowvisuals.modules.visual.FullBright());
 		modules.register(new dev.shadowvisuals.modules.visual.HitColor());
 		modules.register(new dev.shadowvisuals.modules.visual.ViewModel());
@@ -63,6 +73,8 @@ public final class ModuleCatalog {
 		modules.register(new dev.shadowvisuals.modules.world.WorldColor());
 		modules.register(new dev.shadowvisuals.modules.world.SkyColor());
 		modules.register(new dev.shadowvisuals.modules.world.AmbientColor());
+		modules.register(new dev.shadowvisuals.modules.world.Waypoints(client));
+		modules.register(new dev.shadowvisuals.modules.world.DeathPoint(client));
 
 		// Camera
 		modules.register(new dev.shadowvisuals.modules.camera.Zoom());

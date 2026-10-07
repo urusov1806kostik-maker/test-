@@ -35,13 +35,12 @@ public final class ModuleSettingsPanel extends Component {
 	private Module module;
 	private List<String> descriptionLines = List.of();
 	private float describedWidth = -1;
+	private UiContext lastContext;
 
 	public ModuleSettingsPanel(ShadowClient client) {
 		this.client = client;
 		this.reset = Button.icon(Icon.RESET, "ui.module.reset", this::confirmReset);
 	}
-
-	private UiContext lastContext;
 
 	public void open(UiContext context, Module target) {
 		this.lastContext = context;
