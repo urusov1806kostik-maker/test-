@@ -1,4 +1,4 @@
-package dev.shadowvisuals.modules.visual;
+package dev.shadowvisuals.modules.player;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -38,7 +38,7 @@ public final class HitSound extends Module {
 	private long lastPlayed;
 
 	public HitSound() {
-		super("hit_sound", Category.VISUAL);
+		super("hit_sound", Category.PLAYER);
 		on(AttackEntityEvent.class, event -> play(event.target()));
 	}
 

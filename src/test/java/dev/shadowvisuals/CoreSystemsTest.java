@@ -140,6 +140,29 @@ class CoreSystemsTest {
 	}
 
 	@Test
+	void shippedLanguagesDefineTheSameKeys() throws java.io.IOException {
+		java.util.Set<String> english = shippedKeys("en_us");
+		assertFalse(english.isEmpty());
+		for (Localization.Language language : Localization.Language.values()) {
+			if (language.code() != null) {
+				assertEquals(english, shippedKeys(language.code()), "keys of " + language.code());
+			}
+		}
+		Localization localization = new Localization();
+		localization.select(Localization.Language.UKRAINIAN, null);
+		assertEquals("uk_ua", localization.languageCode());
+		assertEquals("Гравець", localization.tr("category.player"));
+	}
+
+	private static java.util.Set<String> shippedKeys(String code) throws java.io.IOException {
+		try (var stream = Localization.class.getResourceAsStream("/assets/shadowvisuals/i18n/" + code + ".json")) {
+			assertTrue(stream != null, "missing " + code);
+			var reader = new java.io.InputStreamReader(stream, StandardCharsets.UTF_8);
+			return new java.util.TreeSet<>(com.google.gson.JsonParser.parseReader(reader).getAsJsonObject().keySet());
+		}
+	}
+
+	@Test
 	void deathPointsAreCapped() {
 		WaypointManager manager = new WaypointManager();
 		for (int i = 0; i < 5; i++) {

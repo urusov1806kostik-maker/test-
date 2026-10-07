@@ -14,8 +14,9 @@ import dev.shadowvisuals.ui.UiContext;
 import dev.shadowvisuals.util.ColorUtil;
 
 /**
- * Bind chip. Click to listen; the next key (or middle/side mouse button) assigns, Escape cancels,
- * Backspace/Delete removes the bind. While listening it holds keyboard focus.
+ * Bind chip. Click to listen; the next key or mouse button (any button, the click that started listening
+ * excluded) assigns, Escape cancels, Backspace/Delete removes the bind. While listening it holds keyboard
+ * focus, so nothing typed reaches other widgets or the game.
  */
 public final class KeybindSelector extends Component {
 	private final KeybindSetting setting;
@@ -58,14 +59,10 @@ public final class KeybindSelector extends Component {
 	@Override
 	public boolean mouseClicked(UiContext context, float mouseX, float mouseY, int button) {
 		if (isListening(context)) {
-			if (button >= 2) {
-				setting.set(Keybind.mouse(button));
-				context.clearFocus();
-				context.sounds().play(UiSounds.Kind.CLICK);
-				return true;
-			}
-			// A click while listening only cancels; it must not reach the widget under the cursor.
+			// The press is consumed either way, so it never reaches the widget under the cursor.
+			setting.set(Keybind.mouse(button));
 			context.clearFocus();
+			context.sounds().play(UiSounds.Kind.CLICK);
 			return true;
 		}
 		if (!contains(mouseX, mouseY)) {

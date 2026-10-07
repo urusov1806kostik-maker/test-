@@ -1,4 +1,4 @@
-package dev.shadowvisuals.modules.visual;
+package dev.shadowvisuals.modules.player;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -43,7 +43,7 @@ public final class Trails extends Module {
 	private final Map<UUID, History> histories = new HashMap<>();
 
 	public Trails() {
-		super("trails", Category.VISUAL);
+		super("trails", Category.PLAYER);
 		on(ClientTickEvent.class, this::tick);
 		on(WorldRenderEvent.class, this::render);
 		on(WorldLeaveEvent.class, event -> histories.clear());

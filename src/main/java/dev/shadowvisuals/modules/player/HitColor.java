@@ -1,4 +1,4 @@
-package dev.shadowvisuals.modules.visual;
+package dev.shadowvisuals.modules.player;
 
 import com.mojang.blaze3d.platform.NativeImage;
 
@@ -20,7 +20,7 @@ public final class HitColor extends Module {
 	private final ColorSetting color = settings().add(new ColorSetting("color", 0xB38B7CF6, true));
 
 	public HitColor() {
-		super("hit_color", Category.VISUAL);
+		super("hit_color", Category.PLAYER);
 		color.onChange(value -> {
 			if (isEnabled()) {
 				apply(color.color());

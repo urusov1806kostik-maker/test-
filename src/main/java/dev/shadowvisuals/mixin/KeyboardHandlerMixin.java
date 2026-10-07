@@ -13,7 +13,7 @@ import net.minecraft.client.input.KeyEvent;
 
 import dev.shadowvisuals.ShadowClient;
 
-/** Forwards raw key input to the client (binds, GUI key). Never cancels vanilla handling. */
+/** Forwards raw key input to the client (binds, GUI key). Only the press that opens the ClickGUI is consumed. */
 @Mixin(KeyboardHandler.class)
 public abstract class KeyboardHandlerMixin {
 	@Shadow

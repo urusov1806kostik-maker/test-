@@ -3,6 +3,7 @@ package dev.shadowvisuals.ui.screen;
 import org.lwjgl.glfw.GLFW;
 
 import dev.shadowvisuals.ShadowClient;
+import dev.shadowvisuals.module.Module;
 import dev.shadowvisuals.render.Renderer2D;
 import dev.shadowvisuals.render.font.FontManager;
 import dev.shadowvisuals.setting.Keybind;
@@ -71,6 +72,12 @@ public final class ClickGuiScreen extends ShadowScreen {
 		client.config().markDirty(client.preferences());
 		refreshModules();
 		modulesPage.resetScroll();
+	}
+
+	/** Shows the page of {@code module}'s category with the module's settings panel open. */
+	public void openModuleSettings(Module module) {
+		selectPage(Page.of(module.category()));
+		settingsPanel.open(context, module);
 	}
 
 	private boolean showsModules() {

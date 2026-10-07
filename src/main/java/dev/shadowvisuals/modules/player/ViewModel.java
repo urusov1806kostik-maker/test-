@@ -1,4 +1,4 @@
-package dev.shadowvisuals.modules.visual;
+package dev.shadowvisuals.modules.player;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -37,7 +37,7 @@ public final class ViewModel extends Module {
 	}
 
 	public ViewModel() {
-		super("view_model", Category.VISUAL);
+		super("view_model", Category.PLAYER);
 	}
 
 	public void apply(PoseStack poses, InteractionHand hand) {

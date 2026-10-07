@@ -13,6 +13,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
@@ -44,7 +45,8 @@ public final class ShadowVisuals implements ClientModInitializer {
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, minecraft) -> client.onJoin(minecraft));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> client.onLeave());
 
-		HudElementRegistry.addLast(id("hud"), client::renderHud);
+		// Below chat and the player list, so those vanilla overlays stay readable on top of the client HUD.
+		HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, id("hud"), client::renderHud);
 		dev.shadowvisuals.hud.VanillaHudOverrides.register(client);
 		WorldRenderEvents.END_MAIN.register(context -> {
 			Minecraft minecraft = Minecraft.getInstance();

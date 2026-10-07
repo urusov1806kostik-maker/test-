@@ -1,4 +1,4 @@
-package dev.shadowvisuals.modules.visual;
+package dev.shadowvisuals.modules.player;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -36,7 +36,8 @@ import dev.shadowvisuals.util.ColorUtil;
 public final class HitParticles extends Module {
 	public enum Shape {
 		SQUARE,
-		DIAMOND
+		DIAMOND,
+		SPARK
 	}
 
 	private static final int CAPACITY = 384;
@@ -66,7 +67,7 @@ public final class HitParticles extends Module {
 	private final BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
 
 	public HitParticles() {
-		super("hit_particles", Category.VISUAL);
+		super("hit_particles", Category.PLAYER);
 		on(AttackEntityEvent.class, event -> burst(event.target()));
 		on(WorldRenderEvent.class, this::render);
 		on(WorldLeaveEvent.class, event -> alive = 0);
@@ -173,7 +174,8 @@ public final class HitParticles extends Module {
 		float oy = (float) (originY - frame.camera().y);
 		float oz = (float) (originZ - frame.camera().z);
 		float half = size.getFloat() / 2f;
-		boolean diamond = shape.get() == Shape.DIAMOND;
+		Shape style = shape.get();
+		boolean diamond = style == Shape.DIAMOND;
 		for (int i = 0; i < alive; i++) {
 			float t = age[i] / life[i];
 			float fade = 1f - t * t;
@@ -184,9 +186,46 @@ public final class HitParticles extends Module {
 			float py = oy + y[i];
 			float pz = oz + z[i];
 			float s = half * (1f - t * 0.5f);
+			if (style == Shape.SPARK) {
+				spark(consumer, pose, px, py, pz, vx[i], vy[i], vz[i], s * 0.7f, core);
+				continue;
+			}
 			billboard(consumer, pose, px, py, pz, up, left, s * 2.6f, diamond, glow);
 			billboard(consumer, pose, px, py, pz, up, left, s, diamond, core);
 		}
+	}
+
+	/**
+	 * Streak from the particle back along its velocity, widened perpendicular to both the motion and the view
+	 * direction so it always faces the camera; the tail fades out.
+	 */
+	private static void spark(VertexConsumer consumer, PoseStack.Pose pose, float px, float py, float pz,
+		float velocityX, float velocityY, float velocityZ, float half, int color) {
+		float speed = (float) Math.sqrt(velocityX * velocityX + velocityY * velocityY + velocityZ * velocityZ);
+		if (speed < 1e-3f) {
+			return;
+		}
+		// Camera-relative position doubles as the view direction because the camera is at the origin.
+		float sideX = velocityY * pz - velocityZ * py;
+		float sideY = velocityZ * px - velocityX * pz;
+		float sideZ = velocityX * py - velocityY * px;
+		float sideLength = (float) Math.sqrt(sideX * sideX + sideY * sideY + sideZ * sideZ);
+		if (sideLength < 1e-5f) {
+			return;
+		}
+		float scale = half / sideLength;
+		sideX *= scale;
+		sideY *= scale;
+		sideZ *= scale;
+		float tail = Math.min(0.6f, speed * 0.06f) / speed;
+		float tx = px - velocityX * tail;
+		float ty = py - velocityY * tail;
+		float tz = pz - velocityZ * tail;
+		int faded = ColorUtil.withAlpha(color, 0);
+		consumer.addVertex(pose, px + sideX, py + sideY, pz + sideZ).setColor(color);
+		consumer.addVertex(pose, px - sideX, py - sideY, pz - sideZ).setColor(color);
+		consumer.addVertex(pose, tx - sideX, ty - sideY, tz - sideZ).setColor(faded);
+		consumer.addVertex(pose, tx + sideX, ty + sideY, tz + sideZ).setColor(faded);
 	}
 
 	private static void billboard(VertexConsumer consumer, PoseStack.Pose pose, float cx, float cy, float cz,

@@ -44,6 +44,16 @@ public enum Page {
 		return this == CONFIG;
 	}
 
+	/** The page that lists {@code category}; every category has exactly one. */
+	public static Page of(Category category) {
+		for (Page page : values()) {
+			if (page.category == category) {
+				return page;
+			}
+		}
+		return VISUAL;
+	}
+
 	public static Page byName(String name) {
 		for (Page page : values()) {
 			if (page.name().equalsIgnoreCase(name)) {

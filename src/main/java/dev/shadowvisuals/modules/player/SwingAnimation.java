@@ -1,4 +1,4 @@
-package dev.shadowvisuals.modules.visual;
+package dev.shadowvisuals.modules.player;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -28,7 +28,7 @@ public final class SwingAnimation extends Module {
 	private final NumberSetting intensity = settings().add(new NumberSetting("intensity", 1.0, 0.2, 2.0, 0.05).suffix("x"));
 
 	public SwingAnimation() {
-		super("swing_animation", Category.VISUAL);
+		super("swing_animation", Category.PLAYER);
 	}
 
 	@Override

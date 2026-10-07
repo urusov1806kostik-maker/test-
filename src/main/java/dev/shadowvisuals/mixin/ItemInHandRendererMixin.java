@@ -17,8 +17,8 @@ import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemStack;
 
 import dev.shadowvisuals.modules.Hooks;
-import dev.shadowvisuals.modules.visual.SwingAnimation;
-import dev.shadowvisuals.modules.visual.ViewModel;
+import dev.shadowvisuals.modules.player.SwingAnimation;
+import dev.shadowvisuals.modules.player.ViewModel;
 
 /** View Model transforms and visual swing presets for first-person hands. */
 @Mixin(ItemInHandRenderer.class)

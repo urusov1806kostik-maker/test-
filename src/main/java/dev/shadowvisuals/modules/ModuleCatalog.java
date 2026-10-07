@@ -53,18 +53,20 @@ public final class ModuleCatalog {
 		modules.register(new dev.shadowvisuals.modules.visual.ItemEsp(client));
 		modules.register(new dev.shadowvisuals.modules.visual.ContainerVisuals());
 		modules.register(new dev.shadowvisuals.modules.visual.BlockOutline());
-		modules.register(new dev.shadowvisuals.modules.visual.JumpCircle());
-		modules.register(new dev.shadowvisuals.modules.visual.Trails());
-		modules.register(new dev.shadowvisuals.modules.visual.HitParticles());
-		modules.register(new dev.shadowvisuals.modules.visual.HitSound());
 		modules.register(new dev.shadowvisuals.modules.visual.GlintColor());
 		modules.register(new dev.shadowvisuals.modules.visual.FullBright());
-		modules.register(new dev.shadowvisuals.modules.visual.HitColor());
-		modules.register(new dev.shadowvisuals.modules.visual.ViewModel());
-		modules.register(new dev.shadowvisuals.modules.visual.SwingAnimation());
 		modules.register(new dev.shadowvisuals.modules.visual.FireOverlay());
 		modules.register(new dev.shadowvisuals.modules.visual.OverlayControl());
 		modules.register(new dev.shadowvisuals.modules.visual.ParticleModifier());
+
+		// Player
+		modules.register(new dev.shadowvisuals.modules.player.JumpCircle());
+		modules.register(new dev.shadowvisuals.modules.player.Trails());
+		modules.register(new dev.shadowvisuals.modules.player.HitParticles());
+		modules.register(new dev.shadowvisuals.modules.player.HitSound());
+		modules.register(new dev.shadowvisuals.modules.player.HitColor());
+		modules.register(new dev.shadowvisuals.modules.player.ViewModel());
+		modules.register(new dev.shadowvisuals.modules.player.SwingAnimation());
 
 		// World
 		modules.register(new dev.shadowvisuals.modules.world.TimeChanger());
@@ -101,6 +103,7 @@ public final class ModuleCatalog {
 			"minecraft:golden_apple, minecraft:enchanted_golden_apple, minecraft:experience_bottle", HudAnchor.MIDDLE_RIGHT, -4, 0));
 		modules.register(new CooldownHud());
 		modules.register(new WarningsHud());
+		modules.register(new dev.shadowvisuals.modules.funtime.ItemBinds(client));
 
 		// Utility
 		modules.register(new RecordingMode());

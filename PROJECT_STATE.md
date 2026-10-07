@@ -8,7 +8,7 @@
 - Компиляция: `./gradlew --no-daemon -q compileJava`; тесты: `./gradlew --no-daemon -q test` (29 юнит-тестов, проходят).
 - Живой тест: `xvfb-run -a -s "-screen 0 1920x1080x24" ./gradlew --no-daemon runClientGameTest`; скриншоты в `build/run/clientGameTest/screenshots/`.
 - Исходники MC 1.21.11: `/home/user/ref/mc`, Fabric API: `/home/user/ref/fabric`.
-- Переводы: scratchpad `.../scratchpad/i18n/` (`base.py`, `hud.py`, `modules1.py` — dict `T` key:(en,ru)); `python3 gen.py` пишет `assets/shadowvisuals/i18n/{en_us,ru_ru}.json`. Новые ключи — новым `*.py`.
+- Переводы: scratchpad `.../scratchpad/i18n/` (`*.py` — dict `T` key:(en,ru); `uk_ua.txt` — key=uk); `python3 gen.py` пишет en_us/ru_ru/uk_ua.json и сообщает о недостающих uk-ключах.
 - `shadowvisuals.mixins.json` (client) перегенерировать из файлов `dev/shadowvisuals/mixin/*.java`.
 - Без `cd` в bash — абсолютные пути.
 
@@ -21,12 +21,13 @@
 - Все миксины для этого написаны и применяются без ошибок. Gametest со скриншотами работает.
 
 ## Сейчас
-- Всё из ТЗ реализовано, компилируется, 29 юнит-тестов и полный gametest проходят (оба мира грузятся; в тесте FPS-лимит 30 и дальность 4 — иначе llvmpipe душит сервер).
-- Запушено в `claude/modest-davinci-s2z7ta`.
+- Всё из ТЗ реализовано. 31 юнит-тест + полный gametest зелёные: GUI, HUD, смерть/респавн/точка смерти, Незер, fullscreen, GUI scale, reload, второй мир, выделенный сервер (вход, Tab, переподключение), бинды предметов FunTime.
+- Языки: en, ru, uk (тест сверяет ключи всех языков).
+- Модуль FunTime «Item Binds» (`modules/funtime/ItemBinds.java`): 5 KeybindSetting (Дезориентация, Пласт, Трапка, Явная пыль, Огненный смерч), по умолчанию NONE; поиск по названию (настраивается), хотбар → левая рука → инвентарь (SWAP), слот возвращается.
+- Категория Player: JumpCircle, Trails, HitParticles, HitSound, HitColor, ViewModel, SwingAnimation (пакет `modules/player`).
 
-## Осталось (опционально)
-- uk_ua перевод (архитектура готова: новый JSON + константа уже есть).
-- Дальнейшая полировка по отзывам.
+## Осталось
+- Ничего обязательного. Дальше — по запросам пользователя.
 
 ## Решения
 - Mojang mappings; всё 2D через `Renderer2D` (retained GuiElementRenderState), без прямого GL.

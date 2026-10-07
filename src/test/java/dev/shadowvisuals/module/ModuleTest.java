@@ -13,6 +13,7 @@ import com.google.gson.JsonObject;
 import org.junit.jupiter.api.Test;
 
 import dev.shadowvisuals.event.EventBus;
+import dev.shadowvisuals.modules.funtime.ItemBinds;
 import dev.shadowvisuals.setting.Keybind;
 import dev.shadowvisuals.setting.NumberSetting;
 
@@ -153,6 +154,27 @@ class ModuleTest {
 		other.load(new JsonObject());
 		assertFalse(copy.isEnabled());
 		assertEquals(1.0, copy.power.get());
+	}
+
+	@Test
+	void itemBindsStartUnboundAndPersist() {
+		ModuleManager manager = manager(new EventBus());
+		ItemBinds binds = manager.register(new ItemBinds(null));
+		for (ItemBinds.Item item : ItemBinds.Item.values()) {
+			assertEquals(Keybind.NONE, binds.bind(item).get());
+		}
+		binds.bind(ItemBinds.Item.DISORIENTATION).set(Keybind.key(88));
+		binds.bind(ItemBinds.Item.LAYER).set(Keybind.mouse(4));
+		JsonObject json = manager.toJson();
+
+		ModuleManager other = manager(new EventBus());
+		ItemBinds copy = other.register(new ItemBinds(null));
+		other.load(json);
+		assertEquals(Keybind.key(88), copy.bind(ItemBinds.Item.DISORIENTATION).get());
+		assertEquals(Keybind.mouse(4), copy.bind(ItemBinds.Item.LAYER).get());
+		assertEquals(Keybind.NONE, copy.bind(ItemBinds.Item.TRAP).get());
+		assertTrue(copy.enabledByDefault());
+		assertEquals("★ явная пыль", ItemBinds.normalize("§6★  Явная   Пыль "));
 	}
 
 	@Test
