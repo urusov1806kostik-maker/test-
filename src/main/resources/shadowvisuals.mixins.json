@@ -2,7 +2,12 @@
 	"required": true,
 	"package": "dev.shadowvisuals.mixin",
 	"compatibilityLevel": "JAVA_21",
-	"client": [],
+	"client": [
+		"GameRendererMixin",
+		"KeyboardHandlerMixin",
+		"LevelRendererMixin",
+		"MouseHandlerMixin"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	},

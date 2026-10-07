@@ -15,6 +15,7 @@ public abstract class SettingNode {
 	private String translationKey;
 	private BooleanSupplier visibility = ALWAYS;
 	private SettingGroup parent;
+	private boolean internal;
 
 	protected SettingNode(String id) {
 		if (id == null || !id.matches("[a-z0-9_]+")) {
@@ -56,6 +57,17 @@ public abstract class SettingNode {
 	/** Shorthand for "visible while this boolean setting is on". */
 	public final <S extends SettingNode> S dependsOn(BooleanSetting toggle) {
 		return visibleWhen(toggle::get);
+	}
+
+	/** Marks a persisted value that is edited elsewhere (e.g. HUD position) and never listed in the GUI. */
+	@SuppressWarnings("unchecked")
+	public final <S extends SettingNode> S internal() {
+		this.internal = true;
+		return (S) this;
+	}
+
+	public final boolean isInternal() {
+		return internal;
 	}
 
 	public boolean isVisible() {

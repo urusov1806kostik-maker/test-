@@ -24,6 +24,17 @@ dependencies {
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
+fabricApi {
+	// Client game tests: real game launches (headless via Xvfb in CI) that drive the GUI and take screenshots.
+	configureTests {
+		createSourceSet = true
+		modId = "shadowvisuals-gametest"
+		enableGameTests = false
+		enableClientGameTests = true
+		eula = true
+	}
+}
+
 loom {
 	runs {
 		client {

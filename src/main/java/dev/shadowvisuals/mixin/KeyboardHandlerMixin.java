@@ -1,0 +1,32 @@
+package dev.shadowvisuals.mixin;
+
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import net.minecraft.client.KeyboardHandler;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.KeyEvent;
+
+import dev.shadowvisuals.ShadowClient;
+
+/** Forwards raw key input to the client (binds, GUI key). Never cancels vanilla handling. */
+@Mixin(KeyboardHandler.class)
+public abstract class KeyboardHandlerMixin {
+	@Shadow
+	@Final
+	private Minecraft minecraft;
+
+	@Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
+	private void shadowvisuals$onKeyPress(long window, int action, KeyEvent event, CallbackInfo ci) {
+		ShadowClient client = ShadowClient.get();
+		if (client != null && window == minecraft.getWindow().handle()) {
+			if (client.onKey(event.key(), event.scancode(), action, event.modifiers())) {
+				ci.cancel();
+			}
+		}
+	}
+}

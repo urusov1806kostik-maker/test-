@@ -1,0 +1,15 @@
+{
+	"schemaVersion": 1,
+	"id": "shadowvisuals-gametest",
+	"version": "1.0.0",
+	"name": "Shadow Visuals Client Tests",
+	"environment": "client",
+	"entrypoints": {
+		"fabric-client-gametest": [
+			"dev.shadowvisuals.gametest.ShadowVisualsClientGameTest"
+		]
+	},
+	"depends": {
+		"shadowvisuals": "*"
+	}
+}
