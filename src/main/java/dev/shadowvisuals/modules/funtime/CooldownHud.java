@@ -31,7 +31,7 @@ public final class CooldownHud extends PanelHudModule {
 	private final List<Identifier> seenGroups = new ArrayList<>();
 
 	public CooldownHud() {
-		super("cooldowns", Category.FUNTIME, false, HudAnchor.BOTTOM_CENTER, -120, -26);
+		super("cooldowns", Category.FUNTIME, false, HudAnchor.BOTTOM_CENTER, 0, -76);
 	}
 
 	private void collect(Minecraft minecraft, float partialTick) {

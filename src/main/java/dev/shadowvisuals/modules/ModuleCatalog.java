@@ -94,9 +94,9 @@ public final class ModuleCatalog {
 		modules.register(new dev.shadowvisuals.modules.iface.CustomTooltips(client));
 
 		// FunTime Helper
-		modules.register(new ItemCounterHud("totem_counter", Category.FUNTIME, "minecraft:totem_of_undying", HudAnchor.BOTTOM_CENTER, -140, -48));
-		modules.register(new ItemCounterHud("pearl_counter", Category.FUNTIME, "minecraft:ender_pearl", HudAnchor.BOTTOM_CENTER, -140, -70));
-		modules.register(new ItemCounterHud("crystal_counter", Category.FUNTIME, "minecraft:end_crystal", HudAnchor.BOTTOM_CENTER, -140, -92));
+		modules.register(new ItemCounterHud("totem_counter", Category.FUNTIME, "minecraft:totem_of_undying", HudAnchor.BOTTOM_CENTER, 112, -4));
+		modules.register(new ItemCounterHud("pearl_counter", Category.FUNTIME, "minecraft:ender_pearl", HudAnchor.BOTTOM_CENTER, 146, -4));
+		modules.register(new ItemCounterHud("crystal_counter", Category.FUNTIME, "minecraft:end_crystal", HudAnchor.BOTTOM_CENTER, 180, -4));
 		modules.register(new ItemCounterHud("item_counters", Category.FUNTIME,
 			"minecraft:golden_apple, minecraft:enchanted_golden_apple, minecraft:experience_bottle", HudAnchor.MIDDLE_RIGHT, -4, 0));
 		modules.register(new CooldownHud());

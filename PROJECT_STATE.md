@@ -1,6 +1,6 @@
 # Shadow Visuals — состояние проекта
 
-Ветка: `claude/modest-davinci-s2z7ta` (ещё НЕ запушено). Fabric 1.21.11, Mojang mappings, Loom 1.18 (`net.fabricmc.fabric-loom-remap`), Fabric API 0.141.6+1.21.11, Loader 0.19.5.
+Ветка: `claude/modest-davinci-s2z7ta` (запушено). Fabric 1.21.11, Mojang mappings, Loom 1.18 (`net.fabricmc.fabric-loom-remap`), Fabric API 0.141.6+1.21.11, Loader 0.19.5.
 
 ## Окружение (важно)
 - Сборка только на JDK 25: `export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64`.
@@ -21,13 +21,12 @@
 - Все миксины для этого написаны и применяются без ошибок. Gametest со скриншотами работает.
 
 ## Сейчас
-- Все модули написаны, зарегистрированы, компилируются, переведены (559 ключей; i18n `modules2.py`). Новые: PlayerEsp, NameTags, ItemEsp, ContainerVisuals, BlockOutline, JumpCircle, Trails, HitParticles, HitSound, GlintColor (+RenderTypesMixin), Waypoints, DeathPoint.
-- Идёт gametest (лог: scratchpad `gt.log`), проверить скриншоты 02/02b (сундук, бочка, меч с зачарованием, метка "Base").
+- Всё из ТЗ реализовано, компилируется, 29 юнит-тестов и полный gametest проходят (оба мира грузятся; в тесте FPS-лимит 30 и дальность 4 — иначе llvmpipe душит сервер).
+- Запушено в `claude/modest-davinci-s2z7ta`.
 
-## Осталось
-- Просмотреть скриншоты, починить найденное.
-- Commit + push в `claude/modest-davinci-s2z7ta`.
-- Опц.: uk_ua перевод.
+## Осталось (опционально)
+- uk_ua перевод (архитектура готова: новый JSON + константа уже есть).
+- Дальнейшая полировка по отзывам.
 
 ## Решения
 - Mojang mappings; всё 2D через `Renderer2D` (retained GuiElementRenderState), без прямого GL.
@@ -36,3 +35,4 @@
 - Глобальные настройки — `client.json`; модули/тема/HUD — `profiles/<name>.json`.
 - Кулдауны только из надёжных клиентских данных (ItemCooldowns через AW).
 - RShift открывает GUI только без экрана или на TitleScreen; событие клавиши отменяется.
+- Ключ мира в одиночной игре = имя папки сохранения (не отображаемое имя), чтобы метки не смешивались.

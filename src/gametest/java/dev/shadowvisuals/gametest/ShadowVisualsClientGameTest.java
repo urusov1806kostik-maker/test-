@@ -20,6 +20,12 @@ import dev.shadowvisuals.ui.screen.HudEditorScreen;
 public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		// The CI machine renders on the CPU; small view distances keep world loading within the test timeout.
+		context.runOnClient(client -> {
+			client.options.renderDistance().set(4);
+			client.options.simulationDistance().set(5);
+			client.options.framerateLimit().set(30);
+		});
 		context.waitTicks(10);
 		context.getInput().pressKey(GLFW.GLFW_KEY_RIGHT_SHIFT);
 		context.waitForScreen(ClickGuiScreen.class);
@@ -41,8 +47,10 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 			context.runOnClient(client -> addShowcaseWaypoint(client));
 			context.waitTicks(20);
 			context.takeScreenshot("02_hud_in_world");
+			context.runOnClient(client -> client.player.setXRot(55f));
+			context.waitTicks(2);
 			context.getInput().holdKeyFor(GLFW.GLFW_KEY_SPACE, 2);
-			context.waitTicks(3);
+			context.waitTicks(4);
 			context.takeScreenshot("02b_jump_circle");
 
 			for (int i = 0; i < 6; i++) {
@@ -98,7 +106,8 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 			context.waitTicks(60);
 			context.takeScreenshot("09_after_reload");
 		}
-		context.waitTicks(100);
+		context.getInput().resizeWindow(854, 480);
+		context.waitTicks(20);
 		try (TestSingleplayerContext world = context.worldBuilder().create()) {
 			world.getClientWorld().waitForChunksRender();
 			context.waitTicks(10);

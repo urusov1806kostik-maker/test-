@@ -79,7 +79,9 @@ public final class SessionState {
 	private static String computeWorldKey(Minecraft client) {
 		IntegratedServer integrated = client.getSingleplayerServer();
 		if (integrated != null) {
-			return "sp:" + integrated.getWorldData().getLevelName();
+			// The save folder is unique, unlike the display name ("New World" is common).
+			java.nio.file.Path folder = integrated.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
+			return "sp:" + (folder != null ? folder.toString() : integrated.getWorldData().getLevelName());
 		}
 		ServerData server = client.getCurrentServer();
 		if (server != null) {

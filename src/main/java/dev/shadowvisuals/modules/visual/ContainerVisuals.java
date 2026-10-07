@@ -169,9 +169,9 @@ public final class ContainerVisuals extends Module {
 			AABB box = new AABB(pos.getX() + inset, pos.getY(), pos.getZ() + inset, pos.getX() + 1 - inset, pos.getY() + (chestShape ? 0.875 : 1), pos.getZ() + 1 - inset);
 			int argb = color(entry.type());
 			if (fill.get()) {
-				WorldRenderer3D.boxFilled(event.frame(), box, ColorUtil.withAlpha(argb, 40), throughWalls.get());
+				WorldRenderer3D.boxFilled(event.frame(), box, ColorUtil.withAlpha(argb, 56), throughWalls.get());
 			}
-			WorldRenderer3D.boxOutline(event.frame(), box, ColorUtil.withAlpha(argb, 220), 1.6f, throughWalls.get());
+			WorldRenderer3D.boxOutline(event.frame(), box, ColorUtil.withAlpha(argb, 230), 2.5f, throughWalls.get());
 		}
 	}
 }
