@@ -1,7 +1,5 @@
 package dev.shadowvisuals.modules.hud;
 
-import java.util.Locale;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 
@@ -13,6 +11,7 @@ import dev.shadowvisuals.render.Renderer2D;
 import dev.shadowvisuals.render.font.FontManager;
 import dev.shadowvisuals.setting.BooleanSetting;
 import dev.shadowvisuals.util.ColorUtil;
+import dev.shadowvisuals.util.Numbers;
 
 /** Heading strip with cardinal letters and degree ticks, interpolated with the frame for smooth motion. */
 public final class CompassHud extends PanelHudModule {
@@ -68,7 +67,7 @@ public final class CompassHud extends PanelHudModule {
 		renderer.popClip();
 		renderer.rounded(center - 0.75f, 2, 1.5f, 3.5f, 0.75f, context.theme().accent());
 		if (showDegrees.get()) {
-			String text = String.format(Locale.ROOT, "%.0f°", heading);
+			String text = Numbers.fixed(heading, 0) + "°";
 			renderer.text(text, center, HEIGHT + 2, 6.5f, context.theme().textSecondary(), Renderer2D.Align.CENTER);
 			setSize(WIDTH, HEIGHT + 10);
 		} else {

@@ -1,7 +1,5 @@
 package dev.shadowvisuals.modules.hud;
 
-import java.util.Locale;
-
 import net.minecraft.client.Minecraft;
 
 import dev.shadowvisuals.animation.SmoothValue;
@@ -11,6 +9,7 @@ import dev.shadowvisuals.hud.HudContext;
 import dev.shadowvisuals.hud.InfoHudModule;
 import dev.shadowvisuals.setting.BooleanSetting;
 import dev.shadowvisuals.ui.Icon;
+import dev.shadowvisuals.util.Numbers;
 
 /** Blocks per second, measured per tick and smoothed so the number does not flicker. */
 public final class SpeedHud extends InfoHudModule {
@@ -52,6 +51,6 @@ public final class SpeedHud extends InfoHudModule {
 
 	@Override
 	protected String value(HudContext context, Minecraft client) {
-		return client.player == null ? null : String.format(Locale.ROOT, "%.2f", speed.get());
+		return client.player == null ? null : Numbers.fixed(speed.get(), 2);
 	}
 }

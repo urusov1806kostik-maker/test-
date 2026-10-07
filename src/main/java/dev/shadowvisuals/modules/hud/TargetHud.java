@@ -25,6 +25,7 @@ import dev.shadowvisuals.theme.DesignTokens;
 import dev.shadowvisuals.theme.ThemeManager;
 import dev.shadowvisuals.ui.Icon;
 import dev.shadowvisuals.util.ColorUtil;
+import dev.shadowvisuals.util.Numbers;
 
 /**
  * Information about the entity you fight or look at: head, name, health and absorption with smoothly
@@ -163,7 +164,7 @@ public final class TargetHud extends PanelHudModule {
 		float currentHealth = Math.max(0, health.get());
 		float trail = Math.max(currentHealth, healthTrail.get());
 		float absorb = Math.max(0, absorption.get());
-		String healthText = String.format(Locale.ROOT, "%.1f", currentHealth + absorb);
+		String healthText = Numbers.fixed(currentHealth + absorb, 1);
 		bold(context, renderer.ellipsize(name, TEXT, FontManager.Weight.SEMIBOLD, textWidth - boldWidth(context, healthText) - 6), textX, headY - 1, theme.textPrimary());
 		float healthWidth = boldWidth(context, healthText);
 		int healthColor = ColorUtil.lerp(theme.error(), theme.success(), Math.min(1f, currentHealth / Math.max(1f, maxHealth)));
@@ -185,7 +186,7 @@ public final class TargetHud extends PanelHudModule {
 		}
 		float chipsY = barY + barHeight + 5;
 		float cursor = textX;
-		cursor = chip(context, Icon.MOVE, String.format(Locale.ROOT, "%.1fm", distance), cursor, chipsY);
+		cursor = chip(context, Icon.MOVE, Numbers.fixed(distance, 1) + "m", cursor, chipsY);
 		cursor = chip(context, Icon.LAYOUT, Integer.toString(armor), cursor, chipsY);
 		if (ping >= 0) {
 			chip(context, Icon.GLOBE, ping + "ms", cursor, chipsY);

@@ -1,5 +1,5 @@
-[16:45:59] [Test worker/WARN]: Missing translation file /assets/shadowvisuals/i18n/uk_ua.json
-[16:45:59] [Test worker/ERROR]: Config file /tmp/junit-1254008199081128149/broken.json is corrupted; loading defaults
+[16:48:27] [Test worker/WARN]: Missing translation file /assets/shadowvisuals/i18n/uk_ua.json
+[16:48:27] [Test worker/ERROR]: Config file /tmp/junit-4152626758462002041/broken.json is corrupted; loading defaults
 com.google.gson.JsonSyntaxException: com.google.gson.stream.MalformedJsonException: Expected ':' at line 1 column 9 path $.this
 See https://github.com/google/gson/blob/main/Troubleshooting.md#malformed-json
 	at com.google.gson.internal.Streams.parse(Streams.java:58)
@@ -101,8 +101,8 @@ See https://github.com/google/gson/blob/main/Troubleshooting.md#malformed-json
 	at com.google.gson.internal.bind.JsonElementTypeAdapter.read(JsonElementTypeAdapter.java:35)
 	at com.google.gson.internal.Streams.parse(Streams.java:46)
 	... 89 more
-[16:45:59] [Test worker/WARN]: Corrupted config backed up to /tmp/junit-1254008199081128149/broken.corrupt-20261007-164559.json
-[16:45:59] [Test worker/ERROR]: Module 'bad' crashed while handling Ping; disabling it
+[16:48:27] [Test worker/WARN]: Corrupted config backed up to /tmp/junit-4152626758462002041/broken.corrupt-20261007-164827.json
+[16:48:27] [Test worker/ERROR]: Module 'bad' crashed while handling Ping; disabling it
 java.lang.IllegalStateException: boom
 	at dev.shadowvisuals.module.ModuleTest$CountingModule.lambda$new$0(ModuleTest.java:35)
 	at dev.shadowvisuals.event.EventBus$Listener.invoke(EventBus.java:93)
@@ -190,7 +190,7 @@ java.lang.IllegalStateException: boom
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
-[16:45:59] [Test worker/ERROR]: Module 'broken' failed during enable and was disabled
+[16:48:27] [Test worker/ERROR]: Module 'broken' failed during enable and was disabled
 java.lang.IllegalStateException: cannot enable
 	at dev.shadowvisuals.module.ModuleTest$BrokenModule.onEnable(ModuleTest.java:59)
 	at dev.shadowvisuals.module.Module.enable(Module.java:157)

@@ -36,6 +36,7 @@ import dev.shadowvisuals.setting.StringSetting;
 import dev.shadowvisuals.theme.DesignTokens;
 import dev.shadowvisuals.ui.Icon;
 import dev.shadowvisuals.util.ColorUtil;
+import dev.shadowvisuals.util.Numbers;
 
 /**
  * Universal warning banners: low health, low durability, missing important items and "cooldown ready".
@@ -128,7 +129,7 @@ public final class WarningsHud extends PanelHudModule {
 			return;
 		}
 		set(Kind.LOW_HEALTH, healthEnabled.get() && player.getHealth() + player.getAbsorptionAmount() <= healthThreshold.getFloat() && player.isAlive(),
-			String.format(Locale.ROOT, "%.1f HP", player.getHealth() + player.getAbsorptionAmount()), healthSound.get());
+			Numbers.fixed(player.getHealth() + player.getAbsorptionAmount(), 1) + " HP", healthSound.get());
 
 		String worstItem = null;
 		float worst = 2f;

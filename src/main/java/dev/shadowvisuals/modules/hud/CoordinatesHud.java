@@ -1,7 +1,5 @@
 package dev.shadowvisuals.modules.hud;
 
-import java.util.Locale;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.Level;
 
@@ -10,6 +8,7 @@ import dev.shadowvisuals.hud.HudContext;
 import dev.shadowvisuals.hud.InfoHudModule;
 import dev.shadowvisuals.setting.BooleanSetting;
 import dev.shadowvisuals.ui.Icon;
+import dev.shadowvisuals.util.Numbers;
 
 /** Player position with optional Nether/Overworld conversion. Hidden by recording mode. */
 public final class CoordinatesHud extends InfoHudModule {
@@ -46,7 +45,7 @@ public final class CoordinatesHud extends InfoHudModule {
 
 	private String format(double x, double y, double z) {
 		return decimals.get()
-			? String.format(Locale.ROOT, "%.1f, %.1f, %.1f", x, y, z)
-			: String.format(Locale.ROOT, "%d, %d, %d", (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
+			? Numbers.appendFixed(Numbers.appendFixed(Numbers.appendFixed(new StringBuilder(24), x, 1).append(", "), y, 1).append(", "), z, 1).toString()
+			: (int) Math.floor(x) + ", " + (int) Math.floor(y) + ", " + (int) Math.floor(z);
 	}
 }

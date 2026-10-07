@@ -1,7 +1,5 @@
 package dev.shadowvisuals.modules.visual;
 
-import java.util.Locale;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.util.Mth;
@@ -20,6 +18,7 @@ import dev.shadowvisuals.setting.BooleanSetting;
 import dev.shadowvisuals.setting.NumberSetting;
 import dev.shadowvisuals.theme.DesignTokens;
 import dev.shadowvisuals.util.ColorUtil;
+import dev.shadowvisuals.util.Numbers;
 
 /**
  * Clean player name tags drawn in screen space: name, health, distance, ping, held item and armor. Size is
@@ -87,7 +86,7 @@ public final class NameTags extends Module {
 		float text = DesignTokens.FONT_SMALL;
 		line.setLength(0);
 		if (distance.get()) {
-			line.append(String.format(Locale.ROOT, "%.0fm", dist));
+			Numbers.appendFixed(line, dist, 0).append('m');
 		}
 		if (ping.get() && minecraft.getConnection() != null) {
 			PlayerInfo info = minecraft.getConnection().getPlayerInfo(player.getUUID());
@@ -96,7 +95,7 @@ public final class NameTags extends Module {
 			}
 		}
 		String details = line.toString();
-		String healthText = health.get() ? String.format(Locale.ROOT, "%.1f", player.getHealth() + player.getAbsorptionAmount()) : null;
+		String healthText = health.get() ? Numbers.fixed(player.getHealth() + player.getAbsorptionAmount(), 1) : null;
 		float nameWidth = renderer.textWidth(name, text, FontManager.Weight.SEMIBOLD);
 		float healthWidth = healthText == null ? 0 : renderer.textWidth(healthText, text, FontManager.Weight.SEMIBOLD) + 5;
 		float detailsWidth = details.isEmpty() ? 0 : renderer.textWidth(details, DesignTokens.FONT_CAPTION) + 5;

@@ -163,6 +163,24 @@ class CoreSystemsTest {
 	}
 
 	@Test
+	void numbersMatchStringFormat() {
+		double[] values = {0, 0.04, 0.05, 1.25, -1.25, -0.04, 12.999, 123456.789, 20, -7.5};
+		for (double value : values) {
+			for (int decimals = 0; decimals <= 3; decimals++) {
+				String expected = java.math.BigDecimal.valueOf(value).setScale(decimals, java.math.RoundingMode.HALF_UP).toPlainString();
+				if (expected.startsWith("-") && Double.parseDouble(expected) == 0) {
+					expected = expected.substring(1);
+				}
+				assertEquals(expected, dev.shadowvisuals.util.Numbers.fixed(value, decimals), value + " / " + decimals);
+			}
+		}
+		assertEquals("05:09", dev.shadowvisuals.util.TimeFormat.duration(309_000));
+		assertEquals("1:05:09", dev.shadowvisuals.util.TimeFormat.duration(3_909_000));
+		assertEquals("4.2s", dev.shadowvisuals.util.TimeFormat.seconds(4.2f));
+		assertEquals("12s", dev.shadowvisuals.util.TimeFormat.seconds(12.4f));
+	}
+
+	@Test
 	void deathPointsAreCapped() {
 		WaypointManager manager = new WaypointManager();
 		for (int i = 0; i < 5; i++) {

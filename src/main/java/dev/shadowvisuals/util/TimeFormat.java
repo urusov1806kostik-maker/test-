@@ -1,7 +1,5 @@
 package dev.shadowvisuals.util;
 
-import java.util.Locale;
-
 public final class TimeFormat {
 	private TimeFormat() {
 	}
@@ -12,13 +10,17 @@ public final class TimeFormat {
 		long hours = totalSeconds / 3600;
 		long minutes = (totalSeconds % 3600) / 60;
 		long seconds = totalSeconds % 60;
-		return hours > 0
-			? String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
-			: String.format(Locale.ROOT, "%02d:%02d", minutes, seconds);
+		StringBuilder out = new StringBuilder(10);
+		if (hours > 0) {
+			Numbers.appendTwoDigits(out.append(hours).append(':'), minutes);
+		} else {
+			Numbers.appendTwoDigits(out, minutes);
+		}
+		return Numbers.appendTwoDigits(out.append(':'), seconds).toString();
 	}
 
 	/** Seconds with one decimal below 10 s ({@code 4.2s}), whole seconds above. */
 	public static String seconds(float seconds) {
-		return seconds < 10f ? String.format(Locale.ROOT, "%.1fs", seconds) : String.format(Locale.ROOT, "%.0fs", seconds);
+		return Numbers.fixed(seconds, seconds < 10f ? 1 : 0) + "s";
 	}
 }
