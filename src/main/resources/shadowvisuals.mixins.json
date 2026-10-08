@@ -17,6 +17,7 @@
 		"LevelMixin",
 		"LevelRendererMixin",
 		"LightTextureMixin",
+		"LivingEntityMixin",
 		"MouseHandlerMixin",
 		"MouseTurnMixin",
 		"ParticleEngineMixin",

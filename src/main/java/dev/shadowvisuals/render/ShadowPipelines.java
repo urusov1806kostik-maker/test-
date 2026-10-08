@@ -59,8 +59,34 @@ public final class ShadowPipelines {
 		.withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
 		.build();
 
+	/** Distance-field text in the world (3D labels): same shader as GUI text, world depth, no culling. */
+	public static final RenderPipeline WORLD_SDF_TEXT = RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET)
+		.withLocation(id("pipeline/world_sdf_text"))
+		.withVertexShader(id("core/sdf_text"))
+		.withFragmentShader(id("core/sdf_text"))
+		.withSampler("Sampler0")
+		.withBlend(com.mojang.blaze3d.pipeline.BlendFunction.TRANSLUCENT)
+		.withVertexFormat(com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_TEX_COLOR, com.mojang.blaze3d.vertex.VertexFormat.Mode.QUADS)
+		.withCull(false)
+		.withDepthWrite(false)
+		.build();
+
+	/** {@link #WORLD_SDF_TEXT} drawn on top of terrain. */
+	public static final RenderPipeline WORLD_SDF_TEXT_SEE_THROUGH = RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET)
+		.withLocation(id("pipeline/world_sdf_text_see_through"))
+		.withVertexShader(id("core/sdf_text"))
+		.withFragmentShader(id("core/sdf_text"))
+		.withSampler("Sampler0")
+		.withBlend(com.mojang.blaze3d.pipeline.BlendFunction.TRANSLUCENT)
+		.withVertexFormat(com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_TEX_COLOR, com.mojang.blaze3d.vertex.VertexFormat.Mode.QUADS)
+		.withCull(false)
+		.withDepthWrite(false)
+		.withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+		.build();
+
 	private static boolean shapesAvailable = true;
 	private static boolean textAvailable = true;
+	private static boolean worldTextAvailable = true;
 	private static boolean validationPending = true;
 
 	private ShadowPipelines() {
@@ -86,6 +112,7 @@ public final class ShadowPipelines {
 		validationPending = false;
 		shapesAvailable = compiles(UI_SHAPE);
 		textAvailable = compiles(SDF_TEXT);
+		worldTextAvailable = textAvailable && compiles(WORLD_SDF_TEXT) && compiles(WORLD_SDF_TEXT_SEE_THROUGH);
 	}
 
 	private static boolean compiles(RenderPipeline pipeline) {
@@ -108,5 +135,10 @@ public final class ShadowPipelines {
 
 	public static boolean textAvailable() {
 		return textAvailable;
+	}
+
+	/** Whether the custom font can be drawn in the world; checked like the GUI pipelines. */
+	public static boolean worldTextAvailable() {
+		return worldTextAvailable && !validationPending;
 	}
 }

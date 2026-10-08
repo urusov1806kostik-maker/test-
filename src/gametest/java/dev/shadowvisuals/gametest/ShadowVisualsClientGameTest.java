@@ -97,6 +97,24 @@ public final class ShadowVisualsClientGameTest implements FabricClientGameTest {
 			context.waitForScreen(null);
 			context.waitTicks(5);
 
+			// Target HUD: an armored target with visible effects that pops a totem.
+			world.getServer().runCommand("execute at @a run summon minecraft:zombie ~ ~ ~2 {NoAI:1b,PersistenceRequired:1b,Silent:1b,"
+				+ "equipment:{head:{id:\"minecraft:diamond_helmet\",count:1},chest:{id:\"minecraft:iron_chestplate\",count:1},"
+				+ "mainhand:{id:\"minecraft:diamond_sword\",count:1},offhand:{id:\"minecraft:totem_of_undying\",count:1}}}");
+			world.getServer().runCommand("effect give @e[type=minecraft:zombie] minecraft:speed 999 1");
+			world.getServer().runCommand("effect give @e[type=minecraft:zombie] minecraft:strength 999 0");
+			context.waitTicks(10);
+			world.getServer().runCommand("damage @e[type=minecraft:zombie,limit=1] 100");
+			context.runOnClient(client -> {
+				ShadowClient.get().modules().byId("target_hud").setEnabled(true);
+				client.player.setYRot(0f);
+				client.player.setXRot(20f);
+			});
+			context.waitTicks(30);
+			context.takeScreenshot("02h_target_hud");
+			world.getServer().runCommand("kill @e[type=minecraft:zombie]");
+			context.waitTicks(5);
+
 			// Music lyrics: the preview drives the 3D lyric effect without a media player.
 			context.runOnClient(client -> {
 				client.player.setXRot(5f);

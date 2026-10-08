@@ -9,8 +9,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.chat.FormattedText;
-import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 
 import dev.shadowvisuals.ShadowClient;
@@ -113,7 +111,7 @@ public final class MusicLyrics extends Module {
 	private static final class FloatingLine {
 		final Kind kind;
 		final String text;
-		final List<FormattedCharSequence> rows;
+		final List<String> rows;
 		final double born;
 		final float angle;
 		final float radius;
@@ -124,7 +122,7 @@ public final class MusicLyrics extends Module {
 		final float hue;
 		double fadeStart = Double.NaN;
 
-		FloatingLine(Kind kind, String text, List<FormattedCharSequence> rows, double born, float angle, float radius, float height,
+		FloatingLine(Kind kind, String text, List<String> rows, double born, float angle, float radius, float height,
 			float phase, float orbit, float rise, float hue) {
 			this.kind = kind;
 			this.text = text;
@@ -340,8 +338,7 @@ public final class MusicLyrics extends Module {
 		if (lines.size() >= MAX_POOL) {
 			lines.remove(0);
 		}
-		Font font = Minecraft.getInstance().font;
-		List<FormattedCharSequence> rows = List.copyOf(font.split(FormattedText.of(text), WRAP_WIDTH));
+		List<String> rows = List.copyOf(WorldRenderer3D.wrap(client.fonts(), Minecraft.getInstance().font, text, WRAP_WIDTH));
 		boolean firstPerson = Minecraft.getInstance().options.getCameraType().isFirstPerson();
 		ThreadLocalRandom random = ThreadLocalRandom.current();
 		float yaw = player.getYRot();
@@ -423,14 +420,14 @@ public final class MusicLyrics extends Module {
 			}
 			float scale = TEXT_SCALE * size.getFloat() * (line.kind == Kind.STATUS ? 0.8f : line.kind == Kind.TITLE ? 0.9f : 1f);
 			float lift = 0f;
-			List<FormattedCharSequence> rows = line.rows;
+			List<String> rows = line.rows;
 			switch (appear.get()) {
 				case RISE -> lift -= (1f - Easing.EASE_OUT_CUBIC.apply(in)) * 0.35f;
 				case POP -> scale *= 0.55f + 0.45f * Easing.EASE_OUT_BACK.apply(in);
 				case TYPEWRITER -> {
 					if (in < 1f) {
 						int visible = Math.max(1, Math.round(line.text.length() * in));
-						rows = font.split(FormattedText.of(line.text.substring(0, visible)), WRAP_WIDTH);
+						rows = WorldRenderer3D.wrap(client.fonts(), font, line.text.substring(0, visible), WRAP_WIDTH);
 					}
 				}
 				case FADE -> {
@@ -450,7 +447,7 @@ public final class MusicLyrics extends Module {
 			float emphasis = line.kind == Kind.STATUS ? 0.7f : current || line.kind == Kind.TITLE ? 1f : 0.6f;
 			int base = current || line.kind == Kind.TITLE ? highlight.color(line.hue) : color.color(line.hue);
 			int alpha = Math.round(255 * opacity.getFloat() * visibility * emphasis);
-			WorldRenderer3D.text3d(frame, font, rows, x, y, z, scale, ColorUtil.withAlpha(base, alpha), depth.getFloat(), throughWalls.get());
+			WorldRenderer3D.text3d(frame, client.fonts(), font, rows, x, y, z, scale, ColorUtil.withAlpha(base, alpha), depth.getFloat(), throughWalls.get());
 		}
 	}
 

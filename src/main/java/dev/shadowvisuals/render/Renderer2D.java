@@ -425,6 +425,20 @@ public final class Renderer2D {
 		pose.popMatrix();
 	}
 
+	/** GUI atlas sprite (e.g. a status effect icon) scaled to a square of {@code size}, tinted by the alpha stack. */
+	public void sprite(net.minecraft.resources.Identifier sprite, float x, float y, float size) {
+		if (alpha < 0.02f) {
+			return;
+		}
+		Matrix3x2fStack pose = graphics.pose();
+		pose.pushMatrix();
+		pose.translate(x, y);
+		pose.scale(size / 18f, size / 18f);
+		graphics.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, sprite, 0, 0, 18, 18,
+			dev.shadowvisuals.util.ColorUtil.withAlpha(0xFFFFFF, Math.round(255 * alpha)));
+		pose.popMatrix();
+	}
+
 	/** Item icon plus the vanilla count/durability overlay. */
 	public void itemWithOverlay(ItemStack stack, float x, float y, float size) {
 		if (stack == null || stack.isEmpty() || alpha < 0.35f) {

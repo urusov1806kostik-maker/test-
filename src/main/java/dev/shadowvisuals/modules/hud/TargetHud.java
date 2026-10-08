@@ -2,16 +2,26 @@ package dev.shadowvisuals.modules.hud;
 
 import java.util.Locale;
 
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.core.Holder;
+import net.minecraft.util.Mth;
+import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerSkin;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import dev.shadowvisuals.ShadowClient;
 import dev.shadowvisuals.animation.SmoothValue;
+import dev.shadowvisuals.core.VisibleEffects;
 import dev.shadowvisuals.hud.HudAnchor;
 import dev.shadowvisuals.hud.HudContext;
 import dev.shadowvisuals.hud.PanelHudModule;
@@ -29,8 +39,10 @@ import dev.shadowvisuals.util.Numbers;
 
 /**
  * Information about the entity you fight or look at: head, name, health and absorption with smoothly
- * animated numbers and bars, distance, armor and ping. Uses only client-visible data and keeps showing the
- * last target while it fades out instead of vanishing instantly.
+ * animated numbers and bars, distance, armor and ping, plus what matters in PvP on servers like FunTime:
+ * worn armor and held items with durability, totems popped and the effects the target visibly has. Uses only
+ * client-visible data (effects are recognized from their particles, without levels or durations) and keeps
+ * showing the last target while it fades out instead of vanishing instantly.
  */
 public final class TargetHud extends PanelHudModule {
 	public enum Look {
@@ -43,9 +55,17 @@ public final class TargetHud extends PanelHudModule {
 	private final BooleanSetting onLook = settings().add(new BooleanSetting("show_on_look", true));
 	private final NumberSetting timeout = settings().add(new NumberSetting("timeout", 3.0, 0.5, 10.0, 0.5).suffix("s"));
 	private final BooleanSetting playersOnly = settings().add(new BooleanSetting("players_only", false));
+	private final BooleanSetting showEquipment = settings().add(new BooleanSetting("show_equipment", true));
+	private final BooleanSetting showEffects = settings().add(new BooleanSetting("show_effects", true));
+	private final BooleanSetting showPops = settings().add(new BooleanSetting("show_pops", true));
+	private final BooleanSetting hitShake = settings().add(new BooleanSetting("hit_shake", true));
 	private final SmoothValue health = new SmoothValue(0f, 9f);
 	private final SmoothValue healthTrail = new SmoothValue(0f, 2.2f);
 	private final SmoothValue absorption = new SmoothValue(0f, 9f);
+	private static final EquipmentSlot[] EQUIPMENT = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET,
+		EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND};
+	private static final ItemStack TOTEM = new ItemStack(Items.TOTEM_OF_UNDYING);
+
 	private LivingEntity current;
 	private LivingEntity shown;
 	private long lastLookMillis;
@@ -129,22 +149,32 @@ public final class TargetHud extends PanelHudModule {
 				skin = info.getSkin();
 			}
 		}
-		draw(context, name, skin, target.getMaxHealth(), target.getArmorValue(), distance, ping, target.hurtTime);
+		draw(context, target, name, skin, target.getMaxHealth(), target.getArmorValue(), distance, ping, target.hurtTime);
 	}
 
 	private void drawPreview(HudContext context) {
 		health.setTarget(14f);
 		healthTrail.setTarget(14f);
 		absorption.setTarget(4f);
-		draw(context, "Steve", null, 20f, 12, 3.4f, 42, 0);
+		// The editor preview uses your own gear so the extra rows can be positioned too.
+		draw(context, Minecraft.getInstance().player, "Steve", null, 20f, 12, 3.4f, 42, 0);
 	}
 
-	private void draw(HudContext context, String name, PlayerSkin skin, float maxHealth, int armor, float distance, int ping, int hurtTime) {
+	private void draw(HudContext context, LivingEntity gear, String name, PlayerSkin skin, float maxHealth, int armor, float distance, int ping,
+		int hurtTime) {
 		Renderer2D renderer = context.renderer();
 		ThemeManager theme = context.theme();
 		boolean compact = look.get() == Look.COMPACT;
 		float width = compact ? 118 : 142;
-		float height = compact ? 26 : 42;
+		List<Holder<MobEffect>> effects = !compact && showEffects.get() && gear != null && !context.editing() ? VisibleEffects.of(gear) : List.of();
+		boolean equipmentRow = !compact && showEquipment.get() && gear != null && hasEquipment(gear);
+		float baseHeight = compact ? 26 : 42;
+		float height = baseHeight + (equipmentRow ? 14 : 0) + (effects.isEmpty() ? 0 : 12);
+		if (hitShake.get() && hurtTime > 0) {
+			// A short decaying shake when the target takes a hit.
+			float strength = hurtTime / 10f;
+			renderer.translate(Mth.sin(hurtTime * 2.4f) * 1.6f * strength, 0);
+		}
 		panel(context, width, height);
 		float head = height - PADDING * 2;
 		float headX = PADDING + 1;
@@ -189,9 +219,57 @@ public final class TargetHud extends PanelHudModule {
 		cursor = chip(context, Icon.MOVE, Numbers.fixed(distance, 1) + "m", cursor, chipsY);
 		cursor = chip(context, Icon.LAYOUT, Integer.toString(armor), cursor, chipsY);
 		if (ping >= 0) {
-			chip(context, Icon.GLOBE, ping + "ms", cursor, chipsY);
+			cursor = chip(context, Icon.GLOBE, ping + "ms", cursor, chipsY);
+		}
+		int pops = showPops.get() && gear != null && !context.editing() ? client.combat().totemPops(gear) : 0;
+		if (pops > 0) {
+			popsChip(context, pops, cursor, chipsY);
+		}
+		float rowY = baseHeight - 1;
+		if (equipmentRow) {
+			float x = PADDING + 1;
+			for (EquipmentSlot slot : EQUIPMENT) {
+				ItemStack stack = gear.getItemBySlot(slot);
+				if (slot == EquipmentSlot.MAINHAND) {
+					x += 4;
+				}
+				if (!stack.isEmpty()) {
+					renderer.itemWithOverlay(stack, x, rowY, 12);
+				}
+				x += 14;
+			}
+			rowY += 14;
+		}
+		if (!effects.isEmpty()) {
+			float x = PADDING + 1;
+			for (Holder<MobEffect> effect : effects) {
+				if (x + 10 > width - PADDING) {
+					break;
+				}
+				renderer.sprite(Gui.getMobEffectSprite(effect), x, rowY, 10);
+				x += 12;
+			}
 		}
 		setSize(width, height);
+	}
+
+	private static boolean hasEquipment(LivingEntity entity) {
+		for (EquipmentSlot slot : EQUIPMENT) {
+			if (!entity.getItemBySlot(slot).isEmpty()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void popsChip(HudContext context, int pops, float x, float y) {
+		Renderer2D renderer = context.renderer();
+		float size = DesignTokens.FONT_CAPTION;
+		String value = "×" + pops;
+		float width = 9 + 2 + renderer.textWidth(value, size) + 5;
+		renderer.rounded(x, y, width, 10, 3, ColorUtil.withAlpha(context.theme().warning(), 40));
+		renderer.item(TOTEM, x + 2, y + 1, 8);
+		renderer.text(value, x + 11, y + 5 - renderer.fonts().visualCenter(size), size, context.theme().warning());
 	}
 
 	private float chip(HudContext context, Icon icon, String value, float x, float y) {

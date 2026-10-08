@@ -12,3 +12,6 @@ accessible field net/minecraft/client/renderer/texture/OverlayTexture texture Ln
 accessible field net/minecraft/client/gui/components/PlayerTabOverlay header Lnet/minecraft/network/chat/Component;
 accessible field net/minecraft/client/gui/components/PlayerTabOverlay footer Lnet/minecraft/network/chat/Component;
 accessible field net/minecraft/client/gui/components/BossHealthOverlay events Ljava/util/Map;
+
+# Target HUD reads which effects a target shows from the synced effect particle list (no durations are known).
+accessible field net/minecraft/world/entity/LivingEntity DATA_EFFECT_PARTICLES Lnet/minecraft/network/syncher/EntityDataAccessor;

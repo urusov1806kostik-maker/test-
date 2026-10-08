@@ -6,7 +6,6 @@ import java.util.List;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffectUtil;
 
@@ -75,12 +74,7 @@ public final class PotionEffectsHud extends PanelHudModule {
 			boolean expiring = !effect.isInfiniteDuration() && effect.endsWithin(200);
 			float blink = expiring ? (float) (0.55 + 0.45 * Math.cos(now * Math.PI * 2)) : 1f;
 			renderer.pushAlpha(blink);
-			renderer.push();
-			renderer.translate(PADDING + 2, y + 1);
-			renderer.scale(12f / 18f);
-			renderer.graphics().blitSprite(RenderPipelines.GUI_TEXTURED, Gui.getMobEffectSprite(effect.getEffect()), 0, 0, 18, 18,
-				ColorUtil.withAlpha(0xFFFFFF, Math.round(255 * renderer.alpha())));
-			renderer.pop();
+			renderer.sprite(Gui.getMobEffectSprite(effect.getEffect()), PADDING + 2, y + 1, 12);
 			float centerY = y + rowHeight / 2f;
 			int nameColor = effect.getEffect().value().isBeneficial() ? context.theme().textPrimary() : ColorUtil.lerp(context.theme().textPrimary(), context.theme().error(), 0.45f);
 			text(context, names.get(i), PADDING + 18, centerY - renderer.fonts().visualCenter(TEXT), nameColor);
