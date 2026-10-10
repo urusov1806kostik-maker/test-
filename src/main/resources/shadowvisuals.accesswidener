@@ -15,3 +15,7 @@ accessible field net/minecraft/client/gui/components/BossHealthOverlay events Lj
 
 # Target HUD reads which effects a target shows from the synced effect particle list (no durations are known).
 accessible field net/minecraft/world/entity/LivingEntity DATA_EFFECT_PARTICLES Lnet/minecraft/network/syncher/EntityDataAccessor;
+
+# Alt Manager switches the session to an offline account (outside a world only).
+accessible field net/minecraft/client/Minecraft user Lnet/minecraft/client/User;
+mutable field net/minecraft/client/Minecraft user Lnet/minecraft/client/User;

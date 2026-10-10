@@ -108,5 +108,6 @@ public final class ModuleCatalog {
 
 		// Utility
 		modules.register(new RecordingMode());
+		modules.register(new dev.shadowvisuals.modules.utility.AltManager(client));
 	}
 }
