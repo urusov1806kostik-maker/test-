@@ -26,7 +26,7 @@ DEFAULTS = {
     "personality": "friendly",
     "custom_personality": "",
     "user_name": "",
-    "voice": "ru-RU-DmitryNeural",
+    "voice": "piper:ru_RU-dmitri-medium",
     "voice_rate": 0,          # проценты, -50..+50
     "voice_volume": 0,
     "tts_enabled": True,
@@ -71,6 +71,10 @@ class Settings:
                 self.data.update(json.loads(self.path.read_text("utf-8")))
             except Exception:
                 pass
+        # v1.0: голос Microsoft Edge стал недоступен (403) — переводим на офлайн-голос Piper
+        if self.data.get("voice") == "ru-RU-DmitryNeural" and not self.data.get("voice_migrated"):
+            self.data["voice"] = DEFAULTS["voice"]
+            self.data["voice_migrated"] = True
 
     def get(self, key, default=None):
         return self.data.get(key, DEFAULTS.get(key, default))

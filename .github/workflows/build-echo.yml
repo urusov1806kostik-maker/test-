@@ -30,7 +30,15 @@ jobs:
           pip install -r requirements.txt
 
       - name: Import check
-        run: python -c "import echo_app.app, echo_app.integrations.telegram, echo_app.integrations.discord_bot, edge_tts, pycaw, vosk, webrtcvad, telethon; print('ok')"
+        run: python -c "import echo_app.app, echo_app.integrations.telegram, echo_app.integrations.discord_bot, edge_tts, piper, pycaw, vosk, webrtcvad, telethon; print('ok')"
+
+      - name: Download built-in voice (Piper ru_RU-dmitri-medium)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force voices | Out-Null
+          $base = "https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/dmitri/medium/ru_RU-dmitri-medium"
+          Invoke-WebRequest "$base.onnx" -OutFile voices\ru_RU-dmitri-medium.onnx
+          Invoke-WebRequest "$base.onnx.json" -OutFile voices\ru_RU-dmitri-medium.onnx.json
 
       - name: Build ECHO.exe
         run: pyinstaller --noconfirm --clean installer\echo.spec
@@ -76,6 +84,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           make_latest: true
           body: |
-            Скачайте **ECHO_Setup.exe** ниже, запустите и следуйте установщику — на рабочем столе появится ярлык E.C.H.O.
+            Скачайте **ECHO_Setup.exe** ниже (Assets), запустите и следуйте установщику — на рабочем столе появится ярлык E.C.H.O.
+            Голос: офлайн мужской голос Дмитрий (Piper) встроен — говорит без интернета.
             После запуска: Настройки → API-ключ Claude.
           files: echo/dist/ECHO_Setup.exe

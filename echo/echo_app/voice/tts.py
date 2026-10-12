@@ -1,6 +1,6 @@
 """Синтез речи.
-Основной движок: Microsoft Edge neural TTS (edge-tts) — естественный мужской голос ru-RU-DmitryNeural.
-Запасной (без интернета): Windows SAPI через pyttsx3.
+Основной движок: Piper — нейронный синтез прямо на компьютере, без интернета (мужской голос ru_RU-dmitri).
+Дополнительно: Microsoft Edge neural TTS (онлайн, может быть недоступен) и Windows SAPI.
 Воспроизведение через sounddevice — можно мгновенно остановить (перебивание)."""
 import asyncio
 import logging
@@ -11,19 +11,54 @@ import time
 
 import numpy as np
 
-from ..config import settings
+from ..config import settings, data_dir, resource_path
 
 log = logging.getLogger("echo.tts")
 
+DEFAULT_VOICE = "piper:ru_RU-dmitri-medium"
 VOICES = {
-    "ru-RU-DmitryNeural": "Дмитрий (мужской, нейронный)",
-    "ru-RU-SvetlanaNeural": "Светлана (женский, нейронный)",
-    "ru-RU-DariyaNeural": "Дария (женский, нейронный)",
-    "sapi": "Системный голос Windows (офлайн)",
+    "piper:ru_RU-dmitri-medium": "Дмитрий (мужской, офлайн) — по умолчанию",
+    "piper:ru_RU-ruslan-medium": "Руслан (мужской, офлайн, скачается)",
+    "piper:ru_RU-denis-medium": "Денис (мужской, офлайн, скачается)",
+    "piper:ru_RU-irina-medium": "Ирина (женский, офлайн, скачается)",
+    "ru-RU-DmitryNeural": "Microsoft Дмитрий (онлайн)",
+    "sapi": "Системный голос Windows",
 }
-LANG_VOICES = {"en": "en-US-GuyNeural", "de": "de-DE-ConradNeural", "fr": "fr-FR-HenriNeural", "es": "es-ES-AlvaroNeural",
-               "it": "it-IT-DiegoNeural", "uk": "uk-UA-OstapNeural", "ja": "ja-JP-KeitaNeural", "zh": "zh-CN-YunxiNeural",
-               "pl": "pl-PL-MarekNeural", "tr": "tr-TR-AhmetNeural", "ko": "ko-KR-InJoonNeural", "pt": "pt-BR-AntonioNeural"}
+# голоса для переводчика (Piper, скачиваются при первом использовании); запасной — Edge
+LANG_VOICES = {"en": "en_US-ryan-medium", "de": "de_DE-thorsten-medium", "fr": "fr_FR-tom-medium", "es": "es_ES-davefx-medium",
+               "it": "it_IT-riccardo-x_low", "uk": "uk_UA-ukrainian_tts-medium", "pl": "pl_PL-darkman-medium",
+               "tr": "tr_TR-dfki-medium", "zh": "zh_CN-huayan-medium", "pt": "pt_BR-faber-medium"}
+EDGE_LANG = {"en": "en-US-GuyNeural", "de": "de-DE-ConradNeural", "fr": "fr-FR-HenriNeural", "es": "es-ES-AlvaroNeural",
+             "it": "it-IT-DiegoNeural", "uk": "uk-UA-OstapNeural", "ja": "ja-JP-KeitaNeural", "zh": "zh-CN-YunxiNeural",
+             "pl": "pl-PL-MarekNeural", "tr": "tr-TR-AhmetNeural", "ko": "ko-KR-InJoonNeural", "pt": "pt-BR-AntonioNeural"}
+HF = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
+
+def piper_model_path(name: str):
+    """Путь к модели голоса: встроенная в программу или скачанная в %APPDATA%/ECHO/voices."""
+    for base in (resource_path("voices"), data_dir() / "voices"):
+        p = base / f"{name}.onnx"
+        if p.exists() and (base / f"{name}.onnx.json").exists():
+            return p
+    return None
+
+
+def download_piper_voice(name: str, progress=None):
+    import urllib.request
+    lang = name.split("-")[0]                     # ru_RU
+    speaker, quality = name.split("-")[1], name.split("-")[2]
+    folder = data_dir() / "voices"
+    folder.mkdir(parents=True, exist_ok=True)
+    for ext in (".onnx.json", ".onnx"):
+        url = f"{HF}/{lang.split('_')[0]}/{lang}/{speaker}/{quality}/{name}{ext}"
+        tmp = folder / f"{name}{ext}.part"
+
+        def hook(n, bs, total):
+            if progress and total > 0 and ext == ".onnx":
+                progress(min(100, int(n * bs * 100 / total)))
+        urllib.request.urlretrieve(url, tmp, hook)
+        tmp.replace(folder / f"{name}{ext}")
+    return folder / f"{name}.onnx"
 
 
 class TTS:
@@ -40,6 +75,8 @@ class TTS:
         self.current_text = ""        # для подавления эха в распознавании
         self.last_spoken_end = 0.0
         self._gen = 0
+        self._piper = {}              # загруженные модели Piper
+        self._downloading = set()
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -106,20 +143,58 @@ class TTS:
     def _synth(self, text, lang):
         voice = settings.get("voice")
         if lang and lang in LANG_VOICES:
-            voice = LANG_VOICES[lang]
-        if voice != "sapi":
-            for attempt in range(2):
-                try:
-                    return self._edge(text, voice)
-                except Exception as e:
-                    log.warning("edge-tts попытка %d: %s", attempt + 1, e)
-            self._report("Нейронный голос недоступен (нет интернета?) — говорю системным голосом Windows.")
+            chain = ["piper:" + LANG_VOICES[lang], EDGE_LANG.get(lang)]
+        elif voice == "sapi":
+            chain = ["sapi"]
+        elif voice.startswith("piper:"):
+            chain = [voice, DEFAULT_VOICE, "ru-RU-DmitryNeural", "sapi"]
+        else:
+            chain = [voice, DEFAULT_VOICE, "sapi"]
+        seen = set()
+        for v in chain:
+            if not v or v in seen:
+                continue
+            seen.add(v)
+            try:
+                if v.startswith("piper:"):
+                    res = self._piper_synth(text, v[6:])
+                    if res is None:
+                        continue
+                    return res
+                if v == "sapi":
+                    return self._sapi(text)
+                return self._edge(text, v)
+            except Exception as e:
+                log.warning("голос %s не сработал: %s", v, e)
+        self._report("Не удалось озвучить ответ ни одним голосом. Подробности в %APPDATA%\\ECHO\\echo.log")
+        return None, None
+
+    def _piper_synth(self, text, name):
+        path = piper_model_path(name)
+        if path is None:
+            if name not in self._downloading:     # качаем в фоне, пока говорим запасным голосом
+                self._downloading.add(name)
+                threading.Thread(target=self._bg_download, args=(name,), daemon=True).start()
+            return None
+        from piper import PiperVoice, SynthesisConfig
+        if name not in self._piper:
+            self._piper[name] = PiperVoice.load(str(path))
+        rate = int(settings.get("voice_rate"))
+        cfg = SynthesisConfig(length_scale=1.0 / max(0.3, 1 + rate / 100))
+        chunks = list(self._piper[name].synthesize(text, cfg))
+        if not chunks:
+            return None
+        return np.concatenate([c.audio_float_array for c in chunks]).astype(np.float32), chunks[0].sample_rate
+
+    def _bg_download(self, name):
         try:
-            return self._sapi(text)
+            download_piper_voice(name)
+            log.info("голос %s скачан", name)
         except Exception as e:
-            log.exception("SAPI failed")
-            self._report(f"Не удалось озвучить ответ: {e}")
-            return None, None
+            log.warning("не удалось скачать голос %s: %s", name, e)
+            self._report(f"Не удалось скачать голос {name}: {e}")
+        finally:
+            self._downloading.discard(name)
 
     def _edge(self, text, voice):
         import edge_tts

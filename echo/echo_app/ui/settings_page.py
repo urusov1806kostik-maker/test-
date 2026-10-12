@@ -58,9 +58,10 @@ class SettingsPage(QScrollArea):
         self.voice = QComboBox()
         for k, v in VOICES.items():
             self.voice.addItem(v, k)
-        idx = self.voice.findData(settings.get("voice"))
-        self.voice.setCurrentIndex(max(0, idx))
-        self.voice.currentIndexChanged.connect(lambda: settings.set("voice", self.voice.currentData()))
+        if self.voice.findData(settings.get("voice")) < 0:
+            self.voice.addItem(settings.get("voice"), settings.get("voice"))
+        self.voice.setCurrentIndex(self.voice.findData(settings.get("voice")))
+        self.voice.currentIndexChanged.connect(self.voice_changed)
         vr = QHBoxLayout(); vr.addWidget(self.voice, 1)
         mv = QPushButton("Ещё голоса…"); mv.clicked.connect(self.more_voices); vr.addWidget(mv)
         tb = QPushButton("▶ Прослушать"); tb.clicked.connect(lambda: self.app.assistant.tts.say("Привет! Я Эхо, ваш персональный помощник. Чем займёмся?"))
@@ -185,16 +186,39 @@ class SettingsPage(QScrollArea):
         run_bg(t, done=lambda r: QMessageBox.information(self, "Claude API", r))
 
     def more_voices(self):
-        from ..voice.tts import list_edge_voices
+        """Каталог офлайн-голосов Piper (huggingface.co/rhasspy/piper-voices)."""
+        import json, urllib.request
+        from ..voice.tts import HF
+
         def load():
-            return asyncio.run(list_edge_voices(""))
-        def got(vs):
-            v, ok = QInputDialog.getItem(self, "Голоса", "Нейронный голос Microsoft:", sorted(vs), 0, False)
+            with urllib.request.urlopen(f"{HF}/voices.json", timeout=20) as r:
+                data = json.load(r)
+            return sorted(data, key=lambda k: (not k.startswith("ru_"), k))
+
+        def got(names):
+            v, ok = QInputDialog.getItem(self, "Голоса Piper", "Офлайн-голос (скачается ~60 МБ):", names, 0, False)
             if ok:
-                if self.voice.findData(v) < 0:
-                    self.voice.addItem(v, v)
-                self.voice.setCurrentIndex(self.voice.findData(v))
+                key = "piper:" + v
+                if self.voice.findData(key) < 0:
+                    self.voice.addItem(v + " (офлайн)", key)
+                self.voice.setCurrentIndex(self.voice.findData(key))
         run_bg(load, done=got)
+
+    def voice_changed(self):
+        key = self.voice.currentData()
+        settings.set("voice", key)
+        from ..voice.tts import piper_model_path, download_piper_voice
+        if key and key.startswith("piper:") and piper_model_path(key[6:]) is None:
+            dlg = QProgressDialog(f"Скачиваю голос {key[6:]}…", None, 0, 100, self)
+            dlg.setWindowModality(Qt.WindowModal); dlg.show()
+            from PySide6.QtCore import QObject, Signal
+
+            class P(QObject):
+                v = Signal(int)
+            self._prog = P(); self._prog.v.connect(dlg.setValue)
+            run_bg(download_piper_voice, key[6:], self._prog.v.emit,
+                   done=lambda _: (dlg.close(), QMessageBox.information(self, "Голос", "Голос установлен.")),
+                   fail=lambda e: (dlg.close(), QMessageBox.warning(self, "Голос", f"Не удалось скачать: {e}")))
 
     def download_vosk(self):
         from ..voice.stt import download_vosk

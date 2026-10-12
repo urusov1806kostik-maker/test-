@@ -271,17 +271,26 @@ def setup_logging():
 
 def selftest():
     """ECHO.exe --selftest: проверка синтеза речи (нейронный голос + SAPI) без звуковой карты. Код выхода 0 = ок."""
+    import numpy as np
     from .voice.tts import TTS
     errors = []
     t = TTS(on_error=errors.append)
     ok = True
     try:
-        pcm, sr = t._edge("Привет! Я Эхо, твой голосовой помощник.", "ru-RU-DmitryNeural")
-        log.info("selftest edge-tts: %.2f s audio", len(pcm) / sr)
-        ok &= len(pcm) > sr
+        res = t._piper_synth("Привет! Я Эхо, твой голосовой помощник. Запускаю Counter-Strike 2.", "ru_RU-dmitri-medium")
+        if res is None:
+            raise RuntimeError("модель голоса ru_RU-dmitri-medium не найдена в программе")
+        pcm, sr = res
+        log.info("selftest piper: %.2f s audio, rms %.3f", len(pcm) / sr, float(np.sqrt(np.mean(pcm ** 2))))
+        ok &= len(pcm) > sr and float(np.sqrt(np.mean(pcm ** 2))) > 0.01
     except Exception:
-        log.exception("selftest edge-tts failed")
+        log.exception("selftest piper failed")
         ok = False
+    try:
+        pcm, sr = t._edge("Проверка.", "ru-RU-DmitryNeural")
+        log.info("selftest edge-tts (необязательно): %.2f s audio", len(pcm) / sr)
+    except Exception as e:
+        log.info("selftest edge-tts (необязательно) недоступен: %s", str(e)[:120])
     if sys.platform == "win32":
         try:
             pcm, sr = t._sapi("Проверка системного голоса.")
