@@ -1,0 +1,21 @@
+PySide6>=6.7
+anthropic>=0.69
+keyring>=25
+psutil>=5.9
+numpy>=1.26
+sounddevice>=0.4.7
+edge-tts>=6.1.12
+miniaudio>=1.59
+pyttsx3>=2.90
+SpeechRecognition>=3.10
+vosk>=0.3.45
+webrtcvad-wheels>=2.0.14
+Pillow>=10.0
+pycaw>=20240316; sys_platform == "win32"
+comtypes>=1.4; sys_platform == "win32"
+WMI>=1.5.1; sys_platform == "win32"
+pywin32>=306; sys_platform == "win32"
+pyperclip>=1.8
+telethon>=1.36
+discord.py>=2.4
+pyinstaller>=6.6

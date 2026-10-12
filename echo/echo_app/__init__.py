@@ -1,0 +1,2 @@
+APP_NAME = "E.C.H.O"
+VERSION = "1.0.0"
