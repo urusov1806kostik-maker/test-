@@ -49,6 +49,7 @@ class Assistant(QObject):
         self.translate_target = settings.get("translate_target")
         self.last_screen_scale = 1.0
         self._gen = 0
+        self._source = "text"     # откуда пришёл текущий запрос: голос отвечает голосом
 
     # ---------- клиент ----------
     def client(self):
@@ -93,7 +94,7 @@ class Assistant(QObject):
         self._confirm_event.clear()
         self.pending_confirm = True
         self.confirm_request.emit(question)
-        self.speak(question.split("\n")[0] + ". Да или нет?")
+        self.speak(question.split("\n")[0] + ". Да или нет?")  # голосом, только если запрос был голосовой
         ok = self._confirm_event.wait(60)
         self.pending_confirm = False
         return ok and self._confirm_result
@@ -104,6 +105,7 @@ class Assistant(QObject):
             if gen != self._gen:
                 return
             self._cancel.clear()
+            self._source = source
             self.user_message.emit(text, source)
             self.db.add_message("user", text, source)
             self.state_changed.emit("thinking")
@@ -268,8 +270,10 @@ class Assistant(QObject):
             self.speak(m.group(1))
             buf = buf[m.end():]
 
-    def speak(self, text):
-        if self.tts and settings.get("tts_enabled") and not self._cancel.is_set():
+    def speak(self, text, force=False):
+        """Озвучить ответ. Голосовой запрос — всегда голосом; текстовый — только если включено в настройках."""
+        by_voice = force or self._source == "voice" or self.conversation_mode or settings.get("speak_text_replies")
+        if self.tts and by_voice and settings.get("tts_enabled") and not self._cancel.is_set():
             clean = re.sub(r"```.*?```", " код показан в чате. ", text, flags=re.S)
             clean = re.sub(r"[*_#`>|]+", "", clean)
             clean = re.sub(r"https?://\S+", "ссылка", clean).strip()

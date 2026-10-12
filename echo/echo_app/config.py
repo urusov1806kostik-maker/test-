@@ -30,6 +30,7 @@ DEFAULTS = {
     "voice_rate": 0,          # проценты, -50..+50
     "voice_volume": 0,
     "tts_enabled": True,
+    "speak_text_replies": False,  # озвучивать ответы на сообщения из чата
     "wake_word": "эхо",
     "stt_engine": "auto",     # auto | vosk | google
     "vosk_model_path": "",

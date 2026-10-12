@@ -29,6 +29,7 @@ class Bridge(QObject):
     listen_state = Signal(str)
     heard = Signal(str)
     notify = Signal(str, str)
+    tts_error = Signal(str)
 
 
 def app_icon():
@@ -62,7 +63,7 @@ class EchoApp:
         splash.progress(40, "Инициализация голоса…")
         from .voice.tts import TTS
         from .voice.listener import Listener
-        a.tts = TTS(on_level=self.bridge.level.emit)
+        a.tts = TTS(on_level=self.bridge.level.emit, on_error=self.bridge.tts_error.emit)
         self.listener = Listener(a, on_level=lambda v: None, on_state=self.bridge.listen_state.emit, on_text=self.bridge.heard.emit)
 
         splash.progress(60, "Создание интерфейса…")
@@ -110,6 +111,7 @@ class EchoApp:
         self.bridge.listen_state.connect(self.set_state)
         self.bridge.heard.connect(lambda t: self.dashboard.heard.setText(f"«{t}»"))
         self.bridge.notify.connect(self.on_notification)
+        self.bridge.tts_error.connect(lambda e: (self.win.status.setText("🔇 " + e), self.chat.add("🔇 " + e, "system")))
 
         splash.progress(75, "Трей и автозапуск…")
         self.tray = QSystemTrayIcon(app_icon())
@@ -174,7 +176,7 @@ class EchoApp:
     def toggle_conversation(self, on):
         self.assistant.conversation_mode = on
         self.on_mode("conversation", on)
-        self.assistant.speak("Режим беседы включён. Говорите свободно." if on else "Режим беседы выключен.")
+        self.assistant.speak("Режим беседы включён. Говорите свободно." if on else "Режим беседы выключен.", force=True)
         if on:
             self.listener.activate()
 
@@ -267,8 +269,33 @@ def setup_logging():
     logging.basicConfig(level=logging.INFO, handlers=[h], format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 
+def selftest():
+    """ECHO.exe --selftest: проверка синтеза речи (нейронный голос + SAPI) без звуковой карты. Код выхода 0 = ок."""
+    from .voice.tts import TTS
+    errors = []
+    t = TTS(on_error=errors.append)
+    ok = True
+    try:
+        pcm, sr = t._edge("Привет! Я Эхо, твой голосовой помощник.", "ru-RU-DmitryNeural")
+        log.info("selftest edge-tts: %.2f s audio", len(pcm) / sr)
+        ok &= len(pcm) > sr
+    except Exception:
+        log.exception("selftest edge-tts failed")
+        ok = False
+    if sys.platform == "win32":
+        try:
+            pcm, sr = t._sapi("Проверка системного голоса.")
+            log.info("selftest sapi: %.2f s audio; %s", len(pcm) / sr, "; ".join(errors) or "русский голос найден")
+        except Exception:
+            log.exception("selftest sapi failed")
+    log.info("selftest result: %s", "OK" if ok else "FAIL")
+    return 0 if ok else 1
+
+
 def main():
     setup_logging()
+    if "--selftest" in sys.argv:
+        return selftest()
     if sys.platform == "win32":
         import ctypes
         try:

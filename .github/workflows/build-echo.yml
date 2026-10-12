@@ -47,6 +47,14 @@ jobs:
           Write-Output $log
           if ($log -match "Traceback|uncaught") { throw "Errors in log" }
 
+      - name: Voice self-test (ECHO.exe --selftest)
+        shell: pwsh
+        run: |
+          $env:APPDATA = "$env:RUNNER_TEMP\appdata-tts"
+          $p = Start-Process dist\ECHO\ECHO.exe -ArgumentList "--selftest" -PassThru -Wait
+          Get-Content "$env:APPDATA\ECHO\echo.log" | Select-String "selftest"
+          if ($p.ExitCode -ne 0) { Get-Content "$env:APPDATA\ECHO\echo.log"; throw "Voice self-test failed" }
+
       - name: Build ECHO_Setup.exe
         shell: pwsh
         run: |

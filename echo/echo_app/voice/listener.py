@@ -162,7 +162,7 @@ class Listener:
             self.a.conversation_mode = False
             self.followup_until = 0
             self.a.mode_changed.emit("conversation", False)
-            self.a.speak("Хорошо, заканчиваем. Зови, если что.")
+            self.a.speak("Хорошо, заканчиваем. Зови, если что.", force=True)
             return
         if START_CONV.search(body) and (has_wake or not self.a.conversation_mode):
             self.a.conversation_mode = True
@@ -172,7 +172,7 @@ class Listener:
                 self._touch()
                 return
         if not body:
-            self.a.speak("Да?")
+            self.a.speak("Да?", force=True)
             self._touch()
             return
         self.a.submit(body, "voice")

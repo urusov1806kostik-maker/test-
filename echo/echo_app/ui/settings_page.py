@@ -53,7 +53,8 @@ class SettingsPage(QScrollArea):
 
         # ---- Голос ----
         c, cl = card("Голос"); f = QFormLayout(); cl.addLayout(f)
-        self._check(f, "Озвучивать ответы", "tts_enabled")
+        self._check(f, "Голосовые ответы (на голосовые запросы E.C.H.O отвечает голосом)", "tts_enabled")
+        self._check(f, "Озвучивать и ответы в текстовом чате", "speak_text_replies")
         self.voice = QComboBox()
         for k, v in VOICES.items():
             self.voice.addItem(v, k)

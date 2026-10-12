@@ -27,7 +27,7 @@ LANG_VOICES = {"en": "en-US-GuyNeural", "de": "de-DE-ConradNeural", "fr": "fr-FR
 
 
 class TTS:
-    def __init__(self, on_level=None, on_state=None):
+    def __init__(self, on_level=None, on_state=None, on_error=None):
         self.q: queue.Queue = queue.Queue()
         self._stop = threading.Event()
         self._playing = threading.Event()
@@ -35,6 +35,8 @@ class TTS:
         self._lock = threading.Lock()
         self.on_level = on_level      # уровень громкости для анимации волны
         self.on_state = on_state      # True/False — говорит ли
+        self.on_error = on_error      # текст ошибки озвучки для интерфейса
+        self._error_shown = set()
         self.current_text = ""        # для подавления эха в распознавании
         self.last_spoken_end = 0.0
         self._gen = 0
@@ -106,11 +108,18 @@ class TTS:
         if lang and lang in LANG_VOICES:
             voice = LANG_VOICES[lang]
         if voice != "sapi":
-            try:
-                return self._edge(text, voice)
-            except Exception as e:
-                log.warning("edge-tts недоступен (%s), использую SAPI", e)
-        return self._sapi(text)
+            for attempt in range(2):
+                try:
+                    return self._edge(text, voice)
+                except Exception as e:
+                    log.warning("edge-tts попытка %d: %s", attempt + 1, e)
+            self._report("Нейронный голос недоступен (нет интернета?) — говорю системным голосом Windows.")
+        try:
+            return self._sapi(text)
+        except Exception as e:
+            log.exception("SAPI failed")
+            self._report(f"Не удалось озвучить ответ: {e}")
+            return None, None
 
     def _edge(self, text, voice):
         import edge_tts
@@ -133,11 +142,14 @@ class TTS:
         from ..pc import com_init
         com_init()
         eng = pyttsx3.init()
-        for v in eng.getProperty("voices"):   # ищем русский мужской голос
-            n = (v.name or "").lower()
-            if ("ru" in str(v.languages).lower() or "russian" in n or "pavel" in n) and "irina" not in n:
-                eng.setProperty("voice", v.id)
-                break
+        voices = eng.getProperty("voices")
+        ru = [v for v in voices if "ru" in str(v.languages).lower() or "russian" in (v.name or "").lower()
+              or "pavel" in (v.name or "").lower() or "irina" in (v.name or "").lower()]
+        male = [v for v in ru if "irina" not in (v.name or "").lower()]
+        if ru:
+            eng.setProperty("voice", (male or ru)[0].id)
+        else:
+            self._report("В Windows нет русского голоса для офлайн-озвучки: Параметры → Время и язык → Речь → Добавить голоса → Русский.")
         eng.setProperty("rate", 180 + int(settings.get("voice_rate")) * 2)
         path = os.path.join(tempfile.gettempdir(), "echo_tts.wav")
         eng.save_to_file(text, path)
@@ -149,6 +161,11 @@ class TTS:
         if ch > 1:
             a = a.reshape(-1, ch).mean(axis=1)
         return a, sr
+
+    def _report(self, msg):
+        if self.on_error and msg not in self._error_shown:   # каждую ошибку показываем один раз
+            self._error_shown.add(msg)
+            self.on_error(msg)
 
     def _play(self, pcm, sr, text):
         import sounddevice as sd
@@ -168,6 +185,9 @@ class TTS:
                     out.write(chunk.reshape(-1, 1))
                     if self.on_level:
                         self.on_level(float(np.sqrt(np.mean(chunk ** 2))) * 4)
+        except Exception as e:
+            log.exception("playback failed")
+            self._report(f"Нет звука: не удалось открыть динамики ({e})")
         finally:
             self._playing.clear()
             self.last_spoken_end = time.time()
