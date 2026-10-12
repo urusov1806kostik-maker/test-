@@ -1,0 +1,73 @@
+name: Build E.C.H.O
+
+on:
+  push:
+    branches: [main, "claude/funny-cannon-800de0"]
+    paths: ["echo/**", ".github/workflows/build-echo.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: echo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: echo/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Import check
+        run: python -c "import echo_app.app, echo_app.integrations.telegram, echo_app.integrations.discord_bot, edge_tts, pycaw, vosk, webrtcvad, telethon; print('ok')"
+
+      - name: Build ECHO.exe
+        run: pyinstaller --noconfirm --clean installer\echo.spec
+
+      - name: Smoke test ECHO.exe
+        shell: pwsh
+        run: |
+          $env:APPDATA = "$env:RUNNER_TEMP\appdata"
+          $p = Start-Process dist\ECHO\ECHO.exe -ArgumentList "--minimized" -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { Get-Content "$env:APPDATA\ECHO\echo.log" -ErrorAction SilentlyContinue; throw "ECHO.exe exited with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+          $log = Get-Content "$env:APPDATA\ECHO\echo.log" -Raw
+          Write-Output $log
+          if ($log -match "Traceback|uncaught") { throw "Errors in log" }
+
+      - name: Build ECHO_Setup.exe
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc installer\echo.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ECHO_Setup
+          path: echo/dist/ECHO_Setup.exe
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: echo-v1.0.${{ github.run_number }}
+          name: E.C.H.O 1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            Скачайте **ECHO_Setup.exe** ниже, запустите и следуйте установщику — на рабочем столе появится ярлык E.C.H.O.
+            После запуска: Настройки → API-ключ Claude.
+          files: echo/dist/ECHO_Setup.exe
