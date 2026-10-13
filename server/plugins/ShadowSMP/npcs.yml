@@ -1,0 +1,84 @@
+# NPC создаются командой /npc или автоматически при /buildspawn confirm
+npcs:
+  shop:
+    type: MANNEQUIN
+    name: '&6&lМагазин'
+    location:
+      ==: org.bukkit.Location
+      world: world
+      x: 0.5
+      y: 140.0
+      z: -10.5
+      pitch: -0.0
+      yaw: 0.0
+    look: true
+    skin: ''
+    description: '&7Нажми, чтобы открыть'
+    actions:
+    - '[menu] shop'
+  crafts:
+    type: MANNEQUIN
+    name: '&d&lКастом крафты'
+    location:
+      ==: org.bukkit.Location
+      world: world
+      x: 11.5
+      y: 140.0
+      z: 0.5
+      pitch: -0.0
+      yaw: 90.0
+    look: true
+    skin: ''
+    description: '&7Талисманы и оружие'
+    actions:
+    - '[menu] crafts'
+  events:
+    type: MANNEQUIN
+    name: '&5&lИвенты'
+    location:
+      ==: org.bukkit.Location
+      world: world
+      x: -10.5
+      y: 140.0
+      z: 0.5
+      pitch: -0.0
+      yaw: 270.0
+    look: true
+    skin: ''
+    description: '&7Информация об ивентах'
+    actions:
+    - '[player] event'
+  guide:
+    type: MANNEQUIN
+    name: '&b&lГид'
+    location:
+      ==: org.bukkit.Location
+      world: world
+      x: 0.5
+      y: 140.0
+      z: 11.5
+      pitch: -0.0
+      yaw: 180.0
+    look: true
+    skin: ''
+    description: '&7Правила и помощь'
+    actions:
+    - '[player] rules'
+    - '[sound] ENTITY_VILLAGER_YES'
+  rtp:
+    type: MANNEQUIN
+    name: '&a&lСлучайный телепорт'
+    location:
+      ==: org.bukkit.Location
+      world: world
+      x: 8.5
+      y: 140.0
+      z: 8.5
+      pitch: -0.0
+      yaw: 135.0
+    look: true
+    skin: ''
+    description: '&7Нажми — и ты в дикой местности'
+    actions:
+    - '[player] tpr'
+    - '[sound] ENTITY_ENDERMAN_TELEPORT'

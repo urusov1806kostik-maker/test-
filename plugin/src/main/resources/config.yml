@@ -165,6 +165,7 @@ luckperms-setup:
     - "lp group default permission set essentials.tpaccept true"
     - "lp group default permission set essentials.tpdeny true"
     - "lp group default permission set essentials.back true"
+    - "lp group default permission set essentials.tpr true"
     - "lp group default permission set essentials.msg true"
     - "lp group default permission set essentials.r true"
     - "lp group default permission set essentials.warp true"

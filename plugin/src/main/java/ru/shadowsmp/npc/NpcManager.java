@@ -211,6 +211,7 @@ public class NpcManager implements Listener, CommandExecutor, TabCompleter {
                 {"crafts", "&d&lКастом крафты", "&7Талисманы и оружие", 11, 0, List.of("[menu] crafts")},
                 {"events", "&5&lИвенты", "&7Информация об ивентах", -11, 0, List.of("[player] event")},
                 {"guide", "&b&lГид", "&7Правила и помощь", 0, 11, List.of("[player] rules", "[sound] ENTITY_VILLAGER_YES")},
+                {"rtp", "&a&lСлучайный телепорт", "&7Нажми — и ты в дикой местности", 8, 8, List.of("[player] tpr", "[sound] ENTITY_ENDERMAN_TELEPORT")},
         };
         for (Object[] d : def) {
             String id = (String) d[0];
