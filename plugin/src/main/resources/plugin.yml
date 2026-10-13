@@ -1,0 +1,50 @@
+name: ShadowSMP
+version: 1.0.0
+main: ru.shadowsmp.ShadowSMP
+api-version: '1.21'
+author: ShadowSMP
+description: Всё-в-одном для ShadowSMP — талисманы, кастом оружие, зачарования, крафты, экономика, ивенты, NPC, таб, скорборд, логин, ресурспак.
+softdepend: [LuckPerms, Essentials, FlectonePulse]
+
+commands:
+  shadowsmp: {description: Информация и перезагрузка, aliases: [ss, ssmp, menu]}
+  spawn: {description: Телепорт на спавн}
+  setspawn: {description: Установить спавн, permission: shadowsmp.admin}
+  buildspawn: {description: Построить красивый спавн, permission: shadowsmp.admin}
+  shop: {description: Магазин, aliases: [магазин, donate]}
+  crafts: {description: Кастом крафты, aliases: [recipes, крафты]}
+  sb: {description: Скрыть/показать скорборд, aliases: [scoreboard]}
+  talisman: {description: Талисманы, aliases: [talismans, талисман]}
+  citem: {description: Кастом предметы, permission: shadowsmp.admin, aliases: [ci]}
+  cenchant: {description: Кастом зачарования, permission: shadowsmp.admin, aliases: [ce]}
+  money: {description: Баланс, aliases: [bal, coins, монеты, shadowcoin, sc]}
+  mpay: {description: Перевести деньги, aliases: [pay2]}
+  mtop: {description: Топ богачей, aliases: [moneytop]}
+  seco: {description: Управление экономикой, permission: shadowsmp.admin}
+  register: {description: Регистрация, aliases: [reg]}
+  login: {description: Вход, aliases: [l, log]}
+  changepassword: {description: Сменить пароль, aliases: [changepass, cp]}
+  logout: {description: Выйти из аккаунта}
+  unregister: {description: Сбросить аккаунт игрока, permission: shadowsmp.admin}
+  event: {description: Ивенты, aliases: [events, ивент]}
+  npc: {description: Управление NPC, permission: shadowsmp.admin, aliases: [snpc]}
+  ccmd: {description: Кастом команды, permission: shadowsmp.admin, aliases: [customcommand]}
+
+permissions:
+  shadowsmp.admin:
+    default: op
+    children:
+      shadowsmp.spawn.bypass: true
+      shadowsmp.spawn.others: true
+      shadowsmp.spawn.instant: true
+      shadowsmp.event.admin: true
+      shadowsmp.money.others: true
+      shadowsmp.cooldown.bypass: true
+      shadowsmp.pack.bypass: false
+  shadowsmp.spawn.bypass: {default: op}
+  shadowsmp.spawn.others: {default: op}
+  shadowsmp.spawn.instant: {default: op}
+  shadowsmp.event.admin: {default: op}
+  shadowsmp.money.others: {default: op}
+  shadowsmp.cooldown.bypass: {default: op}
+  shadowsmp.pack.bypass: {default: false}

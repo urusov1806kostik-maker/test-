@@ -1,0 +1,23 @@
+# ==== Магазин (/shop) ====
+# item: материал / custom:<id> / talisman:<id> / book:<id>:<ур>
+# currency: coins (Монеты) или shadow (ShadowCoin). command — выполнить вместо выдачи предмета ({player})
+items:
+  shard:       {slot: 10, item: custom:shadow_shard, amount: 1, price: 500, currency: coins}
+  gapple:      {slot: 11, item: GOLDEN_APPLE, amount: 2, price: 150, currency: coins}
+  xp:          {slot: 12, item: EXPERIENCE_BOTTLE, amount: 16, price: 200, currency: coins}
+  pearls:      {slot: 13, item: ENDER_PEARL, amount: 8, price: 120, currency: coins}
+  book_vamp:   {slot: 14, item: "book:vampirism:1", amount: 1, price: 1500, currency: coins}
+  book_swift:  {slot: 15, item: "book:swiftness:1", amount: 1, price: 1200, currency: coins}
+  book_owl:    {slot: 16, item: "book:owl:1", amount: 1, price: 1000, currency: coins}
+
+  t_demon:  {slot: 28, item: talisman:demon, amount: 1, price: 250, currency: shadow}
+  t_ice:    {slot: 29, item: talisman:ice, amount: 1, price: 150, currency: shadow}
+  t_storm:  {slot: 30, item: talisman:storm, amount: 1, price: 180, currency: shadow}
+  t_shadow: {slot: 31, item: talisman:shadow, amount: 1, price: 200, currency: shadow}
+  t_life:   {slot: 32, item: talisman:life, amount: 1, price: 200, currency: shadow}
+  t_ocean:  {slot: 33, item: talisman:ocean, amount: 1, price: 120, currency: shadow}
+  blade:    {slot: 34, item: custom:shadow_blade, amount: 1, price: 300, currency: shadow}
+
+  vip:      {slot: 37, item: LIME_DYE, amount: 1, price: 300, currency: shadow, command: "lp user {player} parent add vip", name: "&a&lРанг VIP", lore: ["&7Префикс, /hat, /workbench, больше домов"]}
+  premium:  {slot: 38, item: LIGHT_BLUE_DYE, amount: 1, price: 600, currency: shadow, command: "lp user {player} parent add premium", name: "&b&lРанг PREMIUM", lore: ["&7Всё из VIP + /feed, /ec, /nick"]}
+  shadow:   {slot: 39, item: PURPLE_DYE, amount: 1, price: 1000, currency: shadow, command: "lp user {player} parent add shadow", name: "&5&lРанг SHADOW", lore: ["&7Всё из PREMIUM + /fly, /heal, без КД"]}

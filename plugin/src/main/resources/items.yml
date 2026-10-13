@@ -1,0 +1,94 @@
+# ==== Кастомные предметы: оружие, инструменты, материалы, иконки ====
+# model: shadowsmp:<имя> — текстура из ресурспака (assets/shadowsmp/items/<имя>.json)
+# attributes: attack_damage / attack_speed / max_health / movement_speed ... (значение добавляется к базе игрока)
+# on-hit:     эффекты, когда ТЫ бьёшь (target — цели, self — себе), fire (тики), lightning-chance %, lifesteal %, bonus-damage %
+# on-damaged: эффекты, когда ТЕБЯ бьют (attacker — атакующему, self — себе), fire, dodge-chance %, thorns %
+# Эффект: "ЭФФЕКТ:уровень:тики:шанс%"   passive-effects — пока держишь в руке/носишь
+# custom-enchants: vampirism, wither, venom, frost, thunder, beheading, drill, autosmelt, telepathy, wisdom, reflect, evasion, swiftness, owl, vitality
+items:
+  shadow_blade:
+    material: NETHERITE_SWORD
+    name: "<g:#7B2FF7:#F107A3>&lКлинок Тени</g>"
+    model: "shadowsmp:shadow_blade"
+    lore:
+      - "&7Выкован из осколков тьмы."
+      - ""
+      - "&5При ударе: &7иссушение (25%), слепота (15%)"
+      - "&5Вампиризм: &75% от урона"
+    enchants: {sharpness: 6, unbreaking: 4, looting: 3}
+    custom-enchants: {vampirism: 1}
+    attributes: {attack_damage: 9, attack_speed: -2.4}
+    slot: MAINHAND
+    on-hit:
+      target: ["WITHER:2:60:25", "BLINDNESS:1:40:15"]
+      lifesteal: 5
+  frostbite:
+    material: DIAMOND_SWORD
+    name: "&b&lЛедяное Жало"
+    model: "shadowsmp:frostbite"
+    lore:
+      - "&7Холоднее вечной мерзлоты."
+      - ""
+      - "&bПри ударе: &7замедление II (35%)"
+      - "&bКогда бьют тебя: &7атакующий замедляется"
+    enchants: {sharpness: 5, unbreaking: 3}
+    custom-enchants: {frost: 2}
+    attributes: {attack_damage: 7, attack_speed: -2.4}
+    on-hit:
+      target: ["SLOWNESS:2:60:35", "MINING_FATIGUE:1:60:20"]
+    on-damaged:
+      attacker: ["SLOWNESS:1:40:30"]
+  inferno_axe:
+    material: NETHERITE_AXE
+    name: "&6&lАдский Топор"
+    model: "shadowsmp:inferno_axe"
+    lore:
+      - "&7Пылает огнём Незера."
+      - ""
+      - "&6При ударе: &7поджигает цель, слабость (30%)"
+      - "&6Пассивно: &7огнестойкость в руке"
+    enchants: {sharpness: 5, efficiency: 5, unbreaking: 3}
+    custom-enchants: {thunder: 1}
+    attributes: {attack_damage: 11, attack_speed: -3.0}
+    passive-effects: ["FIRE_RESISTANCE:1"]
+    on-hit:
+      target: ["WEAKNESS:1:60:30"]
+      fire: 100
+      bonus-damage: 10
+  void_pickaxe:
+    material: NETHERITE_PICKAXE
+    name: "&5&lКирка Пустоты"
+    model: "shadowsmp:void_pickaxe"
+    lore:
+      - "&7Пожирает камень пачками."
+      - ""
+      - "&5Бур 3x3 &8(присядь, чтобы копать 1 блок)"
+      - "&5Автоплавка, Спешка II в руке"
+    enchants: {efficiency: 6, fortune: 3, unbreaking: 4}
+    custom-enchants: {drill: 1, autosmelt: 1}
+    attributes: {attack_damage: 5, attack_speed: -2.8}
+    passive-effects: ["HASTE:2"]
+
+  # ---- Материалы ----
+  shadow_shard:
+    material: PAPER
+    name: "&5Осколок Тьмы"
+    model: "shadowsmp:shadow_shard"
+    glint: true
+    lore: ["&7Редкий материал для крафта", "&7талисманов и оружия."]
+  demon_heart:
+    material: PAPER
+    name: "&4&lСердце Демона"
+    model: "shadowsmp:demon_heart"
+    glint: true
+    lore: ["&7Всё ещё бьётся...", "&7Нужно для &4Талисмана Демона&7."]
+
+  # ---- Иконки (для меню/магазина) ----
+  coin_icon:
+    material: PAPER
+    name: "&6Монета"
+    model: "shadowsmp:coin"
+  shadowcoin_icon:
+    material: PAPER
+    name: "&5ShadowCoin"
+    model: "shadowsmp:shadowcoin"

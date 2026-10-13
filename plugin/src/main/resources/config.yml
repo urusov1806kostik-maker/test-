@@ -1,0 +1,225 @@
+# ===================================================
+#            ShadowSMP — главный конфиг
+#  Цвета: &a &l ...  HEX: &#AA00FF  Градиент: <g:#7B2FF7:#F107A3>текст</g>
+# ===================================================
+prefix: "&8[<g:#7B2FF7:#F107A3>&lShadowSMP</g>&8] &7"
+
+# ---------- Обязательный ресурспак ----------
+resource-pack:
+  # Прямая ссылка на ShadowSMP-pack.zip (GitHub raw / Dropbox ?dl=1 / mc-packs.net)
+  url: "https://raw.githubusercontent.com/urusov1806kostik-maker/test-/main/resourcepack/ShadowSMP-pack.zip"
+  # Оставь пустым — плагин сам посчитает SHA-1 при старте
+  sha1: ""
+  force: true
+  kick-on-fail: true
+  prompt: "<g:#7B2FF7:#F107A3>&lShadowSMP</g> &7требует ресурспак с кастомными предметами!"
+  kick-declined: "&cДля игры на &5ShadowSMP &cнужно принять ресурспак!\n&7Сервер → Настроить → Наборы ресурсов: &aВключены"
+  kick-failed: "&cНе удалось загрузить ресурспак. Перезайдите."
+
+# ---------- Регистрация / логин ----------
+auth:
+  enabled: true
+  min-password-length: 4
+  max-attempts: 5
+  timeout-seconds: 90
+  session-minutes: 30   # авто-вход с того же IP
+
+# ---------- Экономика ----------
+economy:
+  coins-name: "&6Монеты"
+  shadow-name: "&5ShadowCoin"
+  start-coins: 100
+  allow-shadow-pay: true
+  reward:
+    monster-kill: 2
+    animal-kill: 0.5
+    player-kill: 25
+
+# ---------- Талисманы ----------
+talismans:
+  # OFFHAND — только левая рука, HOTBAR — левая рука + хотбар, INVENTORY — весь инвентарь
+  active-slot: OFFHAND
+  max-active: 1
+  act-as-totem: false   # true — талисман ещё и спасает от смерти как тотем
+
+# ---------- Спавн ----------
+spawn:
+  protection-radius: 40
+  teleport-on-join: true
+  teleport-delay: 3
+
+# ---------- TAB ----------
+tab:
+  enabled: true
+  header:
+    - ""
+    - "<g:#7B2FF7:#F107A3>&l✦ ShadowSMP ✦</g>"
+    - "&7Онлайн: &d{online}&8/&d{max}"
+    - ""
+  footer:
+    - ""
+    - "&7Пинг: &a{ping}ms &8| &7Монеты: &6{coins} &8| &7ShadowCoin: &5{shadowcoins}"
+    - "&8» &dmc.shadowsmp.ru &8«"
+    - ""
+  player-format: "{prefix}&f{player}"
+
+# ---------- Скорборд ----------
+scoreboard:
+  enabled: true
+  title-speed: 4
+  title-frames:
+    - "&5&l✦ ShadowSMP ✦"
+    - "&d&l✦ &5&lShadowSMP &d&l✦"
+    - "&d&l✦ ShadowSMP ✦"
+    - "&f&l✦ &d&lShadowSMP &f&l✦"
+    - "&d&l✦ ShadowSMP ✦"
+    - "&d&l✦ &5&lShadowSMP &d&l✦"
+  lines:
+    - "&8&m                    "
+    - "&7Ник: &f{player}"
+    - "&7Ранг: {rank}"
+    - " "
+    - "&6⛃ Монеты: &f{coins}"
+    - "&5✦ ShadowCoin: &f{shadowcoins}"
+    - "  "
+    - "&c⚔ Убийства: &f{kills}"
+    - "&7☠ Смерти: &f{deaths}"
+    - "&e⌚ Наиграно: &f{playtime}"
+    - "&d♦ Талисман: {talisman}"
+    - "&5⚑ Ивент: {event}"
+    - "   "
+    - "&7Онлайн: &a{online} &8| &7Пинг: &a{ping}"
+    - "&dmc.shadowsmp.ru"
+  login-lines:
+    - "&8&m                    "
+    - "&7Добро пожаловать,"
+    - "&f{player}&7!"
+    - " "
+    - "&7Войдите в аккаунт:"
+    - "&f/login <пароль>"
+    - "&7или зарегистрируйтесь:"
+    - "&f/register <пароль> <пароль>"
+    - "&8&m                    "
+  rank-names:
+    default: "&7Игрок"
+    vip: "&a&lVIP"
+    premium: "&b&lPREMIUM"
+    shadow: "&5&lSHADOW"
+    helper: "&e&lХЕЛПЕР"
+    moder: "&9&lМОДЕР"
+    admin: "&c&lАДМИН"
+    owner: "&4&lВЛАДЕЛЕЦ"
+
+# ---------- Кастом зачарования (можно переименовать/отключить) ----------
+enchants:
+  vampirism: {enabled: true, name: "&4Вампиризм", max-level: 3}
+  thunder: {enabled: true, name: "&eГромовержец", max-level: 3}
+
+# ---------- Ивенты ----------
+events:
+  auto-interval-minutes: 30
+  min-players: 2
+  auto-types: [chat, math, hunt, boss, treasure, drop]
+  types:
+    chat:
+      duration-seconds: 60
+      reward: {coins: 150, shadowcoins: 2}
+    math:
+      duration-seconds: 60
+      reward: {coins: 150, shadowcoins: 2}
+    hunt:
+      duration-seconds: 300
+      reward: {coins: 500, shadowcoins: 10, items: ["custom:shadow_shard*4"]}
+      reward-2: {coins: 300, shadowcoins: 5}
+      reward-3: {coins: 150, shadowcoins: 2}
+    boss:
+      duration-seconds: 600
+      health: 600
+      damage: 14
+      scale: 1.8
+      name: "&5&l☠ Тёмный Повелитель"
+      offset-x: 0
+      offset-z: 45
+      reward: {coins: 1000, shadowcoins: 25, items: ["custom:demon_heart"]}
+      reward-2: {coins: 500, shadowcoins: 10}
+      reward-3: {coins: 250, shadowcoins: 5}
+    treasure:
+      duration-seconds: 900
+      min-distance: 300
+      max-distance: 1200
+      reward: {coins: 300, shadowcoins: 5}
+      loot: ["DIAMOND*5", "NETHERITE_SCRAP*2", "GOLDEN_APPLE*3", "custom:shadow_shard*6", "book:vampirism:2", "EXPERIENCE_BOTTLE*16"]
+    drop:
+      duration-seconds: 40
+      items-per-second: 4
+      loot: ["DIAMOND", "GOLD_INGOT*3", "EMERALD*2", "custom:shadow_shard", "EXPERIENCE_BOTTLE*4", "GOLDEN_APPLE", "IRON_INGOT*4"]
+
+# ---------- Авто-настройка LuckPerms (выполняется 1 раз) ----------
+luckperms-setup:
+  done: false
+  commands:
+    - "lp group default permission set essentials.home true"
+    - "lp group default permission set essentials.sethome true"
+    - "lp group default permission set essentials.delhome true"
+    - "lp group default permission set essentials.tpa true"
+    - "lp group default permission set essentials.tpaccept true"
+    - "lp group default permission set essentials.tpdeny true"
+    - "lp group default permission set essentials.back true"
+    - "lp group default permission set essentials.msg true"
+    - "lp group default permission set essentials.r true"
+    - "lp group default permission set essentials.warp true"
+    - "lp group default permission set essentials.warp.list true"
+    - "lp group default permission set essentials.kit true"
+    - "lp group default permission set essentials.kits.start true"
+    - "lp group default permission set essentials.afk true"
+    - "lp group default permission set essentials.ignore true"
+    - "lp group default permission set essentials.list true"
+    - "lp group default permission set essentials.help true"
+    - "lp group default meta setprefix 1 \"&7\""
+    - "lp creategroup vip"
+    - "lp group vip parent add default"
+    - "lp group vip setweight 10"
+    - "lp group vip meta setprefix 10 \"&a&lVIP &r&a\""
+    - "lp group vip permission set essentials.sethome.multiple.vip true"
+    - "lp group vip permission set essentials.hat true"
+    - "lp group vip permission set essentials.workbench true"
+    - "lp creategroup premium"
+    - "lp group premium parent add vip"
+    - "lp group premium setweight 20"
+    - "lp group premium meta setprefix 20 \"&b&lPREMIUM &r&b\""
+    - "lp group premium permission set essentials.feed true"
+    - "lp group premium permission set essentials.enderchest true"
+    - "lp group premium permission set essentials.nick true"
+    - "lp creategroup shadow"
+    - "lp group shadow parent add premium"
+    - "lp group shadow setweight 30"
+    - "lp group shadow meta setprefix 30 \"&5&lSHADOW &r&d\""
+    - "lp group shadow permission set essentials.heal true"
+    - "lp group shadow permission set essentials.fly true"
+    - "lp group shadow permission set shadowsmp.cooldown.bypass true"
+    - "lp group shadow permission set shadowsmp.spawn.instant true"
+    - "lp creategroup helper"
+    - "lp group helper parent add default"
+    - "lp group helper setweight 50"
+    - "lp group helper meta setprefix 50 \"&e&lХЕЛПЕР &r&e\""
+    - "lp group helper permission set essentials.mute true"
+    - "lp group helper permission set essentials.kick true"
+    - "lp creategroup moder"
+    - "lp group moder parent add helper"
+    - "lp group moder setweight 60"
+    - "lp group moder meta setprefix 60 \"&9&lМОДЕР &r&9\""
+    - "lp group moder permission set essentials.ban true"
+    - "lp group moder permission set essentials.tempban true"
+    - "lp group moder permission set essentials.vanish true"
+    - "lp group moder permission set essentials.invsee true"
+    - "lp creategroup admin"
+    - "lp group admin parent add moder"
+    - "lp group admin setweight 90"
+    - "lp group admin meta setprefix 90 \"&c&lАДМИН &r&c\""
+    - "lp group admin permission set essentials.* true"
+    - "lp group admin permission set shadowsmp.admin true"
+    - "lp creategroup owner"
+    - "lp group owner parent add admin"
+    - "lp group owner setweight 100"
+    - "lp group owner meta setprefix 100 \"&4&lВЛАДЕЛЕЦ &r&c\""
+    - "lp group owner permission set * true"

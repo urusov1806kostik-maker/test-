@@ -1,0 +1,104 @@
+# ==== Талисманы (работают в ЛЕВОЙ руке, см. config.yml -> talismans) ====
+# Формат такой же, как в items.yml. Текстуры похожи на тотем: shadowsmp:talisman_<id>
+talismans:
+  demon:
+    name: "&4&lТалисман Демона"
+    model: "shadowsmp:talisman_demon"
+    glint: true
+    lore:
+      - "&7Древний талисман, хранящий ярость демона."
+      - ""
+      - "&cПассивно: &7Сила I, Огнестойкость, +2 ❤"
+      - "&cПри ударе: &7поджигает цель, вампиризм 5%"
+      - "&cКогда бьют: &7поджигает атакующего"
+      - ""
+      - "&8Держи в левой руке"
+    passive-effects: ["STRENGTH:1", "FIRE_RESISTANCE:1"]
+    attributes: {max_health: 4}
+    on-hit:
+      fire: 80
+      lifesteal: 5
+    on-damaged:
+      fire: 60
+  ice:
+    name: "&b&lТалисман Льда"
+    model: "shadowsmp:talisman_ice"
+    glint: true
+    lore:
+      - "&7Холод, сковывающий врагов."
+      - ""
+      - "&bПассивно: &7Скорость I"
+      - "&bПри ударе: &7Замедление II (35%)"
+      - "&bКогда бьют: &7атакующий замедляется (30%)"
+      - ""
+      - "&8Держи в левой руке"
+    passive-effects: ["SPEED:1"]
+    on-hit:
+      target: ["SLOWNESS:2:60:35"]
+    on-damaged:
+      attacker: ["SLOWNESS:1:40:30"]
+  storm:
+    name: "&e&lТалисман Бури"
+    model: "shadowsmp:talisman_storm"
+    glint: true
+    lore:
+      - "&7Повелевает молниями."
+      - ""
+      - "&eПассивно: &7Прыгучесть II, Скорость I"
+      - "&eПри ударе: &7молния (12%), +5% урона"
+      - ""
+      - "&8Держи в левой руке"
+    passive-effects: ["JUMP_BOOST:2", "SPEED:1"]
+    on-hit:
+      lightning-chance: 12
+      bonus-damage: 5
+  shadow:
+    name: "&5&lТалисман Тени"
+    model: "shadowsmp:talisman_shadow"
+    glint: true
+    lore:
+      - "&7Ты — часть темноты."
+      - ""
+      - "&5Пассивно: &7Ночное зрение, +скорость"
+      - "&5Уклонение: &715% шанс избежать удара"
+      - "&5При ударе: &7Слепота (20%)"
+      - ""
+      - "&8Держи в левой руке"
+    passive-effects: ["NIGHT_VISION:1"]
+    attributes: {movement_speed: 0.01}
+    on-hit:
+      target: ["BLINDNESS:1:40:20"]
+    on-damaged:
+      dodge-chance: 15
+  life:
+    name: "&a&lТалисман Жизни"
+    model: "shadowsmp:talisman_life"
+    glint: true
+    lore:
+      - "&7Сила самой природы."
+      - ""
+      - "&aПассивно: &7Регенерация I, +4 ❤"
+      - "&aКогда бьют: &7Поглощение (20%)"
+      - ""
+      - "&8Держи в левой руке"
+    passive-effects: ["REGENERATION:1"]
+    attributes: {max_health: 8}
+    on-damaged:
+      self: ["ABSORPTION:1:100:20"]
+  ocean:
+    name: "&3&lТалисман Океана"
+    model: "shadowsmp:talisman_ocean"
+    glint: true
+    lore:
+      - "&7Дар морских глубин."
+      - ""
+      - "&3Пассивно: &7Подводное дыхание, Грация дельфина, Сила источника"
+      - "&3Шипы: &710% урона возвращается атакующему"
+      - "&3При ударе: &7Тошнота (15%)"
+      - ""
+      - "&8Держи в левой руке"
+    passive-effects: ["WATER_BREATHING:1", "DOLPHINS_GRACE:1", "CONDUIT_POWER:1"]
+    on-hit:
+      target: ["NAUSEA:1:100:15"]
+    on-damaged:
+      thorns: 10

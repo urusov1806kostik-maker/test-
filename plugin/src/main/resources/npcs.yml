@@ -1,0 +1,2 @@
+# NPC создаются командой /npc или автоматически при /buildspawn confirm
+npcs: {}

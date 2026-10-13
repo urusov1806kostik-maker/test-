@@ -1,0 +1,116 @@
+# ==== Кастомные крафты ====
+# type: shaped | shapeless | furnace | blasting | smoking | campfire | stonecutting | smithing | anvil
+# Ингредиенты: МАТЕРИАЛ, #тег (#planks), custom:<id>, talisman:<id>, book:<зачарование>:<ур>
+# Для наковальни можно указать кол-во: "custom:shadow_shard*4"
+recipes:
+  # --- Материалы ---
+  shadow_shard:
+    type: shaped
+    result: custom:shadow_shard
+    shape: [" E ", "EAE", " E "]
+    ingredients: {E: ENDER_PEARL, A: AMETHYST_SHARD}
+  demon_heart:
+    type: anvil
+    left: NETHER_STAR
+    right: custom:shadow_shard*4
+    result: custom:demon_heart
+    xp: 10
+
+  # --- Талисманы ---
+  talisman_demon:
+    type: shaped
+    result: talisman:demon
+    shape: ["BSB", "SHS", "BTB"]
+    ingredients: {B: BLAZE_ROD, S: custom:shadow_shard, H: custom:demon_heart, T: TOTEM_OF_UNDYING}
+  talisman_ice:
+    type: shaped
+    result: talisman:ice
+    shape: ["ISI", "STS", "ISI"]
+    ingredients: {I: BLUE_ICE, S: custom:shadow_shard, T: TOTEM_OF_UNDYING}
+  talisman_storm:
+    type: shaped
+    result: talisman:storm
+    shape: ["LSL", "STS", "LSL"]
+    ingredients: {L: LIGHTNING_ROD, S: custom:shadow_shard, T: TOTEM_OF_UNDYING}
+  talisman_shadow:
+    type: shaped
+    result: talisman:shadow
+    shape: ["ESE", "STS", "ESE"]
+    ingredients: {E: ECHO_SHARD, S: custom:shadow_shard, T: TOTEM_OF_UNDYING}
+  talisman_life:
+    type: shaped
+    result: talisman:life
+    shape: ["GSG", "STS", "GSG"]
+    ingredients: {G: GOLDEN_APPLE, S: custom:shadow_shard, T: TOTEM_OF_UNDYING}
+  talisman_ocean:
+    type: shaped
+    result: talisman:ocean
+    shape: ["NSN", "STS", "NSN"]
+    ingredients: {N: NAUTILUS_SHELL, S: custom:shadow_shard, T: TOTEM_OF_UNDYING}
+
+  # --- Оружие и инструменты ---
+  shadow_blade:
+    type: smithing
+    result: custom:shadow_blade
+    template: NETHERITE_UPGRADE_SMITHING_TEMPLATE
+    base: NETHERITE_SWORD
+    addition: custom:shadow_shard
+  frostbite:
+    type: shaped
+    result: custom:frostbite
+    shape: [" B ", " B ", " D "]
+    ingredients: {B: BLUE_ICE, D: DIAMOND_SWORD}
+  inferno_axe:
+    type: anvil
+    left: NETHERITE_AXE
+    right: custom:shadow_shard*8
+    result: custom:inferno_axe
+    xp: 20
+  void_pickaxe:
+    type: shaped
+    result: custom:void_pickaxe
+    shape: ["SSS", " P ", " O "]
+    ingredients: {S: custom:shadow_shard, P: NETHERITE_PICKAXE, O: CRYING_OBSIDIAN}
+
+  # --- Книги кастом-зачарований ---
+  book_vampirism:
+    type: anvil
+    left: BOOK
+    right: custom:shadow_shard*3
+    result: book:vampirism:1
+    xp: 8
+  book_wisdom:
+    type: shapeless
+    result: book:wisdom:1
+    ingredients: [BOOK, custom:shadow_shard, EXPERIENCE_BOTTLE]
+  book_drill:
+    type: smithing
+    result: book:drill:1
+    template: NETHERITE_UPGRADE_SMITHING_TEMPLATE
+    base: BOOK
+    addition: custom:shadow_shard
+
+  # --- Печи / костёр / камнерез ---
+  leather_from_flesh:
+    type: furnace
+    input: ROTTEN_FLESH
+    result: LEATHER
+    xp: 0.3
+    time: 200
+  fast_iron:
+    type: blasting
+    input: RAW_IRON_BLOCK
+    result: IRON_BLOCK
+    xp: 2
+    time: 300
+  campfire_flesh:
+    type: campfire
+    input: ROTTEN_FLESH
+    result: LEATHER
+    xp: 0.3
+    time: 400
+  amethyst_cut:
+    type: stonecutting
+    input: AMETHYST_BLOCK
+    result: AMETHYST_SHARD
+    amount: 4

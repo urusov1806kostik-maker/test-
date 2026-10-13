@@ -1,0 +1,65 @@
+# ==== Кастомные команды ====
+# Можно объединять несколько команд в одну — просто перечисли действия.
+# Действия: [player] cmd | [console] cmd | [message] txt | [broadcast] txt | [title] заголовок;подзаголовок
+#           [actionbar] txt | [sound] SOUND:громк:тон | [delay] тики | [give] id*кол | [coins] n | [shadowcoins] n
+#           [effect] SPEED:2:200 | [spawn] | [teleport] world;x;y;z | [menu] shop|crafts | [close]
+# Плейсхолдеры: {player} {world} {args} {arg1} {arg2} ...
+# Также: permission, cooldown (сек), price + price-shadowcoins, aliases
+commands:
+  rules:
+    description: Правила сервера
+    aliases: [правила]
+    actions:
+      - "[message] &8&m                                        "
+      - "[message] <g:#7B2FF7:#F107A3>&l  Правила ShadowSMP</g>"
+      - "[message] &d1. &7Без читов и X-Ray"
+      - "[message] &d2. &7Без гриферства чужих построек"
+      - "[message] &d3. &7Уважай других игроков"
+      - "[message] &d4. &7Без рекламы других серверов"
+      - "[message] &8&m                                        "
+  discord:
+    description: Наш Discord
+    aliases: [ds, дс]
+    actions:
+      - "[message] &9&lDiscord: &fdiscord.gg/shadowsmp"
+  hf:
+    description: Лечение + еда одной командой
+    permission: shadowsmp.cmd.hf
+    cooldown: 300
+    actions:
+      - "[console] heal {player}"
+      - "[console] feed {player}"
+      - "[sound] ENTITY_PLAYER_LEVELUP:1:1.5"
+      - "[actionbar] &a❤ Вылечен и накормлен!"
+  daily:
+    description: Ежедневная награда
+    aliases: [награда]
+    cooldown: 86400
+    actions:
+      - "[coins] 100"
+      - "[title] &6&lЕжедневная награда;&f+100 Монет"
+      - "[sound] ENTITY_PLAYER_LEVELUP:1:1"
+  starter:
+    description: Стартовый набор (1 раз в неделю)
+    cooldown: 604800
+    actions:
+      - "[give] STONE_SWORD"
+      - "[give] STONE_PICKAXE"
+      - "[give] BREAD*16"
+      - "[give] TORCH*32"
+      - "[message] &aВы получили стартовый набор!"
+  boost:
+    description: Буст скорости и силы за 50 монет
+    price: 50
+    cooldown: 120
+    actions:
+      - "[effect] SPEED:2:600"
+      - "[effect] STRENGTH:1:600"
+      - "[actionbar] &d✦ Буст активирован на 30 сек!"
+  info:
+    description: Информация о сервере
+    actions:
+      - "[title] <g:#7B2FF7:#F107A3>&lShadowSMP</g>;&7Добро пожаловать, &f{player}"
+      - "[delay] 40"
+      - "[message] &7Талисманы: &f/talisman &8| &7Крафты: &f/crafts &8| &7Магазин: &f/shop"
+      - "[message] &7Ивенты: &f/event &8| &7Баланс: &f/money &8| &7Награда: &f/daily"
