@@ -156,8 +156,8 @@ h2{font:20px var(--f-display);margin:0 0 12px;text-transform:uppercase;letter-sp
     <h1>Линия <em>фронта</em></h1>
     <p class="lead">Стратегия в реальном времени. Выберите сторону, стройте заводы и штаб, ведите исследования по веткам, запускайте дроны и уничтожьте главный штаб противника.</p>
     <div class="sides">
-      <button class="sidecard on" data-fac="ua"><span class="flag" style="background:linear-gradient(#2f6fd6 50%,#f4c836 50%)"></span><span><b>Украина</b><span>Leopard, Abrams, HIMARS, «Лютый»</span></span></button>
-      <button class="sidecard" data-fac="ru"><span class="flag" style="background:linear-gradient(#f2f2f2 33.3%,#2850b4 33.3% 66.6%,#d6382c 66.6%)"></span><span><b>Россия</b><span>Т-90М, «Торнадо», «Панцирь», «Герань»</span></span></button>
+      <button class="sidecard on" data-fac="ua"><span class="flag" style="background:linear-gradient(#2f6fd6 50%,#f4c836 50%)"></span><span><b>Украина</b><span>Штаб в Киеве · Leopard, HIMARS, «Лютый»</span></span></button>
+      <button class="sidecard" data-fac="ru"><span class="flag" style="background:linear-gradient(#f2f2f2 33.3%,#2850b4 33.3% 66.6%,#d6382c 66.6%)"></span><span><b>Россия</b><span>Штаб в Ростове · Т-90М, «Торнадо», «Герань»</span></span></button>
     </div>
     <div class="row"><span class="lbl">Сложность</span>
       <button class="tbtn" data-diff="easy">Легко</button>
@@ -298,42 +298,109 @@ function resize(){
 }
 window.addEventListener('resize',resize);
 
+// ---- real map: lon/lat projected onto the field ----
+const LON0=26.1,LON1=44.9,LAT0=44.3,LAT1=51.2;
+const px=lon=>(lon-LON0)/(LON1-LON0)*W, py=lat=>(LAT1-lat)/(LAT1-LAT0)*H;
+const SEA=[[28.6,44.3],[28.7,44.8],[29.0,44.9],[29.7,45.15],[29.75,45.6],[30.2,45.85],[30.6,46.3],[30.75,46.5],[31.1,46.62],[31.5,46.58],[32.0,46.5],[32.4,46.15],[33.0,46.1],[33.65,46.12],[33.3,45.95],[32.75,45.75],[32.5,45.4],[33.0,45.3],[33.4,45.15],[33.6,44.95],[33.5,44.6],[33.8,44.4],[34.2,44.45],[34.5,44.7],[35.0,44.8],[35.4,45.02],[36.0,45.05],[36.45,45.1],[36.5,45.3],[36.6,45.45],[36.1,45.47],[35.5,45.35],[35.1,45.45],[35.0,45.75],[34.85,46.17],[35.4,46.45],[36.0,46.68],[36.8,46.75],[37.55,47.08],[38.2,47.1],[38.9,47.2],[39.3,47.1],[38.7,46.85],[38.27,46.7],[38.1,46.35],[38.17,46.05],[37.7,45.75],[37.38,45.3],[36.8,45.35],[36.75,45.2],[37.0,45.0],[37.3,44.9],[37.8,44.7],[38.2,44.45],[38.4,44.3]];
+const RIVERS=[
+  {w:6,pts:[[30.4,51.2],[30.55,50.45],[31.0,50.1],[31.6,49.75],[32.06,49.44],[32.7,49.2],[33.4,49.07],[34.0,48.85],[34.6,48.5],[35.05,48.45],[35.15,47.85],[34.8,47.62],[34.4,47.57],[33.9,47.2],[33.4,46.75],[32.6,46.62],[32.0,46.55]]},
+  {w:3.5,pts:[[39.2,51.2],[39.6,50.6],[40.8,49.9],[41.6,49.4],[43.0,49.0],[43.4,48.6],[42.1,47.6],[40.8,47.5],[40.1,47.4],[39.7,47.23],[39.3,47.1]]},
+  {w:3,pts:[[36.6,50.6],[36.75,50.1],[36.95,49.65],[37.25,49.2],[37.6,49.0],[38.4,48.95],[39.3,48.75],[39.9,48.45],[40.6,48.0],[40.9,47.55]]},
+  {w:3,pts:[[26.5,49.8],[27.6,49.6],[28.47,49.23],[29.4,48.7],[30.2,48.2],[31.0,47.8],[31.6,47.4],[31.99,46.97],[31.9,46.62]]},
+  {w:2.5,pts:[[26.1,48.6],[27.0,48.45],[27.8,48.3],[28.6,47.9],[29.2,47.4],[29.6,46.9],[30.1,46.45],[30.2,46.25]]}
+];
+const BORDERS=[
+  [[34.2,51.25],[35.3,51.1],[35.6,50.45],[36.2,50.42],[36.9,50.35],[37.6,50.2],[38.1,50.05],[38.4,49.95],[39.2,49.85],[40.1,49.6],[40.15,49.25],[39.7,48.8],[39.85,48.4],[39.95,47.85],[38.85,47.85],[38.25,47.4],[38.2,47.1]],
+  [[26.6,48.25],[27.5,48.45],[28.1,48.25],[29.0,47.95],[29.2,47.45],[29.6,47.0],[30.1,46.4],[29.7,45.8],[28.9,45.5],[28.2,45.45],[29.0,45.35],[29.7,45.2]],
+  [[26.1,48.0],[26.6,48.25]],[[28.2,45.45],[28.0,45.0],[28.6,44.3]]
+];
+const FRONT=[[36.94,50.32],[37.3,50.0],[37.6,49.72],[37.85,49.4],[38.0,49.15],[38.12,48.88],[37.95,48.6],[37.75,48.38],[37.4,48.2],[37.05,47.95],[36.75,47.78],[36.35,47.65],[35.95,47.55],[35.55,47.45],[35.15,47.48],[34.7,47.5],[34.2,47.35],[33.8,47.05],[33.4,46.78],[32.7,46.6],[32.0,46.52]];
+const CITIES=[
+  ['Киев',30.52,50.45,2],['Харьков',36.23,49.99,1],['Днепр',35.05,48.46,1],['Запорожье',35.14,47.84,1],['Одесса',30.73,46.48,1],
+  ['Николаев',31.99,46.97,0],['Херсон',32.62,46.64,0],['Полтава',34.55,49.59,0],['Сумы',34.8,50.91,0],['Винница',28.47,49.23,0],
+  ['Черкассы',32.06,49.44,0],['Кропивницкий',32.26,48.51,0],['Кривой Рог',33.39,47.91,0],['Краматорск',37.56,48.72,0],['Купянск',37.6,49.7,0],
+  ['Донецк',37.8,48.0,1],['Луганск',39.3,48.57,0],['Мариуполь',37.54,47.1,0],['Мелитополь',35.37,46.85,0],['Симферополь',34.1,44.95,0],
+  ['Севастополь',33.52,44.6,0],['Керчь',36.47,45.36,0],['Белгород',36.59,50.6,1],['Ростов-на-Дону',39.72,47.23,2],['Таганрог',38.9,47.22,0],
+  ['Волгоград',44.5,48.7,1],['Краснодар',38.98,45.04,1],['Новороссийск',37.77,44.72,0],['Кишинёв',28.86,47.0,1],['Валуйки',38.1,50.2,0],['Миллерово',40.4,48.92,0]
+];
+const ROADS=[['Киев','Полтава','Харьков','Белгород'],['Киев','Винница'],['Киев','Черкассы','Кропивницкий','Николаев','Херсон'],['Одесса','Николаев'],['Харьков','Днепр','Запорожье','Мелитополь','Симферополь','Севастополь'],
+  ['Днепр','Кривой Рог','Николаев'],['Харьков','Краматорск','Донецк','Мариуполь','Таганрог','Ростов-на-Дону'],['Луганск','Миллерово','Ростов-на-Дону','Краснодар','Новороссийск'],['Ростов-на-Дону','Волгоград'],['Белгород','Валуйки','Миллерово'],['Кишинёв','Одесса']];
+const CBY=Object.fromEntries(CITIES.map(c=>[c[0],c]));
+const water=new Uint8Array((W/4)*(H/4));
+function polyPath(c,pts,close){c.beginPath();pts.forEach(([lo,la],i)=>i?c.lineTo(px(lo),py(la)):c.moveTo(px(lo),py(la)));if(close)c.closePath()}
+function isWater(x,y){return water[clamp(y/4|0,0,H/4-1)*(W/4)+clamp(x/4|0,0,W/4-1)]===1}
+function buildWaterMask(){
+  const m=mk(W/4,H/4),c=m.getContext('2d');c.scale(0.25,0.25);c.fillStyle='#000';polyPath(c,SEA,true);c.fill();
+  const d=c.getImageData(0,0,W/4,H/4).data;for(let i=0;i<water.length;i++)water[i]=d[i*4+3]>100?1:0;
+}
+function landY(x,y){if(!isWater(x,y))return y;for(let k=4;k<H;k+=4){if(y-k>20&&!isWater(x,y-k))return y-k;if(y+k<H-20&&!isWater(x,y+k))return y+k}return y}
+function label(c,t,x,y,font,fill,halo){c.font=font;c.lineWidth=3;c.strokeStyle=halo;c.lineJoin='round';c.strokeText(t,x,y);c.fillStyle=fill;c.fillText(t,x,y)}
 function genBackground(){
   const c=bgx;
-  c.fillStyle='#3a4327';c.fillRect(0,0,W,H);
-  const pal=['#45502d','#4d5532','#3f4a2b','#57573a','#4a4f2f','#525b34','#5d5638'];
-  for(let i=0;i<70;i++){
-    const x=rnd(-100,W),y=rnd(-80,H),w=rnd(120,320),h=rnd(80,220),a=rnd(-0.15,0.15);
-    c.save();c.translate(x,y);c.rotate(a);c.fillStyle=pal[i%pal.length];c.fillRect(0,0,w,h);
-    c.strokeStyle='rgba(0,0,0,0.08)';c.lineWidth=1;
-    for(let k=6;k<h;k+=7){c.beginPath();c.moveTo(0,k);c.lineTo(w,k);c.stroke();}
-    c.restore();
+  const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,'#384528');g.addColorStop(0.55,'#4a5030');g.addColorStop(1,'#5a5636');
+  c.fillStyle=g;c.fillRect(0,0,W,H);
+  // farmland patchwork
+  const pal=['#4b5530','#525a34','#45502c','#5c5a38','#4e532f','#57603a','#615a3a'];
+  for(let i=0;i<900;i++){
+    const x=rnd(-40,W),y=rnd(-30,H),w=rnd(25,70),h=rnd(18,50);
+    c.save();c.translate(x,y);c.rotate(rnd(-0.25,0.25));c.globalAlpha=0.55;c.fillStyle=pal[i%pal.length];c.fillRect(0,0,w,h);
+    c.globalAlpha=0.08;c.strokeStyle='#000';c.lineWidth=1;for(let k=4;k<h;k+=5){c.beginPath();c.moveTo(0,k);c.lineTo(w,k);c.stroke()}c.restore();
   }
+  c.globalAlpha=1;
+  // forests: Polesie in the north + tree belts
+  for(let i=0;i<700;i++){const x=rnd(0,W),y=rnd(0,py(50.1))*Math.random();c.fillStyle=Math.random()<0.5?'#26331b':'#2c3a1f';c.beginPath();c.arc(x,y,rnd(4,9),0,7);c.fill()}
+  for(let i=0;i<40;i++){let x=rnd(0,W),y=rnd(0,H);const vert=Math.random()<0.5,len=rnd(60,180);
+    for(let k=0;k<len;k+=7){c.fillStyle=Math.random()<0.5?'#28351c':'#2f3e21';c.beginPath();c.arc(x+(vert?rnd(-3,3):k),y+(vert?k:rnd(-3,3)),rnd(3,5),0,7);c.fill()}}
   // roads
-  c.strokeStyle='#6d6344';c.lineWidth=10;c.lineCap='round';
-  for(const y0 of [230,640]){c.beginPath();for(let x=0;x<=W;x+=20){const y=y0+Math.sin(x/170+y0)*30;x?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
-  c.strokeStyle='#7c7150';c.lineWidth=3;c.setLineDash([12,10]);
-  for(const y0 of [230,640]){c.beginPath();for(let x=0;x<=W;x+=20){const y=y0+Math.sin(x/170+y0)*30;x?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
-  c.setLineDash([]);
-  // tree lines (лесополосы)
-  for(let i=0;i<14;i++){
-    let x=rnd(0,W),y=rnd(0,H);const vert=Math.random()<0.5,len=rnd(140,380);
-    for(let k=0;k<len;k+=9){c.fillStyle=Math.random()<0.5?'#26331b':'#2e3d20';c.beginPath();c.arc(x+(vert?rnd(-4,4):k),y+(vert?k:rnd(-4,4)),rnd(5,9),0,7);c.fill();}
+  c.lineCap='round';c.lineJoin='round';
+  for(const r of ROADS){c.strokeStyle='rgba(120,108,74,0.9)';c.lineWidth=4;polyPath(c,r.map(n=>[CBY[n][1],CBY[n][2]]));c.stroke();
+    c.strokeStyle='rgba(170,155,110,0.5)';c.lineWidth=1.2;c.stroke()}
+  // sea
+  const sg=c.createLinearGradient(0,py(47.2),0,H);sg.addColorStop(0,'#2b4c58');sg.addColorStop(1,'#1a3340');
+  c.fillStyle=sg;polyPath(c,SEA,true);c.fill();
+  c.save();c.clip();c.strokeStyle='rgba(150,190,190,0.12)';c.lineWidth=14;polyPath(c,SEA,true);c.stroke();
+  c.strokeStyle='rgba(255,255,255,0.03)';c.lineWidth=1;for(let y=0;y<H;y+=6){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke()}c.restore();
+  c.strokeStyle='#8aa69c';c.lineWidth=1.5;polyPath(c,SEA,true);c.stroke();
+  // rivers
+  for(const r of RIVERS){c.strokeStyle='#22414e';c.lineWidth=r.w+2;polyPath(c,r.pts);c.stroke();c.strokeStyle='#3a6676';c.lineWidth=r.w;c.stroke()}
+  // state borders
+  c.setLineDash([10,5,2,5]);c.strokeStyle='rgba(230,220,190,0.7)';c.lineWidth=2;
+  for(const b of BORDERS){polyPath(c,b);c.stroke()}c.setLineDash([]);
+  // front line: trench zigzag + marker
+  c.strokeStyle='#2a2216';c.lineWidth=3;c.beginPath();
+  for(let i=0;i<FRONT.length-1;i++){const [a,b]=[FRONT[i],FRONT[i+1]],x0=px(a[0]),y0=py(a[1]),x1=px(b[0]),y1=py(b[1]),n=Math.max(2,Math.hypot(x1-x0,y1-y0)/9|0);
+    for(let k=0;k<=n;k++){const t=k/n,nx=-(y1-y0),ny=x1-x0,l=Math.hypot(nx,ny)||1,o=(k%2?4:-4);const x=x0+(x1-x0)*t+nx/l*o,y=y0+(y1-y0)*t+ny/l*o;(i||k)?c.lineTo(x,y):c.moveTo(x,y)}}
+  c.stroke();
+  c.strokeStyle='rgba(226,90,60,0.85)';c.lineWidth=2;c.setLineDash([6,4]);polyPath(c,FRONT);c.stroke();c.setLineDash([]);
+  for(let i=0;i<60;i++){const f=FRONT[Math.random()*(FRONT.length-1)|0];crater0(c,px(f[0])+rnd(-25,25),py(f[1])+rnd(-25,25),rnd(4,10))}
+  // labels
+  c.textAlign='center';c.textBaseline='middle';
+  label(c,'УКРАИНА',px(31.2),py(48.9),'28px "Russo One",sans-serif','rgba(231,227,204,0.28)','rgba(0,0,0,0.15)');
+  label(c,'РОССИЯ',px(42.4),py(50.2),'28px "Russo One",sans-serif','rgba(231,227,204,0.28)','rgba(0,0,0,0.15)');
+  label(c,'МОЛДОВА',px(28.2),py(47.6),'14px "Russo One",sans-serif','rgba(231,227,204,0.3)','rgba(0,0,0,0.15)');
+  label(c,'РУМЫНИЯ',px(27.2),py(45.3),'14px "Russo One",sans-serif','rgba(231,227,204,0.3)','rgba(0,0,0,0.15)');
+  label(c,'Чёрное море',px(31.3),py(44.9),'italic 20px "PT Sans",sans-serif','rgba(170,205,210,0.6)','rgba(0,0,0,0.2)');
+  label(c,'Азовское море',px(36.9),py(46.25),'italic 13px "PT Sans",sans-serif','rgba(170,205,210,0.65)','rgba(0,0,0,0.2)');
+  label(c,'Днепр',px(33.0),py(49.3),'italic 12px "PT Sans",sans-serif','rgba(150,200,215,0.8)','rgba(0,0,0,0.4)');
+  label(c,'Дон',px(41.5),py(49.6),'italic 12px "PT Sans",sans-serif','rgba(150,200,215,0.8)','rgba(0,0,0,0.4)');
+  label(c,'КРЫМ',px(34.3),py(45.4),'13px "Russo One",sans-serif','rgba(231,227,204,0.35)','rgba(0,0,0,0.2)');
+  label(c,'линия фронта (примерно)',px(38.75),py(49.25),'italic 11px "PT Sans",sans-serif','rgba(240,140,110,0.9)','rgba(0,0,0,0.5)');
+  for(const [n,lo,la,sz] of CITIES){
+    const x=px(lo),y=py(la);
+    c.fillStyle='#e7e3cc';c.strokeStyle='#111';c.lineWidth=1.5;c.beginPath();c.arc(x,y,sz===2?5:sz?3.5:2.5,0,7);c.fill();c.stroke();
+    if(sz===2){c.fillStyle='#111';c.beginPath();c.arc(x,y,2,0,7);c.fill()}
+    c.textAlign='left';label(c,n,x+6,y-7,(sz?'700 ':'')+(sz===2?13:sz?12:11)+'px "PT Sans",sans-serif','#e7e3cc','rgba(10,12,8,0.75)');
   }
-  // ruined village in no-man's land
-  for(let i=0;i<22;i++){const x=rnd(640,960),y=rnd(330,560);c.fillStyle=Math.random()<0.5?'#5b5a50':'#4b4a42';c.save();c.translate(x,y);c.rotate(rnd(-0.3,0.3));c.fillRect(-9,-7,rnd(12,22),rnd(10,16));c.restore();}
-  // trench lines
-  c.strokeStyle='#2a2618';c.lineWidth=4;
-  for(const tx of [600,1000]){c.beginPath();for(let y=10;y<H;y+=24){const x=tx+((y/24)%2?10:-10);y>10?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
   // grain
-  for(let i=0;i<9000;i++){c.fillStyle=Math.random()<0.5?'rgba(0,0,0,0.06)':'rgba(255,255,220,0.04)';c.fillRect(rnd(0,W),rnd(0,H),2,2);}
+  for(let i=0;i<9000;i++){c.fillStyle=Math.random()<0.5?'rgba(0,0,0,0.05)':'rgba(255,255,220,0.03)';c.fillRect(rnd(0,W),rnd(0,H),2,2)}
 }
+function crater0(c,x,y,r){const g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(30,24,14,0.6)');g.addColorStop(1,'rgba(30,24,14,0)');c.fillStyle=g;c.beginPath();c.arc(x,y,r,0,7);c.fill()}
 
 // ===================== game state =====================
 let G=null,choice={fac:'ua',diff:'normal'};
 function mkTeam(id,fac,ai){
   const F=FACTIONS[fac];
-  return {id,fac,F,ai,money:600,rp:0,res:new Set(),cur:null,prog:0,stance:'defend',mods:baseMods(),
+  return {id,fac,F,ai,left:fac==='ua',money:600,rp:0,res:new Set(),cur:null,prog:0,stance:'defend',mods:baseMods(),
     vis:new Uint8Array(COLS*ROWS),stats:{kills:0,lost:0},incRate:0,rpRate:0};
 }
 function newGame(){
@@ -342,13 +409,15 @@ function newGame(){
      placing:null,nid:1,teams:[mkTeam(0,choice.fac,false),mkTeam(1,other,true)],diff:DIFF[choice.diff],
      ai:{t:2,plan:0,wave:0,attackSize:8,attackStart:0},visT:0,alertT:-99,mouse:{x:0,y:0,in:false},drag:null};
   dcx.clearRect(0,0,W,H);$('#toasts').innerHTML='';
-  placeBuilding(0,'hq',1,9,true);placeBuilding(1,'hq',COLS-4,9,true);
-  for(let i=0;i<5;i++){spawnUnit(0,'inf',200,300+i*60);spawnUnit(1,'inf',W-200,300+i*60);}
+  for(const T of G.teams){
+    const hq=T.left?placeBuilding(T.id,'hq',8,1,true):placeBuilding(T.id,'hq',28,11,true);
+    for(let i=0;i<5;i++)spawnUnit(T.id,'inf',hq.x+(T.left?90:-90),landY(hq.x,hq.y+(i-2)*26));
+  }
   $('#facName').textContent=FACTIONS[choice.fac].name;
   $('#myFlag').style.background=FACTIONS[choice.fac].flag;
   setStance(0,'defend');setSpeed(1);G.paused=false;$('#btnPause').classList.remove('on');
   buildCards();buildTree();
-  toast('Стройте заводы для бюджета и НИИ для исследований','good');
+  toast('Штабы: Киев и Ростов-на-Дону. Стройте заводы и НИИ','good');
 }
 
 // ===================== entities =====================
@@ -358,7 +427,8 @@ function uCost(T,k){const d=UNITS[k];return Math.round(d.cost*T.mods.cost*(d.che
 function canPlace(team,k,col,row){
   const d=BUILD[k];
   if(row<0||row+d.h>ROWS)return false;
-  if(team===0){if(col<0||col+d.w>ZONE)return false}else{if(col<COLS-ZONE||col+d.w>COLS)return false}
+  if(G.teams[team].left){if(col<0||col+d.w>ZONE)return false}else{if(col<COLS-ZONE||col+d.w>COLS)return false}
+  for(let r=row;r<row+d.h;r++)for(let c=col;c<col+d.w;c++)if(isWater((c+0.5)*CELL,(r+0.5)*CELL))return false;
   for(const b of G.builds){if(b.dead)continue;if(col<b.col+b.w&&col+d.w>b.col&&row<b.row+b.h&&row+d.h>b.row)return false}
   // keep units from getting trapped: don't place over own ground units
   return true;
@@ -375,7 +445,7 @@ function spawnUnit(team,k,x,y){
   const d=UNITS[k],T=G.teams[team];
   const hm=d.cat==='inf'?T.mods.infHp:d.cat==='veh'?T.mods.vehHp:1;
   const u={id:G.nid++,key:k,def:d,team,x,y,r:d.r,hp:d.hp*hm,maxhp:d.hp*hm,cd:rnd(0,d.rof||1),scan:rnd(0,0.3),
-    tgt:null,ag:null,ang:team?Math.PI:0,order:null,hold:null,homeY:clamp(y+rnd(-160,160),50,H-50),
+    tgt:null,ag:null,ang:T.left?0:Math.PI,order:null,hold:null,homeY:landY(T.left?560:W-560,clamp(y+rnd(-200,200),50,H-50)),
     bat:d.bat||0,wp:null,hit:0,spin:rnd(0,6)};
   G.units.push(u);return u;
 }
@@ -459,7 +529,9 @@ function shoot(u,tgt){
 function moveTo(u,tx,ty,spd,dt){
   const dx=tx-u.x,dy=ty-u.y,d=Math.hypot(dx,dy);
   if(d<2)return d;
-  const s=Math.min(d,spd*dt);u.x+=dx/d*s;u.y+=dy/d*s;
+  const s=Math.min(d,spd*dt),nx=u.x+dx/d*s,ny=u.y+dy/d*s;
+  if(u.def.cat==='drone'||!isWater(nx,ny)){u.x=nx;u.y=ny}
+  else if(!isWater(nx,u.y))u.x=nx;else if(!isWater(u.x,ny))u.y=ny;
   const a=Math.atan2(dy,dx);let da=a-u.ang;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
   u.ang+=clamp(da,-6*dt,6*dt);
   return d;
@@ -491,7 +563,7 @@ function updateGround(u,dt){
   }else if(T.stance==='attack'){
     dest=u.ag||enemyHQ(u.team);
   }else{
-    const line=u.team===0?560:W-560,back=d.indirect?(u.team===0?-150:150):(d.cat==='inf'?0:(u.team===0?-40:40));
+    const L=T.left,line=L?560:W-560,back=d.indirect?(L?-150:150):(d.cat==='inf'?0:(L?-40:40));
     dest=(u.ag&&Math.abs(u.ag.x-line)<240)?u.ag:{x:line+back,y:u.homeY};
   }
   if(dest)moveTo(u,dest.x,dest.y,d.spd,dt);
@@ -513,7 +585,7 @@ function ewFactor(u,dt){
 }
 function frontWp(u,deep){
   const t=u.team,fx=deep?rnd(0.55,0.85):rnd(0.45,0.65);
-  return {x:t===0?W*fx:W*(1-fx),y:rnd(60,H-60)};
+  return {x:G.teams[t].left?W*fx:W*(1-fx),y:rnd(60,H-60)};
 }
 function updateDrone(u,dt){
   const d=u.def,T=G.teams[u.team];
@@ -564,7 +636,7 @@ function updateDrone(u,dt){
         moveTo(u,u.tgt.x,u.tgt.y,spd,dt);
         if(Math.hypot(u.tgt.x-u.x,u.tgt.y-u.y)<u.tgt.r+5){dealDamage(u.tgt,d.dmg,u.team);boom(u.x,u.y,10);u.dead=true}
       }else{
-        if(!u.wp||Math.hypot(u.wp.x-u.x,u.wp.y-u.y)<15)u.wp={x:u.team===0?rnd(380,700):W-rnd(380,700),y:rnd(60,H-60)};
+        if(!u.wp||Math.hypot(u.wp.x-u.x,u.wp.y-u.y)<15)u.wp={x:T.left?rnd(380,700):W-rnd(380,700),y:rnd(60,H-60)};
         moveTo(u,u.wp.x,u.wp.y,spd*0.5,dt);
       }
       break;
@@ -598,7 +670,7 @@ function updateBuilding(b,dt){
       b.queue.shift();
       const ud=UNITS[q.k];
       if(ud.cat==='drone')spawnUnit(b.team,q.k,b.x,b.y);
-      else spawnUnit(b.team,q.k,b.team===0?b.x1+14:b.x0-14,b.y+rnd(-14,14));
+      else spawnUnit(b.team,q.k,T.left?b.x1+14:b.x0-14,landY(b.x,b.y+rnd(-14,14)));
     }
   }
   const g=d.gun;
@@ -630,6 +702,7 @@ function physics(){
       }
     }
     u.x=clamp(u.x,6,W-6);u.y=clamp(u.y,6,H-6);
+    if(isWater(u.x,u.y))u.y-=1.5;
   }
 }
 function computeVision(T){
@@ -672,7 +745,8 @@ const AI_RES=['r_log','r_tank1','r_fpvmass','r_vest','r_ew','r_spg','r_atgm','r_
 function aiPlace(k){
   const d=BUILD[k],def=['bunker','aa','ew'].includes(k);
   for(let i=0;i<80;i++){
-    const col=def?COLS-ZONE+Math.floor(rnd(0,4)):COLS-ZONE+2+Math.floor(rnd(0,ZONE-2-d.w+1));
+    const L=G.teams[1].left,c0=L?0:COLS-ZONE;
+    const col=def?(L?ZONE-d.w-Math.floor(rnd(0,4)):c0+Math.floor(rnd(0,4))):(L?Math.floor(rnd(0,ZONE-2-d.w+1)):c0+2+Math.floor(rnd(0,ZONE-2-d.w+1)));
     const row=Math.floor(rnd(0,ROWS-d.h+1));
     if(canPlace(1,k,col,row)){placeBuilding(1,k,col,row,false);G.teams[1].money-=d.cost;return true}
   }
@@ -813,11 +887,12 @@ function draw(){
   c.setTransform(sx,0,0,sy,0,0);
   c.drawImage(bg,0,0);c.drawImage(decal,0,0);
   // build zones
-  const my=G.teams[0].F.c1,en=G.teams[1].F.c1;
+  const LT=G.teams[0].left?G.teams[0]:G.teams[1],RT=LT===G.teams[0]?G.teams[1]:G.teams[0];
+  const my=LT.F.c1,en=RT.F.c1,zx=G.teams[0].left?0:W-ZONE*CELL;
   c.globalAlpha=G.placing?0.12:0.05;c.fillStyle=my;c.fillRect(0,0,ZONE*CELL,H);c.fillStyle=en;c.fillRect(W-ZONE*CELL,0,ZONE*CELL,H);c.globalAlpha=1;
   c.setLineDash([8,8]);c.lineWidth=1.5;c.strokeStyle=my;c.globalAlpha=0.5;c.beginPath();c.moveTo(ZONE*CELL,0);c.lineTo(ZONE*CELL,H);c.stroke();
   c.strokeStyle=en;c.beginPath();c.moveTo(W-ZONE*CELL,0);c.lineTo(W-ZONE*CELL,H);c.stroke();c.setLineDash([]);c.globalAlpha=1;
-  if(G.placing){c.strokeStyle='rgba(255,255,255,0.06)';c.lineWidth=1;c.beginPath();for(let x=0;x<=ZONE*CELL;x+=CELL){c.moveTo(x,0);c.lineTo(x,H)}for(let y=0;y<=H;y+=CELL){c.moveTo(0,y);c.lineTo(ZONE*CELL,y)}c.stroke()}
+  if(G.placing){c.strokeStyle='rgba(255,255,255,0.06)';c.lineWidth=1;c.beginPath();for(let x=zx;x<=zx+ZONE*CELL;x+=CELL){c.moveTo(x,0);c.lineTo(x,H)}for(let y=0;y<=H;y+=CELL){c.moveTo(zx,y);c.lineTo(zx+ZONE*CELL,y)}c.stroke()}
   const vis0=G.teams[0].vis;
   for(const b of G.builds)if(b.team===0||b.seen)drawBuilding(b);
   for(const u of G.units)if(u.def.cat!=='drone'&&(u.team===0||isVis(vis0,u.x,u.y)))drawUnit(u);
@@ -1038,7 +1113,8 @@ document.querySelectorAll('[data-diff]').forEach(b=>b.onclick=()=>{choice.diff=b
 $('#btnStart').onclick=()=>{$('#start').hidden=true;newGame();resize()};
 $('#btnAgain').onclick=()=>{$('#end').hidden=true;$('#start').hidden=false;if(G){G.modal=true}};
 
-genBackground();
+buildWaterMask();genBackground();
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{bgx.clearRect(0,0,W,H);genBackground()});
 // demo battle behind the start screen so the first frame isn't empty
 newGame();G.modal=true;
 resize();
