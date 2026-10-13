@@ -38,18 +38,23 @@ public class CustomCommandManager implements CommandExecutor, TabCompleter {
     }
 
     @SuppressWarnings("unchecked")
-    private void unregisterAll() {
-        CommandMap cm = map();
+    private Map<String, Command> known(CommandMap cm) {
         try {
             Field f = SimpleCommandMap.class.getDeclaredField("knownCommands");
             f.setAccessible(true);
-            Map<String, Command> known = (Map<String, Command>) f.get(cm);
-            for (Command c : registered) {
-                c.unregister(cm);
-                known.values().removeIf(v -> v == c);
-            }
+            return (Map<String, Command>) f.get(cm);
         } catch (Exception e) {
-            plugin.getLogger().warning("Не удалось снять старые команды: " + e.getMessage());
+            plugin.getLogger().warning("Нет доступа к списку команд: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void unregisterAll() {
+        CommandMap cm = map();
+        Map<String, Command> known = known(cm);
+        for (Command c : registered) {
+            c.unregister(cm);
+            if (known != null) known.values().removeIf(v -> v == c);
         }
         registered.clear();
     }
@@ -59,11 +64,17 @@ public class CustomCommandManager implements CommandExecutor, TabCompleter {
         data = YamlConfiguration.loadConfiguration(file);
         ConfigurationSection sec = data.getConfigurationSection("commands");
         CommandMap cm = map();
+        Map<String, Command> known = known(cm);
         if (sec != null) for (String name : sec.getKeys(false)) {
             ConfigurationSection c = sec.getConfigurationSection(name);
             Dynamic cmd = new Dynamic(name.toLowerCase(), c);
             cm.register("shadowsmp", cmd);
             registered.add(cmd);
+            // кастом-команда важнее одноимённых команд других плагинов (например /rules у EssentialsX)
+            if (known != null) {
+                known.put(cmd.getName(), cmd);
+                for (String al : cmd.getAliases()) known.put(al.toLowerCase(), cmd);
+            }
         }
         try { Bukkit.getServer().getClass().getMethod("syncCommands").invoke(Bukkit.getServer()); } catch (Exception ignored) {}
         Bukkit.getOnlinePlayers().forEach(Player::updateCommands);
