@@ -126,7 +126,7 @@ local function datatype(name, ctor)
 	return { new = function(...) local t = { __type = name, args = { ... } }; return t end }
 end
 M.Color3 = {
-	new = function(r, g, b) num(r, "Color3"); num(g, "Color3"); num(b, "Color3"); return setmetatable({ R = r, G = g, B = b, __type = "Color3" }, { __index = { Lerp = function(a, b2, t) return M.Color3.new(a.R + (b2.R - a.R) * t, a.G, a.B) end } }) end,
+	new = function(r, g, b) num(r, "Color3"); num(g, "Color3"); num(b, "Color3"); return setmetatable({ R = r, G = g, B = b, __type = "Color3" }, { __index = { Lerp = function(a, b2, t) return M.Color3.new(a.R + (b2.R - a.R) * t, a.G + (b2.G - a.G) * t, a.B + (b2.B - a.B) * t) end, ToHex = function(a) return string.format("%02x%02x%02x", math.floor(a.R * 255), math.floor(a.G * 255), math.floor(a.B * 255)) end } }) end,
 }
 M.Color3.fromRGB = function(r, g, b) return M.Color3.new(r / 255, g / 255, b / 255) end
 M.UDim = { new = function(s, o) return { Scale = s, Offset = o, __type = "UDim" } end }
@@ -384,6 +384,8 @@ function Inst.GetDataStore() return { GetAsync = function() return nil end, SetA
 function Inst.GetGuiInset() return V2.new(0, 36) end
 function Inst.Play() end
 function Inst.BindToRenderStep() end
+function Inst.PromptProductPurchase() end
+function Inst.GetPlayerByUserId(_, id) for _, p in ipairs(M.players) do if p.UserId == id then return p end end end
 
 M.log = function() end
 
@@ -448,6 +450,8 @@ function M.setup()
 	svc("UserInputService")
 	svc("DataStoreService")
 	svc("GuiService")
+	svc("MarketplaceService")
+	svc("SoundService")
 	local sp = svc("StarterPlayer")
 	local sps = M.newInstance("Folder"); sps.Name = "StarterPlayerScripts"; sps.Parent = sp
 	local ws = svc("Workspace", "Workspace")

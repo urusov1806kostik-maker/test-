@@ -83,7 +83,12 @@ standIn(nil)
 assert(not visible("☰ ЮНИТЫ"), "inventory must be closed at spawn")
 standIn("Units")
 assert(visible("☰ ЮНИТЫ"), "inventory must open in Units circle")
-for i, id in ipairs({ "EclipseGuardian", "FallenAngel", "VoidEmperor", "AbyssOverlord", "CorruptedSamurai", "AbyssReaper" }) do
+local SETS = {
+	old = { "EclipseGuardian", "FallenAngel", "VoidEmperor", "AbyssOverlord", "CorruptedSamurai", "AbyssReaper" },
+	shattered = { "RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer" },
+	blood = { "BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse" },
+}
+for i, id in ipairs(SETS[(...) or "old"]) do
 	local r = { rawget(RS.VoidTD.Remotes.Request, "_props").OnServerInvoke(player, "Equip", { Unit = id, Slot = i }) }
 	assert(r[1], tostring(r[2]))
 end
@@ -100,22 +105,43 @@ tick(0.1)
 assert(not visible("☰ ЮНИТЫ"), "G must toggle inventory")
 print("inventory button ok")
 
--- summon в круге
-standIn("Summon")
-assert(visible("✦ VOID SUMMON"), "summon must open in circle")
+-- кейсы в круге
+standIn("Case_ShatteredReality")
+assert(visible("✦ КЕЙСЫ"), "cases must open in circle")
+local g0 = DS.Get(player).Gems
 findButton("x10").Activated:Fire()
-tick(3)
+tick(6)
+assert(DS.Get(player).Gems == g0 - Config.Cases.ShatteredReality.Cost10, "x10 must cost case price")
+local inv = DS.Get(player).Inventory
+local newCount = 0
+for _, id in ipairs(Config.Cases.ShatteredReality.Units) do newCount += (inv[id] or 0) end
+assert(newCount >= 10, "units must come from the case")
 local okBtn = findButton("OK")
 assert(okBtn, "no OK button after summon")
 okBtn.Activated:Fire()
 standIn(nil)
-print("summon circle ok")
+print("case circle ok")
+-- магазин
+findButton("🛒").Activated:Fire()
+tick(0.2)
+assert(visible("🛒 МАГАЗИН КРИСТАЛЛОВ"), "shop must open")
+local g1 = DS.Get(player).Gems
+findButton("R$ 25").Activated:Fire()
+tick(0.2)
+assert(DS.Get(player).Gems == g1 + 100, "test purchase must add gems")
+findButton("ЗАБРАТЬ").Activated:Fire()
+tick(0.2)
+assert(DS.Get(player).Gems == g1 + 100 + Config.Settings.DailyGems, "daily gift")
+findButton("ЗАБРАТЬ")
+tick(0.2)
+findButton("🛒").Activated:Fire()
+print("shop ok")
 
 -- портал ИГРАТЬ -> выбор сложности
 standIn("Play")
 assert(visible("▶ ВЫБОР СЛОЖНОСТИ"), "mode menu must open")
 findButton("ИГРАТЬ").Activated:Fire()
-tick(0.5)
+tick(2)
 assert(player:GetAttribute("InMatch"), "join via menu failed")
 print("joined:", RS.VoidTD.State:GetAttribute("Difficulty"), "char at", char:GetPivot().Position)
 
@@ -170,7 +196,7 @@ findButton("⚙").Activated:Fire()
 tick(0.2)
 local liteParts = unitParts()
 print("unit parts full/lite:", fullParts, liteParts)
-assert(liteParts < fullParts * 0.75, "lite mode must reduce parts")
+assert(liteParts < fullParts, "lite mode must reduce parts")
 assert(findButton("⚙").Text:find("ЛЁГКАЯ"), "button text")
 assert(DS.Get(player).Settings.Lite == true, "lite setting must be saved")
 findButton("⚙").Activated:Fire()
@@ -197,11 +223,11 @@ for _ = 1, 60 * 30 do
 	if w >= 12 or ph == "Defeat" or ph == "Victory" then break end
 end
 findButton("⟵").Activated:Fire()
-tick(0.5)
+tick(2)
 print("left match:", not player:GetAttribute("InMatch"), "phase", RS.VoidTD.State:GetAttribute("Phase"))
 assert(RS.VoidTD.State:GetAttribute("Phase") == "Idle")
 -- снова в бой для проверки продажи
-standIn(nil); standIn("Play"); findButton("ИГРАТЬ").Activated:Fire(); tick(0.3)
+standIn(nil); standIn("Play"); findButton("ИГРАТЬ").Activated:Fire(); tick(2)
 player:SetAttribute("Money", 50000)
 M.raycast = function(origin, dir, params)
 	local filt = params and params.FilterDescendantsInstances

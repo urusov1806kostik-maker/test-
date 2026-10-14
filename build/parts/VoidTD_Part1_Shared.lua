@@ -83,6 +83,9 @@ Config.Settings = {
 	VictoryGems = 1000,
 	BossSlowResist = 0.5,         -- боссы получают только 50% силы замедления
 	StarterUnits = { "VoidSoldier", "ShadowArcher", "LostMage" },
+	DailyGems = 150,              -- бесплатные кристаллы в магазине раз в 20 часов
+	DailyCooldown = 20 * 3600,
+	ShopTestMode = true,          -- в Studio покупка с ProductId = 0 выдаёт кристаллы бесплатно (для теста)
 	DataStoreName = "VoidTD_Data_v1",
 	SyncRate = 0.1,               -- как часто сервер рассылает позиции врагов
 }
@@ -90,7 +93,7 @@ Config.Settings = {
 ------------------------------------------------------------------------
 -- РЕДКОСТИ
 ------------------------------------------------------------------------
-Config.RarityOrder = { "Common", "Rare", "Epic", "Legendary", "Mythic" }
+Config.RarityOrder = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret" }
 
 Config.Rarities = {
 	-- Rate — шанс выпадения в Summon (в процентах, сумма = 100)
@@ -99,6 +102,80 @@ Config.Rarities = {
 	Epic      = { Order = 3, Color = Color3.fromRGB(170, 80, 255),  Rate = 5.5, PlacementLimit = 4 },
 	Legendary = { Order = 4, Color = Color3.fromRGB(255, 195, 50),  Rate = 1.3, PlacementLimit = 3 },
 	Mythic    = { Order = 5, Color = Color3.fromRGB(235, 40, 130),  Rate = 0.2, PlacementLimit = 2 },
+	-- Secret есть только в новых кейсах (шанс задаётся в Config.Cases)
+	Secret    = { Order = 6, Color = Color3.fromRGB(255, 25, 45),   Rate = 0,   PlacementLimit = 1 },
+}
+
+------------------------------------------------------------------------
+-- КЕЙСЫ (Summon). Rates — шансы редкостей в процентах, сумма = 100.
+------------------------------------------------------------------------
+Config.CaseOrder = { "VoidCase", "ShatteredReality", "BloodMoon" }
+
+Config.Cases = {
+	VoidCase = {
+		Name = "VOID CASE", Color = Color3.fromRGB(170, 80, 255),
+		Description = "Оригинальные воины Пустоты.",
+		Cost1 = 50, Cost10 = 450,
+		Rates = { Common = 72, Rare = 21, Epic = 5.5, Legendary = 1.3, Mythic = 0.2 },
+		Units = { "VoidSoldier", "ShadowArcher", "LostMage", "VoidKnight", "DarkGunner", "AbyssReaper",
+			"CorruptedSamurai", "EclipseGuardian", "FallenAngel", "VoidEmperor", "AbyssOverlord" },
+	},
+	ShatteredReality = {
+		Name = "SHATTERED REALITY", Color = Color3.fromRGB(120, 40, 210),
+		Description = "Расколотая реальность. Шанс SECRET: 0.1%",
+		Cost1 = 80, Cost10 = 720,
+		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
+		Units = { "RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer" },
+	},
+	BloodMoon = {
+		Name = "BLOOD MOON", Color = Color3.fromRGB(210, 30, 50),
+		Description = "Кровавая луна. Шанс SECRET: 0.1%",
+		Cost1 = 100, Cost10 = 900,
+		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
+		Units = { "BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse" },
+	},
+}
+
+------------------------------------------------------------------------
+-- МАГАЗИН КРИСТАЛЛОВ
+-- ProductId — Developer Product из Creator Hub (Monetization → Developer Products).
+-- Пока ProductId = 0 и включён ShopTestMode, в Studio покупка бесплатная (для проверки).
+------------------------------------------------------------------------
+Config.Shop = {
+	{ Key = "Gems100",  Gems = 100,  Robux = 25,  ProductId = 0, Title = "Горсть кристаллов" },
+	{ Key = "Gems550",  Gems = 550,  Robux = 99,  ProductId = 0, Title = "Мешок кристаллов", Bonus = "+10%" },
+	{ Key = "Gems1200", Gems = 1200, Robux = 199, ProductId = 0, Title = "Сундук кристаллов", Bonus = "+20%" },
+	{ Key = "Gems2600", Gems = 2600, Robux = 399, ProductId = 0, Title = "Груда кристаллов", Bonus = "+30%" },
+	{ Key = "Gems7000", Gems = 7000, Robux = 999, ProductId = 0, Title = "Сокровищница Пустоты", Bonus = "+40%" },
+}
+
+------------------------------------------------------------------------
+-- ЗВУКИ. Custom — свой звук "rbxassetid://ID" (файлы для загрузки лежат в assets/sounds).
+-- Пока Custom пустой, играет встроенный звук Roblox с обработкой (Pitch).
+------------------------------------------------------------------------
+Config.Sounds = {
+	Slash      = { Custom = "", Id = "rbxasset://sounds/swordslash.wav",           Volume = 0.35, Pitch = 1.1 },
+	HeavyHit   = { Custom = "", Id = "rbxasset://sounds/swordslash.wav",           Volume = 0.5,  Pitch = 0.65 },
+	Shoot      = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.2,  Pitch = 1.6 },
+	Laser      = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.45, Pitch = 0.7 },
+	Magic      = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.3,  Pitch = 0.8 },
+	Explosion  = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.6,  Pitch = 0.45 },
+	Place      = { Custom = "", Id = "rbxasset://sounds/unsheath.wav",             Volume = 0.5,  Pitch = 1 },
+	Upgrade    = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.45, Pitch = 1.3 },
+	Sell       = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.4,  Pitch = 0.6 },
+	Click      = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.2,  Pitch = 1.8 },
+	WaveStart  = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.4,  Pitch = 1 },
+	Boss       = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.8,  Pitch = 0.3 },
+	CoreHit    = { Custom = "", Id = "rbxasset://sounds/swordslash.wav",           Volume = 0.5,  Pitch = 0.4 },
+	Victory    = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.6,  Pitch = 1.2 },
+	Defeat     = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.6,  Pitch = 0.45 },
+	CaseShake  = { Custom = "", Id = "rbxasset://sounds/unsheath.wav",             Volume = 0.4,  Pitch = 0.7 },
+	CaseOpen   = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.7,  Pitch = 0.5 },
+	Reveal     = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.35, Pitch = 1 },
+	Secret     = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.9,  Pitch = 0.25 },
+	Purchase   = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.5,  Pitch = 1.5 },
+	Portal     = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.5,  Pitch = 0.35 },
+	EnemyDeath = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.15, Pitch = 2.2 },
 }
 
 Config.TargetModes = { "First", "Last", "Strongest", "Weakest", "Closest" }
@@ -136,13 +213,16 @@ Config.Difficulties = {
 -- ЛОББИ: остров рядом с картой. Встань в круг, чтобы открыть меню.
 ------------------------------------------------------------------------
 Config.Lobby = {
-	Center = Vector3.new(0, 60, 400),
-	Radius = 58,
-	Spawn = Vector3.new(0, 60, 432),
+	Center = Vector3.new(0, 60, 440),
+	Radius = 95,
+	Spawn = Vector3.new(0, 60, 510),
 	Zones = {
-		Summon = { Offset = Vector3.new(-32, 0, 6), Radius = 7, Title = "SUMMON", Color = Color3.fromRGB(255, 70, 180) },
-		Units  = { Offset = Vector3.new(32, 0, 6),  Radius = 7, Title = "ЮНИТЫ",  Color = Color3.fromRGB(80, 170, 255) },
-		Play   = { Offset = Vector3.new(0, 0, -30), Radius = 8, Title = "ИГРАТЬ", Color = Color3.fromRGB(180, 80, 255) },
+		Play  = { Offset = Vector3.new(0, 0, -62), Radius = 9, Title = "ИГРАТЬ", Color = Color3.fromRGB(180, 80, 255) },
+		Units = { Offset = Vector3.new(64, 0, 8),  Radius = 8, Title = "ЮНИТЫ",  Color = Color3.fromRGB(80, 170, 255) },
+		-- кейсы: Case = ключ из Config.Cases
+		Case_VoidCase         = { Offset = Vector3.new(-58, 0, -22), Radius = 7, Title = "VOID CASE",         Color = Color3.fromRGB(170, 80, 255), Case = "VoidCase" },
+		Case_ShatteredReality = { Offset = Vector3.new(-70, 0, 6),   Radius = 7, Title = "SHATTERED REALITY", Color = Color3.fromRGB(130, 50, 230), Case = "ShatteredReality" },
+		Case_BloodMoon        = { Offset = Vector3.new(-58, 0, 34),  Radius = 7, Title = "BLOOD MOON",        Color = Color3.fromRGB(230, 40, 60),  Case = "BloodMoon" },
 	},
 }
 Config.BattleSpawn = Vector3.new(10, 60, 10)
@@ -159,6 +239,10 @@ Config.UnitOrder = {
 	"AbyssReaper", "CorruptedSamurai",
 	"EclipseGuardian", "FallenAngel",
 	"VoidEmperor", "AbyssOverlord",
+	-- Shattered Reality Case
+	"RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer",
+	-- Blood Moon Case
+	"BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse",
 }
 
 Config.Units = {
@@ -303,6 +387,179 @@ Config.Units = {
 				BlackHole = { Cooldown = 8,  Duration = 7.0, Radius = 14, Tick = 0.5, TickDamage = 285, Slow = 0.60 } },
 		},
 		BlackHoleExtraRange = 11, -- чёрная дыра достаёт дальше обычной атаки
+	},
+
+	--------------------------------------------------------------------
+	-- SHATTERED REALITY CASE
+	--------------------------------------------------------------------
+	RiftScout = {
+		Name = "Rift Scout", Rarity = "Common", AttackType = "Melee", Case = "ShatteredReality",
+		Description = "Разведчик с двумя кинжалами. Каждый 5-й удар наносит 150% урона.",
+		Anim = "DualDagger", HitDelay = 0.12, Scale = 1.0, DefaultTarget = "First",
+		EveryNth = { N = 5, Mult = 1.5 },
+		Levels = {
+			{ Damage = 9,  Range = 11, Cooldown = 0.55, Cost = 200 },
+			{ Damage = 13, Range = 11, Cooldown = 0.52, Cost = 150 },
+			{ Damage = 18, Range = 12, Cooldown = 0.48, Cost = 280 },
+			{ Damage = 26, Range = 12, Cooldown = 0.44, Cost = 450 },
+			{ Damage = 38, Range = 13, Cooldown = 0.40, Cost = 700 },
+		},
+	},
+	CrystalHunter = {
+		Name = "Crystal Hunter", Rarity = "Rare", AttackType = "Projectile", Case = "ShatteredReality",
+		Description = "Кристальный арбалет. Кристаллы взрываются по области. На 5-м уровне — двойной выстрел.",
+		Anim = "Crossbow", HitDelay = 0.2, ProjectileSpeed = 110, Projectile = "Crystal", Scale = 1.0, DefaultTarget = "First",
+		ExplodeMult = 0.5, ImpactColor = Color3.fromRGB(80, 170, 255),
+		Levels = {
+			{ Damage = 30,  Range = 22, Cooldown = 1.10, Cost = 800,  Explode = 4,   Shots = 1 },
+			{ Damage = 44,  Range = 23, Cooldown = 1.05, Cost = 550,  Explode = 4.5, Shots = 1 },
+			{ Damage = 64,  Range = 24, Cooldown = 1.00, Cost = 900,  Explode = 5,   Shots = 1 },
+			{ Damage = 92,  Range = 26, Cooldown = 0.95, Cost = 1400, Explode = 5.5, Shots = 1 },
+			{ Damage = 130, Range = 28, Cooldown = 0.90, Cost = 2200, Explode = 6,   Shots = 2 },
+		},
+	},
+	VoidPuppeteer = {
+		Name = "Void Puppeteer", Rarity = "Epic", AttackType = "Thread", Case = "ShatteredReality",
+		Description = "Кукловод. Нити замедляют и наносят периодический урон. На 5-м уровне — 3 цели.",
+		Anim = "Puppet", HitDelay = 0.25, Scale = 1.05, DefaultTarget = "First",
+		Levels = {
+			{ Damage = 35,  Range = 16, Cooldown = 1.3,  Cost = 1600, Targets = 1, Slow = 0.30, SlowTime = 1.5, Dot = 15, DotTime = 3 },
+			{ Damage = 50,  Range = 16, Cooldown = 1.25, Cost = 1100, Targets = 1, Slow = 0.35, SlowTime = 1.5, Dot = 22, DotTime = 3 },
+			{ Damage = 72,  Range = 17, Cooldown = 1.2,  Cost = 1800, Targets = 2, Slow = 0.40, SlowTime = 1.6, Dot = 32, DotTime = 3 },
+			{ Damage = 105, Range = 18, Cooldown = 1.1,  Cost = 2800, Targets = 2, Slow = 0.45, SlowTime = 1.7, Dot = 46, DotTime = 3 },
+			{ Damage = 150, Range = 19, Cooldown = 1.0,  Cost = 4200, Targets = 3, Slow = 0.50, SlowTime = 1.8, Dot = 68, DotTime = 3 },
+		},
+	},
+	Starbreaker = {
+		Name = "Starbreaker", Rarity = "Legendary", AttackType = "AOE", ImpactKind = "Hammer", Case = "ShatteredReality",
+		Description = "Разрушитель звёзд. Удар молотом — круговой взрыв. С 3-го уровня падают звёздные осколки.",
+		Ability = "STAR SMASH",
+		Anim = "Hammer", HitDelay = 0.55, Scale = 1.3, DefaultTarget = "First",
+		Levels = {
+			{ Damage = 150, Range = 14, Cooldown = 2.4, Cost = 3600, AOERadius = 8 },
+			{ Damage = 210, Range = 14, Cooldown = 2.3, Cost = 2400, AOERadius = 9 },
+			{ Damage = 300, Range = 15, Cooldown = 2.2, Cost = 3800, AOERadius = 10,   Shards = 2, ShardRadius = 4, ShardMult = 0.6 },
+			{ Damage = 430, Range = 16, Cooldown = 2.1, Cost = 5800, AOERadius = 11.5, Shards = 3, ShardRadius = 4.5, ShardMult = 0.6 },
+			{ Damage = 620, Range = 17, Cooldown = 1.9, Cost = 8600, AOERadius = 13,   Shards = 5, ShardRadius = 5, ShardMult = 0.7 },
+		},
+	},
+	RiftMonarch = {
+		Name = "Rift Monarch", Rarity = "Mythic", AttackType = "MultiHit", ImpactKind = "Rift", Case = "ShatteredReality",
+		Description = "Монарх Разломов. RIFT STORM — порталы бьют по разным врагам. На 5-м уровне — большой разлом.",
+		Ability = "RIFT STORM",
+		Anim = "RiftStorm", HitDelay = 0.5, HitInterval = 0.14, Spread = true, Scale = 1.4, DefaultTarget = "First",
+		Levels = {
+			{ Damage = 170, Range = 22, Cooldown = 3.0, Cost = 7200,  Hits = 3 },
+			{ Damage = 240, Range = 23, Cooldown = 2.9, Cost = 4600,  Hits = 4 },
+			{ Damage = 340, Range = 24, Cooldown = 2.8, Cost = 7200,  Hits = 4 },
+			{ Damage = 480, Range = 25, Cooldown = 2.7, Cost = 10500, Hits = 5 },
+			{ Damage = 690, Range = 27, Cooldown = 2.5, Cost = 15500, Hits = 6, BigRift = 12, BigRiftMult = 1.5 },
+		},
+	},
+	RealityDestroyer = {
+		Name = "REALITY DESTROYER", Rarity = "Secret", AttackType = "Splash", Case = "ShatteredReality",
+		Description = "SECRET. RED SPLASH: каждый удар — 100% по цели и 50% по всем врагам вокруг.",
+		Ability = "RED SPLASH",
+		Anim = "RedSplash", HitDelay = 0.35, Scale = 1.5, DefaultTarget = "First",
+		SplashMult = 0.5, ImpactColor = Color3.fromRGB(255, 30, 50),
+		Levels = {
+			{ Damage = 320,  Range = 15, Cooldown = 1.6,  Cost = 9000,  AOERadius = 8 },
+			{ Damage = 450,  Range = 15, Cooldown = 1.5,  Cost = 6000,  AOERadius = 9 },
+			{ Damage = 640,  Range = 16, Cooldown = 1.45, Cost = 9000,  AOERadius = 11 },
+			{ Damage = 900,  Range = 17, Cooldown = 1.35, Cost = 13000, AOERadius = 13 },
+			{ Damage = 1300, Range = 18, Cooldown = 1.25, Cost = 19000, AOERadius = 16 },
+		},
+	},
+
+	--------------------------------------------------------------------
+	-- BLOOD MOON CASE
+	--------------------------------------------------------------------
+	BloodAcolyte = {
+		Name = "Blood Acolyte", Rarity = "Common", AttackType = "Melee", Case = "BloodMoon",
+		Description = "Послушник с серпом. Удары вызывают кровотечение.",
+		Anim = "Sickle", HitDelay = 0.2, Scale = 1.0, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(220, 30, 50),
+		Levels = {
+			{ Damage = 10, Range = 12, Cooldown = 0.85, Cost = 180, Bleed = 4,  BleedTime = 3 },
+			{ Damage = 14, Range = 12, Cooldown = 0.80, Cost = 140, Bleed = 6,  BleedTime = 3 },
+			{ Damage = 20, Range = 13, Cooldown = 0.75, Cost = 260, Bleed = 8,  BleedTime = 3 },
+			{ Damage = 29, Range = 13, Cooldown = 0.70, Cost = 420, Bleed = 11, BleedTime = 3 },
+			{ Damage = 42, Range = 14, Cooldown = 0.65, Cost = 650, Bleed = 16, BleedTime = 3 },
+		},
+	},
+	CrimsonGunslinger = {
+		Name = "Crimson Gunslinger", Rarity = "Rare", AttackType = "Projectile", Case = "BloodMoon",
+		Description = "Стрелок с двумя револьверами. Всегда стреляет дуплетом.",
+		Anim = "Revolver", HitDelay = 0.05, ProjectileSpeed = 200, Projectile = "Bullet", Scale = 1.0, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(255, 70, 70),
+		Levels = {
+			{ Damage = 14, Range = 19, Cooldown = 0.80, Cost = 750,  Shots = 2 },
+			{ Damage = 20, Range = 20, Cooldown = 0.76, Cost = 520,  Shots = 2 },
+			{ Damage = 29, Range = 21, Cooldown = 0.72, Cost = 880,  Shots = 2 },
+			{ Damage = 42, Range = 22, Cooldown = 0.66, Cost = 1350, Shots = 2 },
+			{ Damage = 60, Range = 24, Cooldown = 0.60, Cost = 2100, Shots = 2 },
+		},
+	},
+	MoonWitch = {
+		Name = "Moon Witch", Rarity = "Epic", AttackType = "Chain", Case = "BloodMoon",
+		Description = "Лунная ведьма. Лунный серп отскакивает между врагами.",
+		Anim = "Cast", HitDelay = 0.3, ProjectileSpeed = 60, Projectile = "Moon", Scale = 1.05, DefaultTarget = "First",
+		BounceMult = 0.8, BounceRange = 12, ImpactColor = Color3.fromRGB(255, 120, 140),
+		Levels = {
+			{ Damage = 40,  Range = 17, Cooldown = 1.5,  Cost = 1500, Bounces = 3 },
+			{ Damage = 58,  Range = 18, Cooldown = 1.45, Cost = 1050, Bounces = 3 },
+			{ Damage = 84,  Range = 19, Cooldown = 1.4,  Cost = 1750, Bounces = 4 },
+			{ Damage = 120, Range = 20, Cooldown = 1.3,  Cost = 2700, Bounces = 4 },
+			{ Damage = 175, Range = 21, Cooldown = 1.2,  Cost = 4000, Bounces = 5 },
+		},
+	},
+	BloodfangWarlord = {
+		Name = "Bloodfang Warlord", Rarity = "Legendary", AttackType = "AOE", ImpactKind = "Cleave", Case = "BloodMoon",
+		Description = "Военачальник с двуручным топором. Рассекающий удар по области + кровотечение.",
+		Ability = "BLOOD CLEAVE",
+		Anim = "Axe", HitDelay = 0.4, Scale = 1.3, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(230, 30, 40),
+		Levels = {
+			{ Damage = 140, Range = 13, Cooldown = 2.0,  Cost = 3400, AOERadius = 7,   Bleed = 25,  BleedTime = 3 },
+			{ Damage = 200, Range = 13, Cooldown = 1.9,  Cost = 2300, AOERadius = 7.5, Bleed = 35,  BleedTime = 3 },
+			{ Damage = 285, Range = 14, Cooldown = 1.8,  Cost = 3600, AOERadius = 8,   Bleed = 50,  BleedTime = 3 },
+			{ Damage = 410, Range = 14, Cooldown = 1.7,  Cost = 5500, AOERadius = 9,   Bleed = 70,  BleedTime = 3 },
+			{ Damage = 590, Range = 15, Cooldown = 1.55, Cost = 8200, AOERadius = 10,  Bleed = 100, BleedTime = 3 },
+		},
+	},
+	LunarSeraph = {
+		Name = "Lunar Seraph", Rarity = "Mythic", AttackType = "Pierce", Case = "BloodMoon",
+		Description = "Лунный серафим. Луч пронзает всех врагов на линии.",
+		Ability = "LUNAR LANCE",
+		Anim = "Beam", HitDelay = 0.4, Scale = 1.35, DefaultTarget = "First",
+		PierceWidth = 3.2, ImpactColor = Color3.fromRGB(255, 200, 220),
+		Levels = {
+			{ Damage = 380,  Range = 26, Cooldown = 2.6, Cost = 7000,  CritChance = 0.15, CritMult = 2 },
+			{ Damage = 540,  Range = 27, Cooldown = 2.5, Cost = 4500,  CritChance = 0.17, CritMult = 2 },
+			{ Damage = 770,  Range = 28, Cooldown = 2.4, Cost = 7000,  CritChance = 0.2,  CritMult = 2.2 },
+			{ Damage = 1100, Range = 30, Cooldown = 2.3, Cost = 10000, CritChance = 0.22, CritMult = 2.3 },
+			{ Damage = 1600, Range = 32, Cooldown = 2.1, Cost = 15000, CritChance = 0.25, CritMult = 2.5 },
+		},
+	},
+	CrimsonEclipse = {
+		Name = "CRIMSON ECLIPSE", Rarity = "Secret", AttackType = "AOE", ImpactKind = "Reap", Case = "BloodMoon",
+		Description = "SECRET. Удары косой по области + BLOOD MOON: падающая кровавая луна.",
+		Ability = "BLOOD MOON",
+		Anim = "Reap", HitDelay = 0.35, Scale = 1.5, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(255, 30, 50),
+		Levels = {
+			{ Damage = 300,  Range = 15, Cooldown = 1.7, Cost = 9000,  AOERadius = 6,
+				BloodMoon = { Cooldown = 14, Radius = 12, Mult = 3, Bleed = 60,  BleedTime = 4 } },
+			{ Damage = 420,  Range = 15, Cooldown = 1.6, Cost = 6000,  AOERadius = 6.5,
+				BloodMoon = { Cooldown = 13, Radius = 13, Mult = 3, Bleed = 85,  BleedTime = 4 } },
+			{ Damage = 600,  Range = 16, Cooldown = 1.5, Cost = 9000,  AOERadius = 7,
+				BloodMoon = { Cooldown = 12, Radius = 14, Mult = 3, Bleed = 120, BleedTime = 4 } },
+			{ Damage = 850,  Range = 17, Cooldown = 1.4, Cost = 13000, AOERadius = 8,
+				BloodMoon = { Cooldown = 11, Radius = 16, Mult = 3, Bleed = 170, BleedTime = 4 } },
+			{ Damage = 1200, Range = 18, Cooldown = 1.3, Cost = 19000, AOERadius = 9,
+				BloodMoon = { Cooldown = 9,  Radius = 20, Mult = 3, Bleed = 240, BleedTime = 4 } },
+		},
+		AbilityExtraRange = 8,
 	},
 }
 
@@ -544,6 +801,7 @@ local M = {
 	Fabric = Enum.Material.Fabric,
 	Slate = Enum.Material.Slate,
 	Glass = Enum.Material.Glass,
+	Wood = Enum.Material.Wood,
 }
 
 local P = {
@@ -2039,6 +2297,642 @@ local function AbyssOverlord(lv)
 end
 
 ------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- НОВЫЕ ЮНИТЫ: SHATTERED REALITY CASE
+------------------------------------------------------------------------
+local BLUE = Color3.fromRGB(80, 170, 255)
+local ICE = Color3.fromRGB(170, 225, 255)
+local RED = Color3.fromRGB(255, 35, 55)
+local BLOOD = Color3.fromRGB(140, 14, 28)
+local MOON = Color3.fromRGB(245, 225, 235)
+local SILVER = Color3.fromRGB(200, 200, 215)
+
+-- кинжал в руке, клинок вперёд
+local function dagger(r, limb, glow, len)
+	len = len or 1.3
+	r:Cyl(limb, 0.6, 0.2, CF(0, -1.05, 0.05), P.Maroon, M.Fabric, "Z")
+	r:Box(limb, V(0.22, 0.55, 0.16), CF(0, -1.05, -0.3), P.Steel, M.Metal)
+	r:Box(limb, V(0.1, 0.32, len), CF(0, -1.05, -0.38 - len / 2), P.Purple, M.Metal)
+	r:Wedge(limb, V(0.1, 0.32, 0.45), CF(0, -1.05, -0.38 - len - 0.22) * ANG(0, math.pi, 0), P.Purple, M.Metal)
+	if glow then
+		r:Neon(limb, V(0.12, 0.07, len), CF(0, -0.9, -0.38 - len / 2), P.Neon)
+	end
+	return V(0, -1.05, -0.38 - len)
+end
+
+local function RiftScout(lv)
+	local r = Rig.new({ Name = "RiftScout", Torso = P.DeepViolet, Arm = P.Coal, Leg = P.Black, Head = P.Skin, RoundHead = true })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	r:Box(T, V(2.06, 1.0, 1.08), CF(0, 0.45, 0), P.Coal, M.Fabric) -- лёгкая куртка
+	r:Box(T, V(2.04, 0.22, 1.06), CF(0, -0.7, 0), P.Maroon)
+	r:Seg(T, V(0.9, 0.95, -0.56), V(-0.85, -0.65, -0.56), 0.16, P.Black)
+	-- бандана, очки и шарф
+	r:Cyl(H, 0.3, 1.36, CF(0, 0.45, 0), P.Purple, M.Fabric, "Y")
+	r:Wedge(H, V(0.3, 0.5, 0.7), CF(0.2, 0.35, 0.85) * ANG(rad(-30), 0, rad(15)), P.Purple, M.Fabric)
+	r:Box(H, V(1.38, 0.3, 0.2), CF(0, 0.12, -0.6), P.Black, M.Metal)
+	r:Cyl(H, 0.1, 0.36, CF(-0.3, 0.12, -0.7), P.Neon, M.Neon, "Z")
+	r:Cyl(H, 0.1, 0.36, CF(0.3, 0.12, -0.7), P.Neon, M.Neon, "Z")
+	r:Box(H, V(1.38, 0.4, 0.15), CF(0, -0.38, -0.6), P.Maroon, M.Fabric)
+	r:Face({ Mood = "angry", EyeY = 0.0, Mouth = false })
+	local tipR = dagger(r, RA, lv >= 2, 1.2 + (lv >= 4 and 0.3 or 0))
+	local tipL = dagger(r, LA, lv >= 3, 1.1 + (lv >= 4 and 0.3 or 0))
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(tipR), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r:WeaponTrail(RA, V(0, -1.05, -0.5), tipR, P.NeonSoft)
+	if lv >= 5 then
+		-- дополнительный энергетический след
+		r:WeaponTrail(LA, V(0, -1.05, -0.5), tipL, P.NeonPink)
+		r:Neon(T, V(0.12, 1.4, 0.06), CF(-0.5, 0.2, -0.58) * ANG(0, 0, rad(-20)), P.NeonPink)
+	end
+	r:Hands(P.Black, M.Fabric)
+	for _, Lg in ipairs({ RL, LL }) do
+		r:Box(Lg, V(1.06, 0.45, 1.12), CF(0, -0.78, -0.04), P.Coal)
+		r:Box(Lg, V(1.04, 0.12, 1.04), CF(0, -0.25, 0), P.Purple, M.Fabric)
+	end
+	if lv >= 2 then
+		r:Pauldron(LA, -1, 0.7, P.Coal, P.Purple)
+	end
+	if lv >= 3 then
+		for i = 0, 2 do
+			r:Box(T, V(0.1, 0.5, 0.2), CF(-0.7 + i * 0.25, -0.95, -0.6) * ANG(0, 0, rad(-10)), P.Steel, M.Metal) -- метательные ножи
+		end
+	end
+	if lv >= 4 then
+		r:Cape(1.6, 2.0, P.DeepViolet, true)
+	end
+	levelAura(r, lv)
+	return r:Finish(1, { RS = { 25, 0, 10 }, LS = { 25, 0, -10 } })
+end
+
+local function CrystalHunter(lv)
+	local r = Rig.new({ Name = "CrystalHunter", Torso = Color3.fromRGB(30, 40, 70), Arm = Color3.fromRGB(30, 40, 70), Leg = P.Black, Head = P.Skin, RoundHead = true })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	-- плащ охотника с меховым воротником
+	r:Box(T, V(2.1, 1.9, 1.1), CF(0, 0.05, 0), Color3.fromRGB(25, 30, 55), M.Fabric)
+	r:Sphere(T, V(2.4, 0.7, 1.4), CF(0, 0.95, 0.05), P.Pale, M.Fabric)
+	r:Box(T, V(2.12, 0.25, 1.12), CF(0, -0.75, 0), P.Maroon)
+	r:Box(T, V(1.0, 1.1, 0.1), CF(0, -1.4, -0.57), Color3.fromRGB(25, 30, 55), M.Fabric)
+	-- широкополая шляпа с пером
+	r:Cyl(H, 0.14, 2.2, CF(0, 0.68, 0) * ANG(rad(-6), 0, rad(4)), P.Coal, M.Fabric, "Y")
+	r:Cyl(H, 0.6, 1.2, CF(0, 1.0, 0.05), P.Coal, M.Fabric, "Y")
+	r:Cyl(H, 0.14, 1.24, CF(0, 0.78, 0.05), BLUE, M.Fabric, "Y")
+	r:Sphere(H, V(0.18, 1.3, 0.3), CF(0.55, 1.35, 0.3) * ANG(rad(-25), 0, rad(-30)), ICE, M.Neon)
+	r:Eyes(BLUE, { Y = 0.05, Spacing = 0.3, Size = V(0.24, 0.12, 0.06) })
+	r:Face({ Mood = "calm", EyeY = 0.05 })
+	-- кристальный колчан на спине
+	r:Cyl(T, 1.8, 0.6, CF(-0.45, 0.2, 0.8) * ANG(0, 0, rad(18)), P.Coal, M.Fabric, "Y")
+	for i = 0, 2 do
+		r:Neon(T, V(0.22, 0.6, 0.22), CF(-0.6 + i * 0.12, 1.2, 0.8 + (i - 1) * 0.12) * ANG(0, rad(45), rad(18)), BLUE)
+	end
+	-- кристальный арбалет (ствол вдоль -Y руки)
+	local function crossbow(yOff, xOff)
+		r:Box(RA, V(0.4, 2.0, 0.5), CF(xOff, -1.9 + yOff, -0.1), P.Coal, M.Metal)
+		r:Box(RA, V(0.4, 0.6, 1.1), CF(xOff, -1.15 + yOff, 0.3), P.Maroon) -- приклад
+		r:Rod(RA, V(xOff, -2.6 + yOff, -0.1), V(xOff - 1.3, -2.3 + yOff, -0.1), 0.18, P.Steel, M.Metal) -- плечи лука
+		r:Rod(RA, V(xOff, -2.6 + yOff, -0.1), V(xOff + 1.3, -2.3 + yOff, -0.1), 0.18, P.Steel, M.Metal)
+		r:Neon(RA, V(2.6, 0.05, 0.05), CF(xOff, -2.15 + yOff, -0.1), ICE) -- тетива
+		r:Neon(RA, V(0.18, 1.2, 0.18), CF(xOff, -2.5 + yOff, -0.35) * ANG(0, rad(45), 0), BLUE) -- кристальный болт
+	end
+	crossbow(0, 0)
+	if lv >= 5 then
+		crossbow(0.05, 0.55) -- двойной выстрел
+	end
+	r.Muzzle = r:Neon(RA, V(0.3, 0.3, 0.3), CF(0, -3.1, -0.35) * ANG(rad(45), rad(45), 0), BLUE)
+	r.Muzzle.Name = "Muzzle"
+	r:Hands(Color3.fromRGB(60, 45, 35), M.Fabric)
+	for _, Lg in ipairs({ RL, LL }) do
+		r:Box(Lg, V(1.08, 0.75, 1.14), CF(0, -0.65, -0.04), Color3.fromRGB(60, 45, 35), M.Fabric)
+		r:Sphere(Lg, V(1.15, 0.35, 1.15), CF(0, -0.25, 0), P.Pale, M.Fabric)
+	end
+	if lv >= 2 then
+		r:Pauldron(RA, 1, 0.75, Color3.fromRGB(40, 60, 100), ICE)
+	end
+	if lv >= 3 then
+		r:Pauldron(LA, -1, 0.75, Color3.fromRGB(40, 60, 100), ICE)
+		r:Neon(T, V(0.3, 0.3, 0.08), CF(0, 0.4, -0.58) * ANG(0, 0, rad(45)), BLUE)
+	end
+	if lv >= 4 then
+		r:Orbit("OrbitCrystals", T, CF(0, 0.5, 0), 2.0, 3, 0.3, BLUE)
+	end
+	levelAura(r, lv, BLUE)
+	return r:Finish(1, { RS = { 75, 0, 0 }, LS = { 65, 0, -25 } })
+end
+
+local function VoidPuppeteer(lv)
+	local r = Rig.new({ Name = "VoidPuppeteer", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black })
+	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
+	-- высокий остроконечный капюшон
+	r:Box(H, V(1.6, 0.3, 1.6), CF(0, 0.78, 0.05), P.DeepViolet, M.Fabric)
+	r:Box(H, V(0.26, 1.5, 1.6), CF(-0.78, 0, 0.05), P.DeepViolet, M.Fabric)
+	r:Box(H, V(0.26, 1.5, 1.6), CF(0.78, 0, 0.05), P.DeepViolet, M.Fabric)
+	r:Box(H, V(1.6, 1.5, 0.26), CF(0, 0, 0.78), P.DeepViolet, M.Fabric)
+	r:Wedge(H, V(1.0, 1.6, 1.0), CF(0.1, 1.6, 0.25) * ANG(rad(-10), 0, rad(8)), P.DeepViolet, M.Fabric)
+	r:Eyes(P.NeonSoft, { Y = 0, Spacing = 0.28, Size = V(0.22, 0.22, 0.06), Inset = 0.2 })
+	-- маска-улыбка
+	r:Box(H, V(0.6, 0.1, 0.06), CF(0, -0.35, -0.56), P.NeonSoft, M.Neon)
+	-- длинный камзол
+	r:Box(T, V(2.15, 1.9, 1.15), CF(0, 0.05, 0), P.Violet, M.Fabric)
+	r:Box(T, V(2.2, 1.6, 1.2), CF(0, -1.7, 0), P.DeepViolet, M.Fabric)
+	for i = -1, 1 do
+		r:Ball(T, 0.16, CF(0, 0.6 - i * 0.4, -0.6), P.Gold, M.Metal) -- пуговицы
+	end
+	r:Box(T, V(2.2, 0.2, 1.2), CF(0, -0.85, 0), P.Black)
+	r:Hands(P.Pale)
+	-- нити на пальцах
+	for _, A in ipairs({ RA, LA }) do
+		for k = -1, 1 do
+			r:Rod(A, V(k * 0.25, -1.1, -0.2), V(k * 0.4, -2.6, -0.9), 0.04, P.NeonSoft, M.Neon)
+		end
+	end
+	-- парящая теневая кукла
+	local doll = r:Joint("OrbitPuppet", T, V(0.2, 0.2, 0.2), CF(0, 0.2, 0), CF(), P.Black)
+	doll.Transparency = 1
+	local function makeDoll(cx, cz, color)
+		r:Box(doll, V(0.5, 0.6, 0.3), CF(cx, -0.4, cz), color, M.Fabric)
+		r:Box(doll, V(0.45, 0.45, 0.45), CF(cx, 0.15, cz), color, M.Fabric)
+		r:Neon(doll, V(0.1, 0.1, 0.05), CF(cx - 0.1, 0.18, cz - 0.23), P.NeonPink)
+		r:Neon(doll, V(0.1, 0.1, 0.05), CF(cx + 0.1, 0.18, cz - 0.23), P.NeonPink)
+		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx - 0.35, -0.4, cz), color, M.Fabric)
+		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx + 0.35, -0.4, cz), color, M.Fabric)
+		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx - 0.12, -0.95, cz), color, M.Fabric)
+		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx + 0.12, -0.95, cz), color, M.Fabric)
+		r:Rod(doll, V(cx, 0.4, cz), V(cx, 2.0, cz), 0.03, P.NeonSoft, M.Neon)
+	end
+	makeDoll(2.2, -0.6, P.Coal)
+	if lv >= 5 then
+		makeDoll(-2.2, -0.6, P.DeepViolet)
+	end
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -1.3, -0.3), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	if lv >= 2 then
+		r:Cyl(H, 0.1, 1.7, CF(0, 0.55, 0), P.NeonSoft, M.Neon, "Y") -- светящийся обод капюшона
+	end
+	if lv >= 3 then
+		r:Pauldron(RA, 1, 0.8, P.DeepViolet, P.Gold)
+		r:Pauldron(LA, -1, 0.8, P.DeepViolet, P.Gold)
+	end
+	if lv >= 4 then
+		r:Cape(2.1, 3.4, P.Black, true)
+		r:Glow(doll:FindFirstChildWhichIsA("BasePart") or doll, P.NeonSoft, 6, 1)
+	end
+	levelAura(r, lv)
+	return r:Finish(1.05, { RS = { 40, 0, 20 }, LS = { 40, 0, -20 } })
+end
+
+local function Starbreaker(lv)
+	local GOLD = P.Gold
+	local r = Rig.new({ Name = "Starbreaker", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.45, 1.45, 1.45), TorsoMat = M.Metal })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	r:Box(T, V(2.7, 2.1, 1.6), CF(0, 0.15, 0), P.Coal, M.Metal)
+	r:Wedge(T, V(2.7, 0.6, 0.6), CF(0, -1.0, -0.65) * ANG(0, math.pi, math.pi), P.Black, M.Metal)
+	-- золото-фиолетовые руны
+	for i = 0, 2 do
+		r:Neon(T, V(0.3, 0.3, 0.06), CF(-0.7 + i * 0.7, 0.55 - (i % 2) * 0.3, -0.82) * ANG(0, 0, rad(45)), i % 2 == 0 and GOLD or P.Neon)
+	end
+	r:Neon(T, V(2.2, 0.08, 0.06), CF(0, -0.2, -0.82), GOLD)
+	-- светящийся шлем
+	r:Cyl(H, 1.5, 1.6, CF(0, 0, 0), P.Black, M.Metal, "Y")
+	r:Sphere(H, V(1.6, 0.7, 1.6), CF(0, 0.75, 0), P.Coal, M.Metal)
+	r:Box(H, V(1.3, 0.35, 0.1), CF(0, 0.05, -0.8), P.NeonSoft, M.Neon)
+	r:Box(H, V(0.25, 0.9, 0.2), CF(0, 1.2, 0), GOLD, M.Metal)
+	r:Pauldron(RA, 1, 1.25, P.Black, GOLD, 0.1)
+	r:Pauldron(LA, -1, 1.2, P.Black, GOLD, 0.1)
+	r:Box(RA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
+	r:Box(LA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
+	r:Box(RL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
+	r:Box(LL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
+	r:Cape(2.5, 3.8, P.DeepViolet, true)
+	-- огромный молот: рукоять вперёд, боёк поперёк
+	local hl = 4.0 + (lv >= 4 and 0.6 or 0)
+	r:Cyl(RA, hl, 0.32, CF(0, -1.05, -hl / 2 + 0.4), P.Maroon, M.Fabric, "Z")
+	r:Ball(RA, 0.5, CF(0, -1.05, 0.55), GOLD, M.Metal)
+	local hz = -hl + 0.2
+	local hs = lv >= 5 and 1.25 or 1
+	r:Box(RA, V(1.6, 2.6, 1.6) * hs, CF(0, -1.05, hz), P.Black, M.Metal)
+	r:Cyl(RA, 0.3, 1.9 * hs, CF(0, -1.05 + 1.3 * hs, hz), GOLD, M.Metal, "Y")
+	r:Cyl(RA, 0.3, 1.9 * hs, CF(0, -1.05 - 1.3 * hs, hz), GOLD, M.Metal, "Y")
+	r:Neon(RA, V(1.65, 0.2, 1.65) * hs, CF(0, -1.05, hz), lv >= 3 and P.Neon or GOLD)
+	if lv >= 5 then
+		r:Neon(RA, V(0.8, 2.7, 0.8), CF(0, -1.05, hz), P.NeonSoft)
+	end
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -1.05, hz), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r:WeaponTrail(RA, V(0, -1.05, hz + 0.8), V(0, -1.05, hz - 0.8), GOLD)
+	if lv >= 3 then
+		r:Orbit("OrbitStars", H, CF(0, 1.3, 0), 1.6, lv >= 5 and 5 or 3, 0.3, GOLD)
+	end
+	if lv >= 4 then
+		r:Horn(H, 1, V(0.7, 0.4, 0), 0.9, GOLD)
+		r:Horn(H, -1, V(-0.7, 0.4, 0), 0.9, GOLD)
+	end
+	levelAura(r, lv, GOLD)
+	return r:Finish(1.3, { RS = { 30, 0, 0 }, LS = { 20, 0, 0 } })
+end
+
+local function RiftMonarch(lv)
+	local r = Rig.new({ Name = "RiftMonarch", Torso = P.Black, Arm = P.DeepViolet, Leg = P.Black, Head = P.Pale, RoundHead = true, TorsoMat = M.Metal })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	r:Box(T, V(2.25, 1.8, 1.25), CF(0, 0.2, 0), P.Coal, M.Metal)
+	r:Box(T, V(2.25, 1.7, 1.3), CF(0, -1.75, 0), P.DeepViolet, M.Fabric)
+	r:Seg(T, V(-0.9, 0.9, -0.66), V(0.8, -0.7, -0.66), V2(0.3, 0.08), P.Neon, M.Neon)
+	r:Pauldron(RA, 1, 1.0, P.Black, P.Neon, 0, M.Neon)
+	r:Pauldron(LA, -1, 1.0, P.Black, P.Neon, 0, M.Neon)
+	r:Eyes(P.Neon, { Y = 0.08, Spacing = 0.3, Size = V(0.26, 0.12, 0.06), Tilt = -8 })
+	r:Face({ Mood = "angry", EyeY = 0.08, Mouth = false })
+	-- чёрно-фиолетовая зубчатая корона
+	r:Cyl(H, 0.5, 1.75, CF(0, 0.85, 0), P.Black, M.Metal, "Y")
+	for i = 0, 6 do
+		local a = i / 7 * math.pi * 2
+		local h = (i % 2 == 0) and 1.1 or 0.7
+		r:Wedge(H, V(0.3, h, 0.3), CF(math.cos(a) * 0.75, 1.1 + h / 2, math.sin(a) * 0.75) * ANG(0, -a, 0), i % 2 == 0 and P.Neon or P.Black, i % 2 == 0 and M.Neon or M.Metal)
+	end
+	-- энергетический посох с порталом наверху
+	r:Cyl(RA, 6, 0.26, CF(0, 0.3, -0.55), P.Black, M.Metal, "Y")
+	local top = V(0, 3.6, -0.55)
+	for i = 0, 9 do
+		local a1, a2 = i / 10 * math.pi * 2, (i + 1) / 10 * math.pi * 2
+		r:Rod(RA, top + V(math.cos(a1) * 0.7, math.sin(a1) * 0.7, 0), top + V(math.cos(a2) * 0.7, math.sin(a2) * 0.7, 0), 0.14, P.Neon, M.Neon)
+	end
+	r:Cyl(RA, 0.1, 1.2, CF(top) * ANG(0, rad(90), 0), Color3.fromRGB(10, 0, 20), M.Neon, "X")
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r:WeaponTrail(RA, top - V(0, 0.8, 0), top + V(0, 0.8, 0), P.Neon)
+	r:Hands(P.Black, M.Metal)
+	-- плавающие кольца за спиной
+	local function ring(name, radius, count, color)
+		local hub = r:Orbit(name, T, CF(0, 0.6, 1.6) * ANG(rad(90), 0, 0), radius, 0, 0.2, color)
+		for i = 0, count - 1 do
+			local a = i / count * math.pi * 2
+			r:Neon(hub, V(0.25, 0.25, 0.7), CF(math.cos(a) * radius, 0, math.sin(a) * radius) * ANG(0, -a, 0), color)
+		end
+	end
+	ring("OrbitRing1", 1.8, 12, P.Neon)
+	if lv >= 3 then
+		ring("OrbitRing2", 2.6, 16, P.NeonPink)
+	end
+	if lv >= 2 then
+		r:Cape(2.3, 3.8, P.Black, true)
+	end
+	if lv >= 4 then
+		r:Sparkles(T, P.Neon, { Rate = 10, Size = 0.3 })
+	end
+	levelAura(r, lv)
+	return r:Finish(1.4, { RS = { 12, 0, 0 } })
+end
+
+local function RealityDestroyer(lv)
+	local r = Rig.new({ Name = "RealityDestroyer", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.45, 1.45, 1.45), TorsoMat = M.Metal })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	r:Box(T, V(2.8, 2.2, 1.6), CF(0, 0.15, 0), P.Black, M.Metal)
+	r:Box(T, V(2.4, 0.5, 1.5), CF(0, -0.95, 0), P.Coal, M.Metal)
+	-- красные светящиеся трещины
+	local cracks = { { V(-1.1, 0.9, -0.82), V(-0.2, 0.1, -0.82) }, { V(-0.2, 0.1, -0.82), V(0.4, -0.7, -0.82) }, { V(-0.2, 0.1, -0.82), V(1.0, 0.5, -0.82) }, { V(0.8, 1.0, -0.82), V(1.2, 0.2, -0.82) } }
+	for _, c in ipairs(cracks) do
+		r:Seg(T, c[1], c[2], 0.12, RED, M.Neon)
+	end
+	r:Box(H, V(1.55, 1.55, 1.55), CF(0, 0, 0), P.Black, M.Metal)
+	r:Eyes(RED, { Y = 0.05, Spacing = 0.32, Size = V(0.32, 0.14, 0.06), Tilt = -15, Inset = -0.06 })
+	r:Seg(H, V(-0.5, 0.6, -0.79), V(0.1, -0.2, -0.79), 0.08, RED, M.Neon)
+	-- сломанная корона (не хватает зубцов, наклонена)
+	r:Cyl(H, 0.4, 1.7, CF(0, 0.95, 0) * ANG(0, 0, rad(-9)), P.DarkGold, M.Metal, "Y")
+	for i, a in ipairs({ 0, 1.2, 2.1, 4.4 }) do
+		local h = ({ 0.9, 0.5, 0.75, 0.35 })[i]
+		r:Wedge(H, V(0.3, h, 0.3), CF(math.cos(a) * 0.75, 1.2 + h / 2, math.sin(a) * 0.75) * ANG(0, -a, rad(-9 + i * 4)), P.DarkGold, M.Metal)
+	end
+	r:Pauldron(RA, 1, 1.3, P.Black, RED, 0.1, M.Neon)
+	r:Pauldron(LA, -1, 1.2, P.Black, BLOOD, 0.1)
+	r:Box(RA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
+	r:Box(LA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
+	r:Box(RL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
+	r:Box(LL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
+	r:Seg(RL, V(-0.3, 0.2, -0.62), V(0.2, -0.6, -0.62), 0.08, RED, M.Neon)
+	r:Cape(2.6, 4.0, BLOOD, true)
+	-- красно-фиолетовый меч
+	local blade = r:Sword(RA, {
+		Length = 5.0 + (lv >= 4 and 0.8 or 0),
+		Width = 0.9,
+		Blade = P.Black,
+		Edge = RED,
+		Core = P.NeonPink,
+		Guard = P.DarkGold,
+		GuardWidth = 2.0,
+		Runes = 2 + lv,
+		Gem = RED,
+	})
+	r:Glow(blade, RED, 10, 1.5)
+	-- парящие осколки реальности
+	local hub = r:Orbit("OrbitShards", T, CF(0, 0.6, 0), 2.6, 0, 0.3, RED)
+	for i = 0, (lv >= 3 and 7 or 5) - 1 do
+		local a = i / (lv >= 3 and 7 or 5) * math.pi * 2
+		r:Wedge(hub, V(0.25, 0.7, 0.4), CF(math.cos(a) * 2.6, math.sin(a * 3) * 0.4, math.sin(a) * 2.6) * ANG(rad(30), -a, rad(20)), i % 2 == 0 and RED or P.Neon, M.Neon)
+	end
+	if lv >= 2 then
+		r:Horn(H, 1, V(0.7, 0.4, 0), 1.0, P.Black)
+	end
+	if lv >= 4 then
+		r:Sparkles(blade, RED, { Rate = 16, Size = 0.4 })
+		r:Horn(H, -1, V(-0.7, 0.4, 0), 0.6, P.Black) -- обломанный рог
+	end
+	levelAura(r, lv, RED)
+	return r:Finish(1.5, { RS = { 25, 0, 0 } })
+end
+
+------------------------------------------------------------------------
+-- НОВЫЕ ЮНИТЫ: BLOOD MOON CASE
+------------------------------------------------------------------------
+local function BloodAcolyte(lv)
+	local r = Rig.new({ Name = "BloodAcolyte", Torso = BLOOD, Arm = BLOOD, Leg = P.Black, Head = P.Pale, RoundHead = true })
+	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
+	r:Box(H, V(1.55, 0.28, 1.5), CF(0, 0.74, 0.04), P.Maroon, M.Fabric)
+	r:Box(H, V(0.24, 1.4, 1.5), CF(-0.74, 0.02, 0.04), P.Maroon, M.Fabric)
+	r:Box(H, V(0.24, 1.4, 1.5), CF(0.74, 0.02, 0.04), P.Maroon, M.Fabric)
+	r:Box(H, V(1.55, 1.4, 0.24), CF(0, 0.02, 0.72), P.Maroon, M.Fabric)
+	r:Eyes(RED, { Y = 0.05, Spacing = 0.28, Size = V(0.22, 0.12, 0.06) })
+	r:Face({ Mood = "angry", EyeY = 0.05, Mouth = true })
+	r:Box(T, V(2.2, 1.7, 1.25), CF(0, -1.65, 0), BLOOD, M.Fabric) -- ряса
+	r:Rod(T, V(-1.05, -0.8, -0.6), V(1.05, -0.8, -0.6), 0.14, Color3.fromRGB(150, 120, 80), M.Fabric) -- верёвочный пояс
+	r:Rod(T, V(0.5, -0.8, -0.62), V(0.6, -1.6, -0.65), 0.1, Color3.fromRGB(150, 120, 80), M.Fabric)
+	r:Ball(T, 0.3, CF(0, 0.45, -0.62), RED, M.Neon) -- кровавый камень
+	r:Hands(P.Pale)
+	-- серп: древко и изогнутое лезвие наверху
+	r:Cyl(RA, 2.6, 0.2, CF(0, -0.9, -0.55), Color3.fromRGB(70, 45, 30), M.Wood or M.Plastic, "Y")
+	local top = V(0, 0.35, -0.55)
+	local pts = { top, top + V(0, 0.35, -0.6), top + V(0, 0.2, -1.2), top + V(0, -0.3, -1.5) }
+	r:Chain(RA, pts, 0.3, P.Steel, M.Metal, 0.8)
+	if lv >= 2 then
+		local edge = {}
+		for i, p in ipairs(pts) do
+			edge[i] = p + V(0, -0.14, 0)
+		end
+		r:Chain(RA, edge, 0.08, RED, M.Neon, 1)
+	end
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top + V(0, -0.3, -1.5)), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r:WeaponTrail(RA, top, top + V(0, -0.3, -1.5), RED)
+	if lv >= 3 then
+		r:Box(T, V(2.25, 0.6, 1.3), CF(0, 0.75, 0), P.Maroon, M.Fabric)
+	end
+	if lv >= 4 then
+		r:Cape(1.8, 2.8, P.Maroon, true)
+	end
+	if lv >= 5 then
+		r:Orbit("OrbitBlood", T, CF(0, 0.5, 0), 1.8, 3, 0.3, RED)
+	end
+	levelAura(r, lv, RED)
+	return r:Finish(1, { RS = { 20, 0, 0 } })
+end
+
+local function revolver(r, limb, glow)
+	r:Box(limb, V(0.3, 0.55, 0.45), CF(0, -1.25, 0.1), Color3.fromRGB(70, 45, 30)) -- рукоять
+	r:Cyl(limb, 0.4, 0.45, CF(0, -1.6, -0.05), P.Steel, M.Metal, "Y") -- барабан
+	r:Cyl(limb, 1.0, 0.2, CF(0, -2.2, -0.05), P.Black, M.Metal, "Y") -- ствол
+	if glow then
+		r:Cyl(limb, 0.6, 0.22, CF(0, -2.0, -0.05), RED, M.Neon, "Y")
+	end
+	return V(0, -2.75, -0.05)
+end
+
+local function CrimsonGunslinger(lv)
+	local r = Rig.new({ Name = "CrimsonGunslinger", Torso = P.Coal, Arm = P.Coal, Leg = Color3.fromRGB(50, 35, 30), Head = P.Skin, RoundHead = true })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	-- ковбойская шляпа
+	r:Cyl(H, 0.14, 2.3, CF(0, 0.66, 0) * ANG(rad(-5), 0, rad(-4)), P.Black, M.Fabric, "Y")
+	r:Cyl(H, 0.7, 1.3, CF(0, 1.02, 0), P.Black, M.Fabric, "Y")
+	r:Cyl(H, 0.14, 1.34, CF(0, 0.8, 0), RED, M.Fabric, "Y")
+	r:Eyes(RED, { Y = 0.02, Spacing = 0.28, Size = V(0.24, 0.1, 0.06), Tilt = -10 })
+	r:Face({ Mood = "angry", EyeY = 0.02, Mouth = false })
+	r:Box(H, V(1.38, 0.45, 0.15), CF(0, -0.38, -0.6), BLOOD, M.Fabric) -- платок
+	-- пончо
+	r:Wedge(T, V(2.4, 0.9, 0.7), CF(0, 0.6, -0.5) * ANG(0, math.pi, 0), BLOOD, M.Fabric)
+	r:Wedge(T, V(2.4, 0.9, 0.7), CF(0, 0.6, 0.5), BLOOD, M.Fabric)
+	r:Box(T, V(2.3, 0.12, 1.3), CF(0, 0.16, 0), P.Gold, M.Fabric)
+	r:Box(T, V(2.1, 0.25, 1.1), CF(0, -0.8, 0), Color3.fromRGB(70, 45, 30)) -- пояс
+	r:Ball(T, 0.3, CF(0, -0.8, -0.58), P.Gold, M.Metal)
+	for i = 0, 4 do
+		r:Cyl(T, 0.25, 0.1, CF(-0.8 + i * 0.4, -0.8, -0.6), P.Gold, M.Metal, "Y") -- патроны
+	end
+	r:Hands(P.Black, M.Fabric)
+	for _, Lg in ipairs({ RL, LL }) do
+		r:Box(Lg, V(1.08, 0.8, 1.15), CF(0, -0.62, -0.04), Color3.fromRGB(70, 45, 30)) -- сапоги
+		r:Cyl(Lg, 0.1, 0.35, CF(0, -0.95, 0.62), P.Steel, M.Metal, "Z") -- шпоры
+	end
+	local tip = revolver(r, RA, lv >= 3)
+	revolver(r, LA, lv >= 3)
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(tip), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	if lv >= 2 then
+		r:Pauldron(RA, 1, 0.7, BLOOD, P.Gold)
+	end
+	if lv >= 4 then
+		r:Cape(1.8, 2.6, P.Black, true)
+	end
+	if lv >= 5 then
+		r:Neon(H, V(1.36, 0.08, 1.36), CF(0, 0.8, 0), RED)
+	end
+	levelAura(r, lv, RED)
+	return r:Finish(1, { RS = { 70, 0, 0 }, LS = { 70, 0, 0 } })
+end
+
+local function MoonWitch(lv)
+	local r = Rig.new({ Name = "MoonWitch", Torso = Color3.fromRGB(40, 12, 30), Arm = Color3.fromRGB(40, 12, 30), Leg = P.Black, Head = MOON, RoundHead = true })
+	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
+	-- остроконечная шляпа ведьмы
+	r:Cyl(H, 0.14, 2.4, CF(0, 0.7, 0) * ANG(rad(-4), 0, rad(5)), P.Black, M.Fabric, "Y")
+	r:Cyl(H, 0.6, 1.3, CF(0, 1.05, 0.05), P.Black, M.Fabric, "Y")
+	r:Cyl(H, 0.6, 0.9, CF(0.1, 1.6, 0.25) * ANG(rad(-15), 0, rad(-10)), P.Black, M.Fabric, "Y")
+	r:Cyl(H, 0.5, 0.5, CF(0.2, 2.05, 0.55) * ANG(rad(-30), 0, rad(-18)), P.Black, M.Fabric, "Y")
+	r:Cyl(H, 0.14, 1.34, CF(0, 0.85, 0.05), RED, M.Fabric, "Y")
+	r:Neon(H, V(0.3, 0.3, 0.08), CF(0.45, 1.0, -0.6) * ANG(0, 0, rad(45)), MOON)
+	-- длинные волосы
+	r:Box(H, V(1.4, 1.4, 0.3), CF(0, -0.3, 0.6), Color3.fromRGB(90, 10, 30))
+	r:Eyes(RED, { Y = 0.05, Spacing = 0.28, Size = V(0.22, 0.14, 0.06) })
+	r:Face({ Mood = "calm", EyeY = 0.05, MouthColor = BLOOD })
+	-- платье
+	r:Box(T, V(2.2, 2.1, 1.3), CF(0, -2.0, 0), Color3.fromRGB(40, 12, 30), M.Fabric)
+	r:Box(T, V(2.25, 0.15, 1.35), CF(0, -2.95, 0), RED, M.Fabric)
+	r:Rod(T, V(-1.0, -0.8, -0.6), V(1.0, -0.8, -0.6), 0.14, P.Gold, M.Metal)
+	r:Hands(MOON)
+	-- посох с полумесяцем
+	r:Cyl(RA, 5, 0.22, CF(0, -0.5, -0.55), P.Black, M.Plastic, "Y")
+	local c = V(0, 2.5, -0.55)
+	local pts = {}
+	for i = 0, 6 do
+		local a = math.rad(-60 + i * 40)
+		pts[#pts + 1] = c + V(0, math.cos(a) * 0.9, math.sin(a) * 0.9)
+	end
+	r:Chain(RA, pts, 0.3, MOON, M.Neon, 0.9, true)
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(c), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r:WeaponTrail(RA, c - V(0, 0.9, 0), c + V(0, 0.9, 0), MOON)
+	r:Glow(RA, MOON, 6, 1)
+	-- парящая луна
+	if lv >= 2 then
+		local hub = r:Orbit("OrbitMoon", T, CF(0, 1.4, 0), 1.9, 0, 0.3, MOON)
+		r:Ball(hub, 0.7, CF(1.9, 0, 0), MOON, M.Neon)
+		if lv >= 4 then
+			r:Ball(hub, 0.5, CF(-1.9, 0, 0), RED, M.Neon)
+		end
+	end
+	if lv >= 3 then
+		r:Cape(1.9, 3.2, P.Black, true)
+	end
+	if lv >= 5 then
+		r:Sparkles(T, RED, { Rate = 8, Size = 0.3 })
+	end
+	levelAura(r, lv, MOON)
+	return r:Finish(1.05, { RS = { 10, 0, 0 }, LS = { 10, 0, -10 } })
+end
+
+local function BloodfangWarlord(lv)
+	local r = Rig.new({ Name = "BloodfangWarlord", Torso = Color3.fromRGB(80, 50, 40), Arm = Color3.fromRGB(80, 50, 40), Leg = P.Black, Head = Color3.fromRGB(80, 50, 40), HeadSize = V(1.4, 1.4, 1.4) })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	local FUR = Color3.fromRGB(70, 60, 60)
+	-- волчья шкура-капюшон с пастью
+	r:Sphere(H, V(1.7, 1.1, 1.8), CF(0, 0.65, 0.1), FUR, M.Fabric)
+	r:Box(H, V(0.9, 0.5, 0.9), CF(0, 0.75, -0.95), FUR, M.Fabric)
+	for i = -1, 1, 2 do
+		r:Wedge(H, V(0.15, 0.35, 0.2), CF(i * 0.3, 0.42, -1.3) * ANG(0, 0, math.pi), P.White)
+		r:Wedge(H, V(0.3, 0.5, 0.4), CF(i * 0.55, 1.25, 0.2), FUR, M.Fabric) -- уши
+	end
+	r:Neon(H, V(0.12, 0.08, 0.06), CF(-0.3, 0.88, -1.4), RED)
+	r:Neon(H, V(0.12, 0.08, 0.06), CF(0.3, 0.88, -1.4), RED)
+	r:Eyes(RED, { Y = 0.0, Spacing = 0.32, Size = V(0.28, 0.12, 0.06), Tilt = -15 })
+	r:Box(H, V(0.12, 0.6, 0.06), CF(-0.32, -0.25, -0.72), RED, M.Neon) -- боевая раскраска
+	r:Box(H, V(0.12, 0.6, 0.06), CF(0.32, -0.25, -0.72), RED, M.Neon)
+	-- броня и мех
+	r:Box(T, V(2.5, 1.6, 1.4), CF(0, 0.3, 0), P.Coal, M.Metal)
+	r:Sphere(T, V(3.2, 0.9, 1.8), CF(0, 1.0, 0.05), FUR, M.Fabric)
+	r:Box(T, V(2.3, 0.35, 1.3), CF(0, -0.8, 0), Color3.fromRGB(70, 45, 30))
+	r:Ball(T, 0.45, CF(0, -0.8, -0.68), P.Pale) -- череп-пряжка
+	for _, x in ipairs({ -0.6, 0.6 }) do
+		r:Box(T, V(0.8, 0.9, 0.15), CF(x, -1.35, -0.62) * ANG(rad(-8), 0, 0), FUR, M.Fabric)
+	end
+	r:Pauldron(RA, 1, 1.15, P.Coal, RED, 0, M.Neon)
+	r:Pauldron(LA, -1, 1.1, P.Coal, P.Steel)
+	r:Hands(Color3.fromRGB(60, 40, 30), M.Fabric)
+	for _, Lg in ipairs({ RL, LL }) do
+		r:Box(Lg, V(1.15, 0.9, 1.2), CF(0, -0.55, 0), FUR, M.Fabric)
+	end
+	-- двуручный топор: рукоять вперёд, два лезвия
+	local hl = 4.2
+	r:Cyl(RA, hl, 0.3, CF(0, -1.05, -hl / 2 + 0.4), Color3.fromRGB(60, 40, 30), M.Fabric, "Z")
+	local hz = -hl + 0.4
+	local bs = lv >= 4 and 1.2 or 1
+	for _, side in ipairs({ 1, -1 }) do
+		r:Box(RA, V(0.18, 1.3 * bs, 1.2 * bs), CF(0, -1.05 + side * 0.85 * bs, hz), P.Steel, M.Metal)
+		r:Wedge(RA, V(0.18, 0.6 * bs, 1.2 * bs), CF(0, -1.05 + side * 1.75 * bs, hz) * ANG(side == 1 and 0 or math.pi, 0, 0), P.Steel, M.Metal)
+		if lv >= 2 then
+			r:Neon(RA, V(0.2, 0.12, 1.2 * bs), CF(0, -1.05 + side * 2.05 * bs, hz), RED)
+		end
+	end
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -1.05, hz), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r:WeaponTrail(RA, V(0, -1.05 + 1.8 * bs, hz), V(0, -1.05 - 1.8 * bs, hz), RED)
+	if lv >= 3 then
+		r:Cape(2.4, 3.4, BLOOD, true)
+	end
+	if lv >= 5 then
+		r:Horn(H, 1, V(0.7, 0.6, 0.1), 0.8, P.Pale)
+		r:Horn(H, -1, V(-0.7, 0.6, 0.1), 0.8, P.Pale)
+	end
+	levelAura(r, lv, RED)
+	return r:Finish(1.3, { RS = { 30, 0, 0 } })
+end
+
+local function LunarSeraph(lv)
+	local r = Rig.new({ Name = "LunarSeraph", Torso = SILVER, Arm = SILVER, Leg = Color3.fromRGB(150, 150, 170), Head = MOON, RoundHead = true, TorsoMat = M.Metal })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	r:Box(T, V(2.2, 1.5, 1.2), CF(0, 0.3, 0), P.White, M.Metal)
+	r:Neon(T, V(0.45, 0.45, 0.06), CF(0, 0.4, -0.62) * ANG(0, 0, rad(45)), Color3.fromRGB(255, 160, 200))
+	r:Box(T, V(2.2, 1.3, 1.25), CF(0, -1.55, 0), P.White, M.Fabric)
+	r:Box(T, V(2.24, 0.2, 1.28), CF(0, -0.85, 0), P.Gold, M.Metal)
+	r:Pauldron(RA, 1, 0.9, P.White, P.Gold)
+	r:Pauldron(LA, -1, 0.9, P.White, P.Gold)
+	r:Box(H, V(1.4, 1.2, 0.35), CF(0, 0.05, 0.55), Color3.fromRGB(250, 240, 220)) -- волосы
+	r:Eyes(Color3.fromRGB(255, 120, 170), { Y = 0.05, Spacing = 0.3, Size = V(0.24, 0.12, 0.06) })
+	r:Face({ Mood = "calm", EyeY = 0.05, BrowColor = P.Gray })
+	r:Hands(P.White, M.Metal)
+	-- полумесяц-нимб
+	local pts = {}
+	for i = 0, 7 do
+		local a = math.rad(-110 + i * 31)
+		pts[#pts + 1] = V(math.sin(a) * 0.95, 1.35 + math.cos(a) * 0.3, 0.3 + math.cos(a) * 0.2)
+	end
+	r:Chain(H, pts, 0.16, MOON, M.Neon, 1, true)
+	-- две пары крыльев
+	local ws = lv >= 4 and 1.2 or 1
+	for pair = 1, 2 do
+		for _, side in ipairs({ 1, -1 }) do
+			local name = (side == 1 and "WingR" or "WingL") .. (pair == 2 and "2" or "")
+			local y = pair == 1 and 0.6 or -0.2
+			local wing = r:Joint(name, T, V(2.8 * ws, 0.45, 0.25), CF(0.3 * side, y, 0.55), CF(1.4 * ws * side, 0.45, 0.15) * ANG(0, 0, rad((pair == 1 and 25 or -10) * side)), P.White)
+			for i = 1, 4 do
+				local len = (2.2 - i * 0.3) * ws * (pair == 2 and 0.75 or 1)
+				r:Box(wing, V(0.5 * ws, len, 0.18), CF((-1.2 + i * 0.55) * ws * side, -len / 2 + 0.1, 0.05) * ANG(0, 0, rad(-10 * side)), i % 2 == 0 and MOON or P.White)
+			end
+		end
+	end
+	-- копьё-луч
+	local sl = lv >= 5 and 1.2 or 1
+	r:Cyl(RA, 6.2 * sl, 0.24, CF(0, 0.3, -0.55), P.White, M.Metal, "Y")
+	r:Cyl(RA, 0.25, 0.5, CF(0, 3.1 * sl + 0.2, -0.55), P.Gold, M.Metal, "Y")
+	local tip = r:Neon(RA, V(0.35, 1.6 * sl, 0.12), CF(0, 4.1 * sl + 0.2, -0.55), Color3.fromRGB(255, 180, 210))
+	tip.Name = "Muzzle"
+	r.Muzzle = tip
+	r:WeaponTrail(RA, V(0, 3.0 * sl, -0.55), V(0, 5.0 * sl, -0.55), MOON)
+	r:Glow(tip, Color3.fromRGB(255, 180, 210), 8, 1.5)
+	if lv >= 3 then
+		r:Orbit("OrbitStars", H, CF(0, 1.4, 0.2), 1.4, 4, 0.2, MOON)
+	end
+	if lv >= 5 then
+		r:Cape(1.8, 3.4, Color3.fromRGB(240, 200, 220), true)
+	end
+	levelAura(r, lv, MOON)
+	return r:Finish(1.35, { RS = { 10, 0, 0 } })
+end
+
+local function CrimsonEclipse(lv)
+	local r = Rig.new({ Name = "CrimsonEclipse", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.4, 1.4, 1.4), TorsoMat = M.Metal })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	r:Box(T, V(2.6, 2.0, 1.5), CF(0, 0.2, 0), P.Black, M.Metal)
+	r:Box(T, V(2.3, 1.7, 1.35), CF(0, -1.7, 0), BLOOD, M.Fabric)
+	for _, c in ipairs({ { V(-0.9, 0.9, -0.77), V(-0.1, 0.0, -0.77) }, { V(-0.1, 0.0, -0.77), V(0.7, -0.6, -0.77) }, { V(0.6, 0.9, -0.77), V(0.2, 0.3, -0.77) } }) do
+		r:Seg(T, c[1], c[2], 0.12, RED, M.Neon)
+	end
+	-- капюшон-шлем
+	r:Sphere(H, V(1.7, 1.6, 1.7), CF(0, 0.15, 0.05), P.Black, M.Metal)
+	r:Box(H, V(1.2, 0.5, 0.2), CF(0, -0.05, -0.75), Color3.fromRGB(10, 0, 5))
+	r:Eyes(RED, { Y = 0.0, Spacing = 0.3, Size = V(0.3, 0.12, 0.06), Tilt = -15, Inset = -0.1 })
+	-- диск затмения за головой
+	r:Cyl(H, 0.15, 3.0, CF(0, 0.4, 1.0), RED, M.Neon, "Z")
+	r:Cyl(H, 0.2, 2.5, CF(0.15, 0.45, 1.05), P.Black, M.Plastic, "Z")
+	r:Pauldron(RA, 1, 1.2, P.Black, RED, 0.1, M.Neon)
+	r:Pauldron(LA, -1, 1.15, P.Black, BLOOD, 0.1)
+	r:Hands(P.Black, M.Metal)
+	r:Cape(2.5, 4.0, BLOOD, true)
+	-- огромная красная коса
+	r:Cyl(RA, 6.4, 0.28, CF(0, 0.2, -0.55), P.Black, M.Metal, "Y")
+	local top = V(0, 3.35, -0.55)
+	local bl = lv >= 5 and 1.35 or 1.1
+	local pts = { top, top + V(0, 0.2, -1.0) * bl, top + V(0, -0.05, -2.0) * bl, top + V(0, -0.6, -2.9) * bl, top + V(0, -1.4, -3.4) * bl }
+	r:Chain(RA, pts, 0.5, P.Black, M.Metal, 0.85)
+	local edge = {}
+	for i, p in ipairs(pts) do
+		edge[i] = p + V(0, -0.25, 0)
+	end
+	r:Chain(RA, edge, 0.14, RED, M.Neon, 1)
+	r:Ball(RA, 0.6, CF(top), RED, M.Neon)
+	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top + V(0, -0.6, -2.5) * bl), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r:WeaponTrail(RA, top + V(0, -0.2, -0.8) * bl, top + V(0, -1.4, -3.4) * bl, RED)
+	-- капли крови на орбите
+	local hub = r:Orbit("OrbitBlood", T, CF(0, 0.5, 0), 2.4, 0, 0.3, RED)
+	for i = 0, (lv >= 3 and 6 or 4) - 1 do
+		local a = i / (lv >= 3 and 6 or 4) * math.pi * 2
+		r:Sphere(hub, V(0.35, 0.5, 0.35), CF(math.cos(a) * 2.4, math.sin(a * 2) * 0.3, math.sin(a) * 2.4), RED, M.Neon)
+	end
+	if lv >= 2 then
+		r:Horn(H, 1, V(0.6, 0.5, 0.1), 1.1, P.Black)
+		r:Horn(H, -1, V(-0.6, 0.5, 0.1), 1.1, P.Black)
+	end
+	if lv >= 4 then
+		r:Sparkles(T, RED, { Rate = 14, Size = 0.4, Up = 2 })
+	end
+	levelAura(r, lv, RED)
+	return r:Finish(1.5, { RS = { 8, 0, 0 } })
+end
+
 local Builders = {
 	VoidSoldier = VoidSoldier,
 	ShadowArcher = ShadowArcher,
@@ -2051,28 +2945,74 @@ local Builders = {
 	FallenAngel = FallenAngel,
 	VoidEmperor = VoidEmperor,
 	AbyssOverlord = AbyssOverlord,
+	RiftScout = RiftScout,
+	CrystalHunter = CrystalHunter,
+	VoidPuppeteer = VoidPuppeteer,
+	Starbreaker = Starbreaker,
+	RiftMonarch = RiftMonarch,
+	RealityDestroyer = RealityDestroyer,
+	BloodAcolyte = BloodAcolyte,
+	CrimsonGunslinger = CrimsonGunslinger,
+	MoonWitch = MoonWitch,
+	BloodfangWarlord = BloodfangWarlord,
+	LunarSeraph = LunarSeraph,
+	CrimsonEclipse = CrimsonEclipse,
 }
 
 -- Построить модель юнита. Модель стоит в начале координат, ноги на высоте -HipHeight.
 -- Аура редкости у ног: Epic — фиолетовые искры, Legendary — золото, Mythic — красно-фиолетовый вихрь
+local applyLevelSkin
 local UNIT_RARITY = {
-	AbyssReaper = "Epic", CorruptedSamurai = "Epic",
-	EclipseGuardian = "Legendary", FallenAngel = "Legendary",
-	VoidEmperor = "Mythic", AbyssOverlord = "Mythic",
+	AbyssReaper = "Epic", CorruptedSamurai = "Epic", VoidPuppeteer = "Epic", MoonWitch = "Epic",
+	EclipseGuardian = "Legendary", FallenAngel = "Legendary", Starbreaker = "Legendary", BloodfangWarlord = "Legendary",
+	VoidEmperor = "Mythic", AbyssOverlord = "Mythic", RiftMonarch = "Mythic", LunarSeraph = "Mythic",
+	RealityDestroyer = "Secret", CrimsonEclipse = "Secret",
 }
 local RARITY_AURA = {
 	Epic = { Color = ColorSequence.new(Color3.fromRGB(170, 80, 255)), Rate = 3, Size = 0.22 },
 	Legendary = { Color = ColorSequence.new(Color3.fromRGB(255, 205, 70), Color3.fromRGB(190, 110, 255)), Rate = 5, Size = 0.28 },
 	Mythic = { Color = ColorSequence.new(Color3.fromRGB(255, 50, 150), Color3.fromRGB(150, 60, 255)), Rate = 8, Size = 0.34 },
+	Secret = { Color = ColorSequence.new(Color3.fromRGB(255, 20, 40), Color3.fromRGB(20, 0, 0)), Rate = 14, Size = 0.45 },
 }
+
+-- Материалы меняются с уровнем: 1 — потёртый ржавый металл, 2–3 — металл, 4–5 — блестящая фольга,
+-- на 5-м уровне броня ещё и подсвечивается цветом редкости.
+local RARITY_TINT = {
+	Epic = Color3.fromRGB(150, 80, 230), Legendary = Color3.fromRGB(230, 180, 60),
+	Mythic = Color3.fromRGB(230, 50, 140), Secret = Color3.fromRGB(230, 30, 40),
+}
+applyLevelSkin = function(model, lv, rarity)
+	local tint = RARITY_TINT[rarity or ""] or Color3.fromRGB(150, 110, 230)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1 then
+			local mat = d.Material
+			if mat == M.Metal then
+				if lv == 1 then
+					d.Material = Enum.Material.CorrodedMetal
+				elseif lv >= 4 then
+					d.Material = Enum.Material.Foil
+					if lv >= 5 then
+						d.Color = d.Color:Lerp(tint, 0.18)
+					end
+				end
+			elseif mat == M.Plastic and lv == 1 then
+				d.Material = Enum.Material.Plastic
+			elseif mat == M.Fabric and lv >= 5 then
+				d.Color = d.Color:Lerp(tint, 0.1)
+			end
+		end
+	end
+end
 
 function UnitModels.Build(unitId, level)
 	local builder = Builders[unitId]
 	if not builder then
 		error("Unknown unit " .. tostring(unitId))
 	end
-	local rig = builder(math.clamp(level or 1, 1, 5))
+	local lv = math.clamp(level or 1, 1, 5)
+	local rig = builder(lv)
 	rig.Model.Name = unitId
+	applyLevelSkin(rig.Model, lv, UNIT_RARITY[unitId])
 	local aura = not UnitModels.Lite and RARITY_AURA[UNIT_RARITY[unitId] or ""]
 	if aura then
 		local at = Instance.new("Attachment")
@@ -2495,6 +3435,160 @@ function EnemyModels.Build(enemyId)
 end
 
 return EnemyModels
+]======] }
+FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "CaseModels" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: CaseModels
+-- 3D-модели кейсов (витрины в лобби и анимация открытия). Все детали заякорены.
+-- CaseModels.Build(caseId) -> { Model, Body, Lid, Core, Shards = {...}, Cracks = {...} }
+
+local CaseModels = {}
+
+local V = Vector3.new
+local CF = CFrame.new
+local ANG = CFrame.Angles
+local rad = math.rad
+
+local function part(parent, size, cf, color, material, props)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if props then
+		for k, v in pairs(props) do
+			p[k] = v
+		end
+	end
+	p.Parent = parent
+	return p
+end
+
+local function neon(parent, size, cf, color, props)
+	local p = part(parent, size, cf, color, Enum.Material.Neon, props)
+	p.CastShadow = false
+	return p
+end
+
+------------------------------------------------------------------------
+-- VOID CASE: тёмный сундук с фиолетовым светящимся замком и сферой Пустоты
+------------------------------------------------------------------------
+local function VoidCase(m)
+	local r = { Shards = {}, Cracks = {} }
+	local dark, violet, glow = Color3.fromRGB(28, 22, 38), Color3.fromRGB(70, 30, 110), Color3.fromRGB(180, 80, 255)
+	r.Body = part(m, V(4, 2.4, 3), CF(0, 1.2, 0), dark, Enum.Material.Metal)
+	part(m, V(4.15, 0.35, 3.15), CF(0, 0.2, 0), violet, Enum.Material.Metal)
+	r.Lid = part(m, V(4.1, 1.0, 3.1), CF(0, 2.9, 0), violet, Enum.Material.Metal)
+	part(m, V(4.2, 0.2, 3.2), CF(0, 2.45, 0), Color3.fromRGB(200, 160, 60), Enum.Material.Metal)
+	for _, x in ipairs({ -1.6, 1.6 }) do
+		part(m, V(0.35, 3.4, 3.2), CF(x, 1.7, 0), Color3.fromRGB(200, 160, 60), Enum.Material.Metal)
+	end
+	r.Core = neon(m, V(0.9, 0.9, 0.3), CF(0, 1.9, -1.6) * ANG(0, 0, rad(45)), glow)
+	local orb = neon(m, V(1.4, 1.4, 1.4), CF(0, 4.6, 0), glow, { Shape = Enum.PartType.Ball, Transparency = 0.2 })
+	table.insert(r.Shards, orb)
+	for i = 0, 3 do
+		local a = i / 4 * math.pi * 2
+		local s = neon(m, V(0.4, 0.8, 0.4), CF(math.cos(a) * 2.6, 3.6, math.sin(a) * 2.6) * ANG(rad(30), a, 0), glow)
+		table.insert(r.Shards, s)
+	end
+	return r
+end
+
+------------------------------------------------------------------------
+-- SHATTERED REALITY: кубический сундук с трещинами, кристаллом и осколками
+------------------------------------------------------------------------
+local function ShatteredReality(m)
+	local r = { Shards = {}, Cracks = {} }
+	local dark, purple, glow = Color3.fromRGB(26, 14, 44), Color3.fromRGB(60, 20, 110), Color3.fromRGB(170, 70, 255)
+	r.Body = part(m, V(3.6, 3.6, 3.6), CF(0, 1.8, 0), dark, Enum.Material.Slate)
+	r.Lid = part(m, V(3.8, 0.5, 3.8), CF(0, 3.75, 0), purple, Enum.Material.Slate)
+	part(m, V(3.8, 0.4, 3.8), CF(0, 0.2, 0), purple, Enum.Material.Slate)
+	-- угловые рёбра
+	for _, x in ipairs({ -1.75, 1.75 }) do
+		for _, z in ipairs({ -1.75, 1.75 }) do
+			part(m, V(0.35, 3.8, 0.35), CF(x, 1.9, z), purple, Enum.Material.Metal)
+		end
+	end
+	-- фиолетовые трещины на гранях
+	local cracks = {
+		{ V(-1.0, 2.6, -1.82), V(0.1, 1.6, -1.82) }, { V(0.1, 1.6, -1.82), V(-0.3, 0.6, -1.82) },
+		{ V(0.1, 1.6, -1.82), V(1.1, 1.1, -1.82) }, { V(1.82, 2.8, -0.8), V(1.82, 1.4, 0.4) },
+		{ V(1.82, 1.4, 0.4), V(1.82, 0.5, 1.1) }, { V(-1.82, 2.2, 0.9), V(-1.82, 0.9, -0.4) },
+	}
+	for _, c in ipairs(cracks) do
+		local a, b = c[1], c[2]
+		local len = (b - a).Magnitude
+		local up = math.abs((b - a).Unit.Y) > 0.98 and V(0, 0, 1) or V(0, 1, 0)
+		local cr = neon(m, V(0.14, 0.14, len), CFrame.lookAt((a + b) / 2, b, up), glow)
+		table.insert(r.Cracks, cr)
+	end
+	r.Core = neon(m, V(1.2, 1.9, 1.2), CF(0, 5.0, 0) * ANG(0, rad(45), 0), glow)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		local s = neon(m, V(0.35, 0.7, 0.2), CF(math.cos(a) * 2.8, 4.2 + (i % 2) * 0.8, math.sin(a) * 2.8) * ANG(rad(25), a, rad(20)), i % 2 == 0 and glow or Color3.fromRGB(220, 170, 255))
+		table.insert(r.Shards, s)
+	end
+	return r
+end
+
+------------------------------------------------------------------------
+-- BLOOD MOON: чёрный алтарь-сундук с кровавой луной над ним
+------------------------------------------------------------------------
+local function BloodMoon(m)
+	local r = { Shards = {}, Cracks = {} }
+	local black, crimson, glow = Color3.fromRGB(20, 8, 12), Color3.fromRGB(110, 15, 28), Color3.fromRGB(255, 40, 60)
+	r.Body = part(m, V(3.8, 2.6, 3.2), CF(0, 1.3, 0), black, Enum.Material.Slate)
+	r.Lid = part(m, V(4.0, 0.8, 3.4), CF(0, 3.0, 0), crimson, Enum.Material.Metal)
+	part(m, V(4.2, 0.3, 3.6), CF(0, 0.15, 0), crimson, Enum.Material.Metal)
+	-- клыки по краям крышки
+	for i = -1, 1 do
+		local w = Instance.new("WedgePart")
+		w.Anchored = true
+		w.CanCollide = false
+		w.CanQuery = false
+		w.Size = V(0.3, 0.7, 0.4)
+		w.CFrame = CF(i * 1.2, 2.35, -1.75) * ANG(0, 0, math.pi)
+		w.Color = Color3.fromRGB(235, 225, 215)
+		w.Parent = m
+	end
+	r.Core = neon(m, V(0.8, 0.8, 0.3), CF(0, 1.5, -1.65) * ANG(0, 0, rad(45)), glow)
+	local moon = neon(m, V(2.4, 2.4, 2.4), CF(0, 5.6, 0), glow, { Shape = Enum.PartType.Ball })
+	part(m, V(2.45, 2.45, 2.45), CF(0.55, 5.8, -0.2), black, Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Ball, Transparency = 0.15 })
+	table.insert(r.Shards, moon)
+	for i = 0, 4 do
+		local a = i / 5 * math.pi * 2
+		table.insert(r.Shards, neon(m, V(0.3, 0.3, 0.3), CF(math.cos(a) * 2.4, 4.0, math.sin(a) * 2.4), glow, { Shape = Enum.PartType.Ball }))
+	end
+	return r
+end
+
+local Builders = { VoidCase = VoidCase, ShatteredReality = ShatteredReality, BloodMoon = BloodMoon }
+
+function CaseModels.Build(caseId)
+	local m = Instance.new("Model")
+	m.Name = "Case_" .. tostring(caseId)
+	local builder = Builders[caseId] or VoidCase
+	local r = builder(m)
+	m.PrimaryPart = r.Body
+	m.WorldPivot = CF(0, 0, 0)
+	r.Model = m
+	-- запоминаем исходные позиции для анимации
+	r.Base = {}
+	for _, d in ipairs(m:GetDescendants()) do
+		if d:IsA("BasePart") then
+			r.Base[d] = d.CFrame
+		end
+	end
+	return r
+end
+
+return CaseModels
 ]======] }
 
 for _, f in ipairs(FILES) do

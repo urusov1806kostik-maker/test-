@@ -18,6 +18,7 @@ local ctx = {
 	PathUtil = require(Shared:WaitForChild("PathUtil")),
 	UnitModels = require(Shared:WaitForChild("UnitModels")),
 	EnemyModels = require(Shared:WaitForChild("EnemyModels")),
+	CaseModels = require(Shared:WaitForChild("CaseModels")),
 	FX = require(script:WaitForChild("FX")),
 	Renderer = require(script:WaitForChild("Renderer")),
 	UI = require(script:WaitForChild("UI")),
@@ -297,7 +298,12 @@ end
 ------------------------------------------------------------------------
 -- КРУГИ В ЛОББИ: встал в круг — открылось меню, вышел — закрылось
 ------------------------------------------------------------------------
-local ZONE_MODAL = { Summon = "Summon", Units = "Inventory", Play = "Mode" }
+local ZONE_MODAL = { Units = "Inventory", Play = "Mode" }
+for key, z in pairs(ctx.Config.Lobby.Zones) do
+	if z.Case then
+		ZONE_MODAL[key] = "Summon"
+	end
+end
 local zoneState = {}
 
 local function updateZones()
@@ -323,9 +329,12 @@ local function updateZones()
 		local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
 		if inside ~= (zoneState[key] == true) then
 			zoneState[key] = inside or nil
+			if inside and z.Case then
+				UI.SelectCase(z.Case)
+			end
 			UI.Show(ZONE_MODAL[key], inside)
 			if inside then
-				FX.Sound("Ping", 0.3, 1.1)
+				FX.Sound("Click", 1, 1)
 			end
 		end
 	end

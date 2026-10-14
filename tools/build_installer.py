@@ -16,6 +16,7 @@ ENTRIES = [
     ("ReplicatedStorage/VoidTD/PathUtil.lua", "ReplicatedStorage", ["VoidTD", "PathUtil"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/UnitModels.lua", "ReplicatedStorage", ["VoidTD", "UnitModels"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/EnemyModels.lua", "ReplicatedStorage", ["VoidTD", "EnemyModels"], "ModuleScript"),
+    ("ReplicatedStorage/VoidTD/CaseModels.lua", "ReplicatedStorage", ["VoidTD", "CaseModels"], "ModuleScript"),
     ("ServerScriptService/VoidTDServer/init.server.lua", "ServerScriptService", ["VoidTDServer"], "Script"),
     ("ServerScriptService/VoidTDServer/MapBuilder.lua", "ServerScriptService", ["VoidTDServer", "MapBuilder"], "ModuleScript"),
     ("ServerScriptService/VoidTDServer/DataService.lua", "ServerScriptService", ["VoidTDServer", "DataService"], "ModuleScript"),

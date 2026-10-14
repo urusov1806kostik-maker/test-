@@ -2,6 +2,8 @@
 -- VOID TD :: Server bootstrap
 
 local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("VoidTD")
@@ -140,13 +142,45 @@ handlers.SetLite = function(player, data)
 	return true
 end
 
+handlers.ClaimDaily = function(player)
+	local ok, res = DataService.ClaimDaily(player)
+	if ok then
+		pushProfile(player)
+	end
+	return ok, res
+end
+
+handlers.BuyGems = function(player, data)
+	local key = type(data) == "table" and data.Key
+	local item
+	for _, it in ipairs(Config.Shop) do
+		if it.Key == key then
+			item = it
+		end
+	end
+	if not item then
+		return false, "Неизвестный товар"
+	end
+	if (item.ProductId or 0) > 0 then
+		MarketplaceService:PromptProductPurchase(player, item.ProductId)
+		return true, "prompt"
+	end
+	if Config.Settings.ShopTestMode and RunService:IsStudio() then
+		DataService.GrantPurchase(player, item.Gems, nil)
+		pushProfile(player)
+		return true, item.Gems
+	end
+	return false, "Товар не настроен: укажи ProductId в Config.Shop"
+end
+
 handlers.StartWave = function(player)
 	return GameService.RequestStartWave(player)
 end
 
 handlers.Summon = function(player, data)
 	local count = (type(data) == "table" and data.Count == 10) and 10 or 1
-	local ok, result = DataService.Summon(player, count)
+	local caseId = type(data) == "table" and data.Case or "VoidCase"
+	local ok, result = DataService.Summon(player, caseId, count)
 	if ok then
 		pushProfile(player)
 	end
@@ -181,6 +215,23 @@ request.OnServerInvoke = function(player, action, data)
 		return false, "Ошибка сервера"
 	end
 	return a, b
+end
+
+-- Покупки за Robux (Developer Products из Config.Shop)
+MarketplaceService.ProcessReceipt = function(info)
+	local player = Players:GetPlayerByUserId(info.PlayerId)
+	if not player or not DataService.Get(player) then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	for _, it in ipairs(Config.Shop) do
+		if it.ProductId == info.ProductId then
+			DataService.GrantPurchase(player, it.Gems, info.PurchaseId)
+			pushProfile(player)
+			remotes.Notify:FireClient(player, { Type = "Purchase", Gems = it.Gems })
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+	end
+	return Enum.ProductPurchaseDecision.NotProcessedYet
 end
 
 -- Гемы меняются от наград за волны — периодически отправляем профиль

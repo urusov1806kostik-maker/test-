@@ -61,6 +61,7 @@ local ctx = {
 	PathUtil = require(Shared:WaitForChild("PathUtil")),
 	UnitModels = require(Shared:WaitForChild("UnitModels")),
 	EnemyModels = require(Shared:WaitForChild("EnemyModels")),
+	CaseModels = require(Shared:WaitForChild("CaseModels")),
 	FX = require(script:WaitForChild("FX")),
 	Renderer = require(script:WaitForChild("Renderer")),
 	UI = require(script:WaitForChild("UI")),
@@ -340,7 +341,12 @@ end
 ------------------------------------------------------------------------
 -- КРУГИ В ЛОББИ: встал в круг — открылось меню, вышел — закрылось
 ------------------------------------------------------------------------
-local ZONE_MODAL = { Summon = "Summon", Units = "Inventory", Play = "Mode" }
+local ZONE_MODAL = { Units = "Inventory", Play = "Mode" }
+for key, z in pairs(ctx.Config.Lobby.Zones) do
+	if z.Case then
+		ZONE_MODAL[key] = "Summon"
+	end
+end
 local zoneState = {}
 
 local function updateZones()
@@ -366,9 +372,12 @@ local function updateZones()
 		local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
 		if inside ~= (zoneState[key] == true) then
 			zoneState[key] = inside or nil
+			if inside and z.Case then
+				UI.SelectCase(z.Case)
+			end
 			UI.Show(ZONE_MODAL[key], inside)
 			if inside then
-				FX.Sound("Ping", 0.3, 1.1)
+				FX.Sound("Click", 1, 1)
 			end
 		end
 	end
@@ -433,40 +442,39 @@ local numberCount = 0
 -- ЗВУКИ (встроенные звуки клиента Roblox, без загрузки ассетов)
 ------------------------------------------------------------------------
 local SoundService = game:GetService("SoundService")
-local SOUNDS = {
-	Slash = "rbxasset://sounds/swordslash.wav",
-	Lunge = "rbxasset://sounds/swordlunge.wav",
-	Place = "rbxasset://sounds/unsheath.wav",
-	Ping = "rbxasset://sounds/electronicpingshort.wav",
-}
+local SoundConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("VoidTD"):WaitForChild("Config")).Sounds
 local lastSound = {}
 
+-- Играет звук события из Config.Sounds. volume/pitch — множители (по умолчанию 1).
+-- Если у события указан Custom ("rbxassetid://..."), играет свой звук, иначе встроенный.
 function FX.Sound(name, volume, pitch, pos)
-	local id = SOUNDS[name]
-	if not id then
+	local def = SoundConfig[name]
+	if not def then
 		return
 	end
 	local t = os.clock()
 	if lastSound[name] and t - lastSound[name] < 0.07 then
 		return
 	end
+	volume = (volume or 1) * (def.Volume or 0.4)
 	-- приглушаем далёкие звуки
 	if pos then
 		local cam = workspace.CurrentCamera
 		local d = cam and (cam.CFrame.Position - pos).Magnitude or 0
-		if d > 120 then
+		if d > 140 then
 			return
 		end
-		volume = (volume or 0.4) * math.clamp(1 - d / 120, 0.15, 1)
+		volume = volume * math.clamp(1 - d / 140, 0.15, 1)
 	end
 	lastSound[name] = t
+	local custom = def.Custom and def.Custom ~= ""
 	local s = Instance.new("Sound")
-	s.SoundId = id
-	s.Volume = volume or 0.4
-	s.PlaybackSpeed = pitch or 1
+	s.SoundId = custom and def.Custom or def.Id
+	s.Volume = volume
+	s.PlaybackSpeed = (pitch or 1) * (custom and 1 or (def.Pitch or 1))
 	s.Parent = SoundService
 	s:Play()
-	task.delay(3, function()
+	task.delay(4, function()
 		s:Destroy()
 	end)
 end
@@ -709,6 +717,14 @@ function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 		local s = 0.7 + lv * 0.1
 		p = FX.Part({ Shape = Enum.PartType.Ball, Size = V(s, s, s), Color = NEON })
 		light(p, NEON, 8, 2)
+	elseif kind == "Crystal" then
+		p = FX.Part({ Size = V(0.4, 0.4, 1.3), Color = Color3.fromRGB(110, 190, 255) })
+		light(p, Color3.fromRGB(80, 170, 255), 7, 2)
+	elseif kind == "Bullet" then
+		p = FX.Part({ Size = V(0.15, 0.15, 0.9), Color = Color3.fromRGB(255, 90, 80) })
+	elseif kind == "Moon" then
+		p = FX.Part({ Size = V(0.2, 1.2, 1.2), Shape = Enum.PartType.Cylinder, Color = Color3.fromRGB(255, 200, 215) })
+		light(p, Color3.fromRGB(255, 120, 150), 8, 2)
 	else
 		p = FX.Part({ Size = V(0.25, 0.25, 1.4 + lv * 0.15), Color = lv >= 5 and NEON_PINK or NEON_SOFT })
 	end
@@ -730,7 +746,11 @@ function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 
 	local start = os.clock()
 	local last = getTarget() or from
-	p.CFrame = CFrame.lookAt(from, last)
+	if (last - from).Magnitude > 0.01 then
+		p.CFrame = CFrame.lookAt(from, last)
+	else
+		p.CFrame = CF(from)
+	end
 	local conn
 	conn = RunService.RenderStepped:Connect(function()
 		local alpha = math.clamp((os.clock() - start) / math.max(travel, 0.01), 0, 1)
@@ -790,9 +810,11 @@ end
 -- СПОСОБНОСТИ
 ------------------------------------------------------------------------
 -- ECLIPSE SHOCKWAVE
-function FX.Shockwave(pos, radius, lv)
+function FX.Shockwave(pos, radius, lv, color, soft)
+	local NEON = color or NEON
+	local NEON_SOFT = soft or NEON_SOFT
 	local g = V(pos.X, pos.Y + 0.2, pos.Z)
-	FX.Sound("Lunge", 0.6, 0.55, pos)
+	FX.Sound("Explosion", 1, 1, pos)
 	local cam = workspace.CurrentCamera
 	if cam and (cam.CFrame.Position - pos).Magnitude < 70 then
 		FX.Shake(lv >= 5 and 0.5 or 0.25, 0.35)
@@ -830,7 +852,8 @@ function FX.Shockwave(pos, radius, lv)
 end
 
 -- Удар косы: горизонтальная дуга + область
-function FX.Reap(unitPos, center, radius, lv)
+function FX.Reap(unitPos, center, radius, lv, color)
+	local NEON = color or NEON
 	local dir = (center - unitPos)
 	dir = V(dir.X, 0, dir.Z)
 	if dir.Magnitude < 0.1 then
@@ -847,7 +870,7 @@ end
 
 -- VOID JUDGEMENT: энергетический разрез по врагу
 function FX.Judgement(pos, lv, hitIndex)
-	FX.Sound("Slash", 0.5, 0.8 + (hitIndex or 1) * 0.08, pos)
+	FX.Sound("Magic", 1, 0.9 + (hitIndex or 1) * 0.08, pos)
 	local color = (hitIndex or 1) % 2 == 0 and NEON or NEON_PINK
 	local p = pos + V(0, 2, 0)
 	FX.SlashMark(p, rad(35 + rng:NextNumber(-10, 10)), 9 + lv, 0.7 + lv * 0.08, color, 0.45)
@@ -865,7 +888,7 @@ end
 -- BLACK HOLE
 function FX.BlackHole(pos, radius, duration, lv, delay)
 	task.delay(delay or 0, function()
-		FX.Sound("Lunge", 0.7, 0.4, pos)
+		FX.Sound("Portal", 1, 1, pos)
 		local center = pos + V(0, 2.2, 0)
 		local m = Instance.new("Model")
 		m.Name = "BlackHole"
@@ -938,7 +961,7 @@ function FX.Poof(pos, color, size)
 end
 
 function FX.LevelUp(pos, color)
-	FX.Sound("Ping", 0.4, 1.3, pos)
+	FX.Sound("Upgrade", 1, 1, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 4, color or NEON, 0.6, 0.3)
 	local col = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 3, 3), CFrame = CF(pos + V(0, 0.3, 0)) * ANG(0, 0, rad(90)), Color = color or NEON, Transparency = 0.2 })
 	tween(col, 0.7, { CFrame = CF(pos + V(0, 7, 0)) * ANG(0, 0, rad(90)), Transparency = 1, Size = V(0.1, 4.5, 4.5) })
@@ -947,7 +970,7 @@ function FX.LevelUp(pos, color)
 end
 
 function FX.Place(pos)
-	FX.Sound("Place", 0.5, 1, pos)
+	FX.Sound("Place", 1, 1, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 3.5, NEON_SOFT, 0.45, 0.25)
 	FX.Burst(pos + V(0, 0.5, 0), Color3.fromRGB(70, 60, 80), 8, 0.4, 5)
 end
@@ -997,6 +1020,146 @@ function FX.DamageNumber(pos, amount, flag)
 		numberCount = numberCount - 1
 		anchor:Destroy()
 	end)
+end
+
+------------------------------------------------------------------------
+-- ЭФФЕКТЫ НОВЫХ ЮНИТОВ
+------------------------------------------------------------------------
+local RED = Color3.fromRGB(255, 35, 55)
+local GOLD = Color3.fromRGB(255, 205, 80)
+local BLUE = Color3.fromRGB(90, 180, 255)
+FX.Colors.Red, FX.Colors.Gold, FX.Colors.Blue = RED, GOLD, BLUE
+
+-- нить кукловода от руки к цели
+function FX.Thread(from, to, color)
+	local len = (to - from).Magnitude
+	if len < 0.1 then
+		return
+	end
+	local p = FX.Part({ Size = V(0.08, 0.08, len), CFrame = CFrame.lookAt((from + to) / 2, to), Color = color or NEON_SOFT })
+	tween(p, 0.5, { Transparency = 1, Size = V(0.02, 0.02, len) })
+	cleanup(p, 0.55)
+	FX.Ring(to - V(0, 1, 0), 2, color or NEON, 0.35, 0.2)
+end
+
+-- взрыв кристалла
+function FX.CrystalBurst(pos, radius)
+	FX.Sphere(pos, radius * 0.6, BLUE, 0.3)
+	FX.Ring(V(pos.X, pos.Y + 0.2, pos.Z), radius, Color3.fromRGB(170, 225, 255), 0.35, 0.25)
+	FX.Burst(pos + V(0, 1, 0), BLUE, 8, 0.35, 8)
+	FX.Sound("Explosion", 0.5, 1.6, pos)
+end
+
+-- падающий звёздный осколок
+function FX.FallingShard(pos, radius, color)
+	color = color or GOLD
+	local top = pos + V(rng:NextNumber(-3, 3), 22, rng:NextNumber(-3, 3))
+	local shard = FX.Part({ Size = V(0.7, 2.2, 0.7), CFrame = CF(top) * ANG(0, rng:NextNumber(0, 6), rad(15)), Color = color })
+	tween(shard, 0.28, { CFrame = CF(pos + V(0, 1, 0)) * ANG(0, 2, rad(15)) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	task.delay(0.28, function()
+		shard:Destroy()
+		FX.Ring(V(pos.X, pos.Y + 0.2, pos.Z), radius, color, 0.35, 0.3)
+		FX.Sphere(pos + V(0, 0.5, 0), radius * 0.4, Color3.fromRGB(255, 240, 200), 0.25)
+		FX.Burst(pos + V(0, 1, 0), color, 6, 0.4, 8)
+	end)
+end
+
+-- маленький портал с разрезом (RIFT STORM)
+function FX.RiftPortal(pos, lv)
+	local c = pos + V(0, 3.5, 0)
+	local ring = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 0.5, 0.5), CFrame = CF(c) * ANG(0, rng:NextNumber(0, 6), 0), Color = NEON })
+	tween(ring, 0.15, { Size = V(0.2, 3.2, 3.2) }, Enum.EasingStyle.Back)
+	local core = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.25, 0.3, 0.3), CFrame = ring.CFrame, Color = Color3.fromRGB(15, 0, 30) })
+	tween(core, 0.15, { Size = V(0.25, 2.4, 2.4) }, Enum.EasingStyle.Back)
+	task.delay(0.15, function()
+		FX.SlashMark(pos + V(0, 1.5, 0), rad(rng:NextNumber(-50, 50)), 6 + lv * 0.5, 0.5, NEON_PINK, 0.3)
+		FX.Burst(pos + V(0, 1, 0), NEON, 6, 0.35, 7)
+		tween(ring, 0.25, { Size = V(0.1, 0.2, 0.2), Transparency = 1 })
+		tween(core, 0.25, { Size = V(0.1, 0.1, 0.1), Transparency = 1 })
+	end)
+	cleanup(ring, 0.45)
+	cleanup(core, 0.45)
+	FX.Sound("Portal", 0.5, 1.4, pos)
+end
+
+-- большой центральный разлом
+function FX.BigRift(pos, radius)
+	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	local disk = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 1, 1), CFrame = CF(g) * ANG(0, 0, rad(90)), Color = Color3.fromRGB(15, 0, 30) })
+	tween(disk, 0.25, { Size = V(0.2, radius * 2, radius * 2) }, Enum.EasingStyle.Back)
+	FX.Ring(g, radius * 1.1, NEON, 0.6, 0.5, 1, 0.05)
+	FX.Ring(g + V(0, 0.1, 0), radius * 0.8, NEON_PINK, 0.5, 0.3, 0.5)
+	for i = 1, 4 do
+		task.delay(i * 0.05, function()
+			FX.SlashMark(g + V(rng:NextNumber(-radius / 2, radius / 2), 2, rng:NextNumber(-radius / 2, radius / 2)), rad(rng:NextNumber(-60, 60)), 9, 0.7, NEON, 0.4)
+		end)
+	end
+	task.delay(0.35, function()
+		tween(disk, 0.35, { Size = V(0.1, 0.5, 0.5), Transparency = 1 })
+	end)
+	cleanup(disk, 0.8)
+	FX.Shake(0.4, 0.4)
+	FX.Sound("Explosion", 1, 0.7, pos)
+end
+
+-- RED SPLASH: расширяющаяся красная волна, вспышка и осколки из меча
+function FX.RedSplash(pos, radius, from)
+	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	FX.Ring(g, radius, RED, 0.5, 0.5, 1, 0.05)
+	FX.Ring(g + V(0, 0.12, 0), radius * 0.7, Color3.fromRGB(255, 150, 150), 0.35, 0.25, 0.5, 0.2)
+	local flash = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.08, radius * 1.6, radius * 1.6), CFrame = CF(g + V(0, 0.05, 0)) * ANG(0, 0, rad(90)), Color = RED, Transparency = 0.3 })
+	tween(flash, 0.3, { Transparency = 1 })
+	cleanup(flash, 0.35)
+	FX.Sphere(pos + V(0, 1, 0), 2.5, RED, 0.25)
+	if from then
+		for _ = 1, FX.Lite and 2 or 6 do
+			local to = g + V(rng:NextNumber(-radius, radius) * 0.7, 0.5, rng:NextNumber(-radius, radius) * 0.7)
+			local shard = FX.Part({ Size = V(0.25, 0.25, 1.1), CFrame = CFrame.lookAt(from, to), Color = RED })
+			tween(shard, 0.25, { CFrame = CFrame.lookAt(to, to + (to - from)), Transparency = 0.6 })
+			cleanup(shard, 0.27)
+		end
+	end
+	FX.Cracks(g, radius * 0.8, RED, 6, 0.9)
+	FX.Sound("HeavyHit", 1, 0.9, pos)
+end
+
+-- рассекающий удар топора
+function FX.Cleave(unitPos, center, radius, color)
+	FX.Reap(unitPos, center, radius, 4, color or RED)
+	FX.Ring(V(center.X, center.Y + 0.2, center.Z), radius, color or RED, 0.4, 0.3)
+	FX.Sound("HeavyHit", 1, 1, center)
+end
+
+-- молот Starbreaker
+function FX.Hammer(pos, radius, lv)
+	FX.Shockwave(pos, radius, lv, GOLD, Color3.fromRGB(200, 140, 255))
+end
+
+-- кровавая луна падает с неба и взрывается
+function FX.BloodMoonFall(pos, radius, delay)
+	delay = delay or 1
+	local moon = FX.Part({ Shape = Enum.PartType.Ball, Size = V(5, 5, 5), CFrame = CF(pos + V(0, 45, 0)), Color = RED })
+	light(moon, RED, 40, 4)
+	local mark = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.1, radius * 2, radius * 2), CFrame = CF(pos + V(0, 0.25, 0)) * ANG(0, 0, rad(90)), Color = RED, Transparency = 0.75 })
+	tween(moon, delay, { CFrame = CF(pos + V(0, 2, 0)), Size = V(7, 7, 7) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	tween(mark, delay, { Transparency = 0.4 })
+	task.delay(delay, function()
+		moon:Destroy()
+		mark:Destroy()
+	end)
+	FX.Sound("Boss", 0.6, 1.4, pos)
+end
+
+function FX.BloodMoonBoom(pos, radius)
+	FX.Shockwave(pos, radius, 5, RED, Color3.fromRGB(255, 140, 140))
+	FX.Sphere(pos + V(0, 2, 0), radius * 0.6, Color3.fromRGB(120, 0, 15), 0.6, Enum.Material.Neon, 0.3)
+	FX.Shake(0.6, 0.6)
+end
+
+-- пробивающий лунный луч
+function FX.PierceBeam(from, to)
+	FX.Beam(from + V(0, 3, 0), to + V(0, 1.5, 0), 2.2, Color3.fromRGB(255, 190, 215), 0.45, true)
+	FX.Sound("Laser", 1, 1.2, from)
 end
 
 return FX
@@ -1253,7 +1416,60 @@ Anims.Land = function()
 	}
 end
 
+-- анимации новых юнитов
+Anims.DualDagger = function(h)
+	return {
+		{ 0, {} },
+		{ h * 0.6, { RS = { 110, 0, 20 }, LS = { 40, 0, -10 }, Root = { 0, -20, 0 } } },
+		{ h, { RS = { 60, 0, -20 }, LS = { 100, 0, -20 }, Root = { 4, 20, 0 } } },
+		{ h + 0.12, { RS = { 75, 0, 0 }, LS = { 70, 0, 0 } } },
+		{ h + 0.3, {} },
+	}
+end
+Anims.Crossbow = function(h)
+	return {
+		{ 0, {} },
+		{ h, { RS = { 88, 0, 0 }, LS = { 82, 0, -28 }, Neck = { 6, 0, 0 } } },
+		{ h + 0.06, { RS = { 105, 0, 0 }, LS = { 96, 0, -28 }, Root = { -6, 0, 0 } } },
+		{ h + 0.3, { RS = { 88, 0, 0 }, LS = { 82, 0, -28 } } },
+		{ h + 0.6, {} },
+	}
+end
+Anims.Puppet = function(h)
+	return {
+		{ 0, {} },
+		{ h * 0.7, { RS = { 85, 0, 35 }, LS = { 85, 0, -35 }, Neck = { 10, 0, 0 } } },
+		{ h, { RS = { 105, 0, 12 }, LS = { 105, 0, -12 } } },
+		{ h + 0.15, { RS = { 90, 0, 28 }, LS = { 90, 0, -28 } } },
+		{ h + 0.5, {} },
+	}
+end
+Anims.Hammer = Anims.Slam
+Anims.RiftStorm = Anims.Judgement
+Anims.RedSplash = Anims.HeavySlash
+Anims.Sickle = Anims.Slash
+Anims.Axe = Anims.HeavySlash
+Anims.Revolver = function(h)
+	return {
+		{ 0, {} },
+		{ h, { RS = { 95, 0, 0 }, LS = { 70, 0, 0 } } },
+		{ h + 0.05, { RS = { 112, 0, 0 }, LS = { 70, 0, 0 }, Root = { -3, 0, 0 } } },
+		{ h + 0.12, { RS = { 92, 0, 0 }, LS = { 95, 0, 0 } } },
+		{ h + 0.17, { RS = { 92, 0, 0 }, LS = { 112, 0, 0 }, Root = { -3, 0, 0 } } },
+		{ h + 0.45, {} },
+	}
+end
+
 local FIDGETS = {
+	DualDagger = { "Twirl", "LookAround", "Flex" },
+	Crossbow = { "Reload", "LookAround" },
+	Puppet = { "Stretch", "LookAround" },
+	Hammer = { "Flex", "Stretch", "LookAround" },
+	RiftStorm = { "LookAround", "Stretch" },
+	RedSplash = { "Twirl", "Flex" },
+	Sickle = { "Twirl", "LookAround" },
+	Revolver = { "Twirl", "Reload" },
+	Axe = { "Flex", "LookAround" },
 	Slash = { "Twirl", "LookAround", "Flex" },
 	HeavySlash = { "Twirl", "LookAround", "Stretch" },
 	Katana = { "Twirl", "LookAround" },
@@ -1339,8 +1555,8 @@ local function applyPose(rig, pose, t, phase)
 			if name == "RS" or name == "LS" then
 				local side = name == "RS" and 1 or -1
 				cf = cf * ANG(rad(breathe * 2), 0, rad(breathe * 1.5 * side))
-			elseif name == "WingR" or name == "WingL" then
-				local side = name == "WingR" and 1 or -1
+			elseif name:sub(1, 4) == "Wing" then
+				local side = name:sub(5, 5) == "R" and 1 or -1
 				cf = cf * ANG(0, math.sin(t * 2.4 + phase) * 0.12 * side, math.sin(t * 2.4 + phase) * 0.1 * side)
 			elseif name == "Neck" then
 				cf = cf * ANG(0, math.sin(t * 0.7 + phase) * 0.08, 0)
@@ -1427,7 +1643,7 @@ function Renderer.SpawnEnemy(data)
 	if Config.Enemies[typeId].IsBoss then
 		view.RoarT = os.clock() + 0.6
 		task.delay(0.6, function()
-			FX.Sound("Lunge", 0.8, 0.3)
+			FX.Sound("Boss", 1, 1)
 			FX.Shake(0.5, 0.9)
 		end)
 	end
@@ -1472,6 +1688,7 @@ local function deathAnim(view, reason)
 		return
 	end
 	FX.Poof(root.Position + V(0, 0.5, 0), FX.Colors.Neon, size)
+	FX.Sound("EnemyDeath", 1, 1 / math.max(size, 0.6), root.Position)
 	if def.IsBoss then
 		FX.Shockwave(root.Position - V(0, rig.HipHeight - 0.2, 0), 10 * size, 5)
 	end
@@ -1807,30 +2024,82 @@ function Renderer.OnAttack(p)
 		task.delay(delay, fn)
 	end
 
+	local impactColor = def.ImpactColor or FX.Colors.Neon
 	if def.AttackType == "Projectile" then
+		for si, id in ipairs(p.T or { firstId }) do
+			local travel = (p.TRS and p.TRS[si]) or p.TR or 0.2
+			at(h + (si - 1) * (p.SG or 0.12), function()
+				if not view.Rig or not view.Rig.Model.Parent then
+					return
+				end
+				local from = muzzlePos(view)
+				FX.Sound("Shoot", def.Projectile == "Bolt" and 0.6 or 1, def.Projectile == "Bullet" and 0.8 or 1, from)
+				FX.Projectile(def.Projectile, from, function()
+					return Renderer.EnemyCenter(id)
+				end, travel, function(pos)
+					local orb = def.Projectile == "Orb"
+					FX.Burst(pos, orb and FX.Colors.Neon or impactColor, orb and 8 or 4, 0.3, 5)
+					if orb then
+						FX.Sphere(pos, 1.4 + lv * 0.15, FX.Colors.Neon, 0.25)
+					end
+				end, lv)
+				if def.Projectile == "Bolt" or def.Projectile == "Bullet" then
+					FX.Sphere(from, 0.6, impactColor, 0.12)
+				end
+			end)
+		end
+	elseif def.AttackType == "Chain" then
+		-- лунный серп летит от цели к цели
+		local times = p.TT or {}
+		for i, id in ipairs(p.T or {}) do
+			local prevT = i == 1 and h or times[i - 1]
+			at(prevT, function()
+				if not view.Rig.Model.Parent then
+					return
+				end
+				local from = i == 1 and muzzlePos(view) or Renderer.EnemyCenter(p.T[i - 1])
+				if not from then
+					return
+				end
+				FX.Sound("Magic", 0.8, 1.3 + i * 0.1, from)
+				FX.Projectile("Moon", from, function()
+					return Renderer.EnemyCenter(id)
+				end, math.max((times[i] or prevT) - prevT, 0.05), function(pos)
+					FX.Burst(pos, impactColor, 6, 0.3, 6)
+					FX.Ring(pos - V(0, 1, 0), 2.5, impactColor, 0.3, 0.2)
+				end, lv)
+			end)
+		end
+	elseif def.AttackType == "Thread" then
 		at(h, function()
-			if not view.Rig or not view.Rig.Model.Parent then
+			if not view.Rig.Model.Parent then
 				return
 			end
-			local from = muzzlePos(view)
-			FX.Sound("Lunge", def.Projectile == "Bolt" and 0.12 or 0.25, def.Projectile == "Bolt" and 1.8 or 1.3, from)
-			FX.Projectile(def.Projectile, from, function()
-				return Renderer.EnemyCenter(firstId)
-			end, p.TR or 0.2, function(pos)
-				FX.Burst(pos, def.Projectile == "Orb" and FX.Colors.Neon or FX.Colors.Soft, def.Projectile == "Orb" and 8 or 4, 0.3, 5)
-				if def.Projectile == "Orb" then
-					FX.Sphere(pos, 1.4 + lv * 0.15, FX.Colors.Neon, 0.25)
+			FX.Sound("Magic", 0.8, 0.7, view.Pos)
+			for _, id in ipairs(p.T or {}) do
+				local target = Renderer.EnemyCenter(id)
+				if target then
+					FX.Thread(muzzlePos(view), target, FX.Colors.Soft)
 				end
-			end, lv)
-			if def.Projectile == "Bolt" then
-				FX.Sphere(from, 0.6, FX.Colors.Soft, 0.12)
+			end
+		end)
+	elseif def.AttackType == "Splash" then
+		at(h, function()
+			if view.Rig.Model.Parent then
+				FX.Sphere(muzzlePos(view), 2.2, FX.Colors.Red, 0.25)
+			end
+		end)
+	elseif def.AttackType == "Pierce" then
+		at(h, function()
+			if view.Rig.Model.Parent then
+				FX.Sphere(muzzlePos(view), 2, Color3.fromRGB(255, 190, 215), 0.3)
 			end
 		end)
 	elseif def.AttackType == "Laser" then
 		at(h, function()
 			local target = Renderer.EnemyCenter(firstId) or tpos
 			if target and view.Rig.Model.Parent then
-				FX.Sound("Lunge", 0.5, 0.7, target)
+				FX.Sound("Laser", 1, 1, target)
 				FX.Beam(muzzlePos(view), target, (lv >= 5) and 2.6 or (1.2 + lv * 0.2), (lv >= 5) and FX.Colors.Soft or FX.Colors.Neon, 0.45, lv >= 5)
 			end
 		end)
@@ -1843,9 +2112,17 @@ function Renderer.OnAttack(p)
 			local origin = view.Rig.Root.Position + V(0, 1, 0)
 			local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z))
 			local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
-			local big = view.UnitId == "AbyssOverlord"
-			FX.Arc(cf, reach, rad(15), rad(150), big and FX.Colors.Neon or FX.Colors.Soft, big and 1 or (0.4 + lv * 0.05), 0.3)
-			FX.Sound("Slash", 0.35, big and 0.7 or 1.1, target)
+			local big = view.UnitId == "AbyssOverlord" or p.PW
+			local arcColor = def.ImpactColor or (big and FX.Colors.Neon or FX.Colors.Soft)
+			if p.PW then
+				arcColor = FX.Colors.Pink
+				FX.Sphere(target, 2.2, FX.Colors.Pink, 0.25)
+			end
+			FX.Arc(cf, reach, rad(15), rad(150), arcColor, big and 1 or (0.4 + lv * 0.05), 0.3)
+			if def.Anim == "DualDagger" then
+				FX.Arc(cf * ANG(0, 0, rad(60)), reach * 0.9, rad(20), rad(140), FX.Colors.Neon, 0.35, 0.25)
+			end
+			FX.Sound(big and "HeavyHit" or "Slash", 1, 1, target)
 			FX.Burst(target, FX.Colors.Neon, big and 12 or 5, big and 0.6 or 0.3, big and 10 or 5)
 			if big then
 				FX.Ring(V(target.X, view.Pos.Y + 0.2, target.Z), 4, FX.Colors.Neon, 0.35, 0.3)
@@ -1885,13 +2162,13 @@ function Renderer.OnAttack(p)
 					local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z)) * ANG(0, 0, rad(i % 2 == 0 and 50 or -50))
 					local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
 					FX.Arc(cf, reach, rad(10), rad(140), lv >= 5 and FX.Colors.Pink or FX.Colors.Neon, 0.35 + lv * 0.05, 0.25)
-					FX.Sound("Slash", 0.35, 1.25, target)
+					FX.Sound("Slash", 1, 1.15, target)
 					if lv >= 3 then
 						FX.SlashMark(target, rad(i % 2 == 0 and 40 or -40), 5 + lv * 0.5, 0.35, FX.Colors.Neon, 0.3)
 					end
 				else
-					-- Void Emperor: вспышка на мече, сам разрез — в Impact
-					FX.Sphere(muzzlePos(view), 1.6, FX.Colors.Pink, 0.2)
+					-- Void Emperor / Rift Monarch: вспышка на оружии, сам удар — в Impact
+					FX.Sphere(muzzlePos(view), 1.6, def.ImpactKind == "Rift" and FX.Colors.Neon or FX.Colors.Pink, 0.2)
 				end
 			end)
 		end
@@ -1905,7 +2182,31 @@ function Renderer.OnImpact(p)
 		FX.Shockwave(p.P, p.R, lv)
 	elseif k == "Reap" then
 		local view = unitViews[p.U]
-		FX.Reap(view and view.Pos or p.P, p.P, p.R, lv)
+		local def = view and Config.Units[view.UnitId]
+		FX.Reap(view and view.Pos or p.P, p.P, p.R, lv, def and def.ImpactColor)
+		FX.Sound("Slash", 1, 0.8, p.P)
+	elseif k == "Crystal" then
+		FX.CrystalBurst(p.P, p.R)
+	elseif k == "Hammer" then
+		FX.Hammer(p.P, p.R, lv)
+	elseif k == "Shard" then
+		FX.FallingShard(p.P, p.R)
+	elseif k == "Rift" then
+		FX.RiftPortal(p.P, lv)
+	elseif k == "BigRift" then
+		FX.BigRift(p.P, p.R)
+	elseif k == "Splash" then
+		local view = unitViews[p.U]
+		FX.RedSplash(p.P, p.R, view and muzzlePos(view))
+	elseif k == "Cleave" then
+		local view = unitViews[p.U]
+		FX.Cleave(view and view.Pos or p.P, p.P, p.R)
+	elseif k == "BloodMoonFall" then
+		FX.BloodMoonFall(p.P, p.R, p.DL)
+	elseif k == "BloodMoon" then
+		FX.BloodMoonBoom(p.P, p.R)
+	elseif k == "Pierce" then
+		FX.PierceBeam(p.P, p.E)
 	elseif k == "Smash" then
 		local g = Vector3.new(p.P.X, p.P.Y + 0.2, p.P.Z)
 		FX.Ring(g, p.R, FX.Colors.Neon, 0.4, 0.4, 1, 0.1)
@@ -2033,6 +2334,7 @@ FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "UI" }, "ModuleS
 -- Весь интерфейс создаётся кодом: HUD, хотбар, панель юнита, Summon, инвентарь, уведомления.
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local UI = {}
@@ -2187,7 +2489,8 @@ local function viewport(parent, unitId, level, props)
 	cam.FieldOfView = 34
 	local s = rig.Scale
 	local center = Vector3.new(0, -0.1 * s, 0)
-	cam.CFrame = CFrame.lookAt(center + Vector3.new(4.2, 2.0, -10.5) * s, center)
+	-- камера дальше, чтобы юнит с оружием целиком помещался в превью
+	cam.CFrame = CFrame.lookAt(center + Vector3.new(5.6, 2.6, -14.5) * s, center)
 	cam.Parent = vf
 	vf.CurrentCamera = cam
 	if props.Silhouette then
@@ -2302,20 +2605,26 @@ local function buildHUD()
 		ctx.SetLite(not ctx.Lite, true)
 	end)
 
+	-- магазин кристаллов
+	refs.ShopButton = button({ Parent = gui, AnchorPoint = Vector2.new(1, 0), Size = UDim2.fromOffset(190, 46), Position = UDim2.new(1, -16, 0, 64), Text = "🛒 МАГАЗИН", BackgroundColor3 = Color3.fromRGB(50, 120, 80), StrokeColor = THEME.Good }, function()
+		UI.Toggle("Shop")
+		FX.Sound("Click", 1, 1)
+	end)
+
 	-- выход из матча в лобби
 	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 170), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
 		ctx.Placement.Stop()
-		local ok = ctx.Request("LeaveMatch")
-		if ok then
-			UI.CloseUnit()
-		end
+		UI.CloseUnit()
+		task.spawn(UI.FadeTransition, "ВОЗВРАЩЕНИЕ В ЛОББИ", function()
+			return ctx.Request("LeaveMatch")
+		end)
 	end)
 
 	-- подсказка в лобби
 	local hint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(640, 86), Position = UDim2.new(0.5, 0, 1, -18), StrokeColor = THEME.Accent })
 	refs.LobbyHint = hint
 	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 36), Position = UDim2.fromOffset(10, 6), Text = "ЛОББИ", TextColor3 = THEME.Accent })
-	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Встань в круг:  ✦ SUMMON — призыв   •   ▶ ИГРАТЬ — в бой   •   ☰ ЮНИТЫ — кнопка слева или G" })
+	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Круги слева — 3 КЕЙСА  •  ▶ ИГРАТЬ — в бой  •  ☰ ЮНИТЫ — G  •  🛒 МАГАЗИН — справа" })
 
 	-- подсказка размещения
 	refs.PlaceHint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(520, 34), Position = UDim2.new(0.5, 0, 1, -150), Visible = false })
@@ -2570,6 +2879,7 @@ function UI.SellSelected()
 		local ok, res = ctx.Request("Sell", { Uid = UI.SelectedUid })
 		if ok then
 			UI.Toast("Продано за $" .. Config.FormatNumber(res), "gold")
+			FX.Sound("Sell", 1, 1)
 			UI.CloseUnit()
 		end
 	end
@@ -2630,19 +2940,113 @@ local function modal(name, title, size)
 end
 
 ------------------------------------------------------------------------
--- SUMMON
+-- ПЕРЕХОД: чёрный экран
 ------------------------------------------------------------------------
-local function showSummonResults(results)
-	local overlay = new("Frame", { Parent = gui, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(5, 0, 10), BackgroundTransparency = 0.25, ZIndex = 20 })
-	local best = 1
-	for _, r in ipairs(results) do
-		best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+local fading = false
+
+-- Затемнение -> действие (fn) -> плавное появление. fn может вернуть результат.
+function UI.FadeTransition(text, fn)
+	if fading then
+		return fn and fn() or nil
 	end
-	local bestName = Config.RarityOrder[best]
-	local flash = new("Frame", { Parent = overlay, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Config.Rarities[bestName].Color, BackgroundTransparency = 0.3, ZIndex = 21 })
-	tween(flash, 0.8, { BackgroundTransparency = 1 })
-	label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(600, 60), Position = UDim2.new(0.5, 0, 0.08, 0), Text = best >= 4 and (bestName:upper() .. "!") or "SUMMON", TextColor3 = Config.Rarities[bestName].Color, ZIndex = 22, StrokeThickness = 3 })
-	local grid = new("Frame", { Parent = overlay, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(5 * 150, (#results > 5 and 2 or 1) * 200), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 22 }, {
+	fading = true
+	local black = new("Frame", { Parent = UI.Gui, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, ZIndex = 200 })
+	local t = new("TextLabel", { Parent = black, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(700, 60), Font = Enum.Font.FredokaOne, TextScaled = true, Text = text or "", TextColor3 = THEME.Accent, TextTransparency = 1, ZIndex = 201 })
+	tween(black, 0.35, { BackgroundTransparency = 0 })
+	tween(t, 0.35, { TextTransparency = 0 })
+	FX.Sound("Portal", 0.8, 1)
+	task.wait(0.4)
+	local a, b
+	if fn then
+		a, b = fn()
+	end
+	task.wait(0.45)
+	tween(black, 0.55, { BackgroundTransparency = 1 })
+	tween(t, 0.4, { TextTransparency = 1 })
+	task.delay(0.6, function()
+		black:Destroy()
+		fading = false
+	end)
+	return a, b
+end
+
+------------------------------------------------------------------------
+-- КЕЙСЫ: витрина, шансы, анимации открытия
+------------------------------------------------------------------------
+local CaseModels
+local selectedCase = "VoidCase"
+local caseViews = {}
+
+-- 3D-кейс во ViewportFrame
+local function caseViewport(parent, caseId, props)
+	props = props or {}
+	local vf = new("ViewportFrame", {
+		Parent = parent,
+		BackgroundTransparency = 1,
+		Size = props.Size or UDim2.fromScale(1, 1),
+		Position = props.Position or UDim2.new(),
+		AnchorPoint = props.AnchorPoint or Vector2.new(),
+		Ambient = Color3.fromRGB(160, 140, 190),
+		LightColor = Color3.fromRGB(255, 245, 255),
+		LightDirection = Vector3.new(-0.5, -1, -0.7),
+		ZIndex = props.ZIndex or 1,
+	})
+	local r = CaseModels.Build(caseId)
+	r.Model.Parent = vf
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = 40
+	cam.CFrame = CFrame.lookAt(Vector3.new(0, 4.5, -13), Vector3.new(0, 2.6, 0))
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	r.Viewport = vf
+	return r
+end
+
+local function rateText(case)
+	local lines = {}
+	for _, rarity in ipairs(Config.RarityOrder) do
+		local rate = case.Rates[rarity]
+		if rate and rate > 0 then
+			lines[#lines + 1] = string.format('<font color="#%s">%s</font>  %s%%', Config.Rarities[rarity].Color:ToHex(), rarity:upper(), tostring(rate))
+		end
+	end
+	return table.concat(lines, "\n")
+end
+
+function UI.SelectCase(caseId)
+	if not Config.Cases[caseId] then
+		return
+	end
+	selectedCase = caseId
+	local case = Config.Cases[caseId]
+	refs.CaseName.Text = case.Name
+	refs.CaseName.TextColor3 = case.Color
+	refs.CaseDesc.Text = case.Description
+	refs.CaseRates.Text = rateText(case)
+	refs.CaseBuy1.Text = "x1  💎" .. case.Cost1
+	refs.CaseBuy10.Text = "x10  💎" .. case.Cost10
+	refs.CaseBig:ClearAllChildren()
+	caseViews.Big = caseViewport(refs.CaseBig, caseId)
+	for id, b in pairs(refs.CaseTabs) do
+		b.Border.Color = id == caseId and Config.Cases[id].Color or THEME.AccentDark
+	end
+	for _, c in ipairs(refs.CaseUnits:GetChildren()) do
+		if c:IsA("GuiObject") then
+			c:Destroy()
+		end
+	end
+	for i, id in ipairs(case.Units) do
+		local def = Config.Units[id]
+		local rc = rarityColor(id)
+		local cell = panel({ Parent = refs.CaseUnits, Size = UDim2.fromOffset(100, 108), BackgroundColor3 = THEME.BG2, StrokeColor = rc, LayoutOrder = Config.Rarities[def.Rarity].Order * 100 + i, ZIndex = 7 })
+		viewport(cell, id, 1, { Size = UDim2.new(1, 0, 0, 74), ZIndex = 8 })
+		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 16), Position = UDim2.fromOffset(3, 74), Text = def.Name, Font = Enum.Font.GothamBold, ZIndex = 8 })
+		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.fromOffset(3, 90), Text = def.Rarity, TextColor3 = rc, ZIndex = 8 })
+	end
+end
+
+local function showCards(overlay, results)
+	local grid = new("Frame", { Parent = overlay, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(5 * 150, (#results > 5 and 2 or 1) * 200), Position = UDim2.fromScale(0.5, 0.55), ZIndex = 22 }, {
 		new("UIGridLayout", { CellSize = UDim2.fromOffset(140, 190), CellPadding = UDim2.fromOffset(10, 10), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
 	for i, r in ipairs(results) do
@@ -2660,56 +3064,223 @@ local function showSummonResults(results)
 				tag.Rotation = -12
 			end
 			tween(sc, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
-			FX.Sound("Ping", 0.3, 0.8 + Config.Rarities[def.Rarity].Order * 0.15)
+			FX.Sound("Reveal", 1, 0.8 + Config.Rarities[def.Rarity].Order * 0.12)
 		end)
 	end
 	task.delay(0.15 * #results + 0.4, function()
-		button({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(200, 54), Position = UDim2.new(0.5, 0, 0.92, 0), Text = "OK", ZIndex = 25 }, function()
+		button({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(200, 54), Position = UDim2.new(0.5, 0, 0.95, 0), Text = "OK", ZIndex = 25 }, function()
 			overlay:Destroy()
 		end)
 	end)
 end
 
-local function buildSummon()
-	local m = modal("Summon", "✦ VOID SUMMON", UDim2.fromOffset(760, 520))
-	label({ Parent = m, Size = UDim2.new(1, -36, 0, 20), Position = UDim2.fromOffset(18, 54), Text = "Призови воинов Пустоты. В x10 гарантирован минимум один Rare+.", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Dim, Font = Enum.Font.GothamBold, ZIndex = 6 })
-	local list = new("ScrollingFrame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 330), Position = UDim2.fromOffset(18, 82), CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 6, BorderSizePixel = 0, ZIndex = 6 }, {
-		new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
-	})
-	for order, rarity in ipairs(Config.RarityOrder) do
-		local r = Config.Rarities[rarity]
-		local row = panel({ Parent = list, Size = UDim2.new(1, -10, 0, 74), BackgroundColor3 = THEME.BG2, StrokeColor = r.Color, LayoutOrder = order, ZIndex = 6 })
-		label({ Parent = row, Size = UDim2.fromOffset(130, 30), Position = UDim2.fromOffset(12, 8), Text = rarity:upper(), TextColor3 = r.Color, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7 })
-		label({ Parent = row, Size = UDim2.fromOffset(130, 24), Position = UDim2.fromOffset(12, 40), Text = string.format("%.1f%%", r.Rate), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Text, ZIndex = 7 })
-		local x = 150
-		for _, id in ipairs(Config.UnitOrder) do
-			if Config.Units[id].Rarity == rarity then
-				local cell = new("Frame", { Parent = row, BackgroundColor3 = THEME.BG, BackgroundTransparency = 0.3, Size = UDim2.fromOffset(160, 64), Position = UDim2.fromOffset(x, 5), ZIndex = 7 }, { corner(6) })
-				viewport(cell, id, 1, { Size = UDim2.fromOffset(60, 64), ZIndex = 8 })
-				label({ Parent = cell, Size = UDim2.new(1, -64, 0, 22), Position = UDim2.fromOffset(62, 21), Text = Config.Units[id].Name, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8 })
-				x = x + 168
+-- Анимация открытия: у каждого кейса своя
+local function playCaseOpening(caseId, results)
+	local case = Config.Cases[caseId]
+	local best = 1
+	for _, r in ipairs(results) do
+		best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+	end
+	local bestName = Config.RarityOrder[best]
+	local bestColor = Config.Rarities[bestName].Color
+	local overlay = new("Frame", { Parent = gui, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(5, 0, 10), BackgroundTransparency = 0.15, ZIndex = 20 })
+	local stage = new("Frame", { Parent = overlay, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(520, 520), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 21 })
+	local r = caseViewport(stage, caseId, { ZIndex = 21 })
+	local title = label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(700, 56), Position = UDim2.new(0.5, 0, 0.06, 0), Text = case.Name, TextColor3 = case.Color, ZIndex = 22, StrokeThickness = 3 })
+	local start = os.clock()
+	local SHAKE, BURST = 1.4, 0.9
+	local nextTick = 0
+	local dirs = {}
+	for p, base in pairs(r.Base) do
+		local d = base.Position - Vector3.new(0, 2, 0)
+		dirs[p] = (d.Magnitude > 0.1 and d.Unit or Vector3.new(0, 1, 0)) + Vector3.new(math.random() - 0.5, math.random() * 0.6, math.random() - 0.5)
+	end
+	local done = false
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - start
+		if t < SHAKE then
+			-- фаза 1: тряска, свечение, у каждого кейса своё
+			local k = t / SHAKE
+			local shake = CFrame.new((math.random() - 0.5) * k * 0.5, 0, (math.random() - 0.5) * k * 0.5) * CFrame.Angles(0, t * (1 + k * 6), (math.random() - 0.5) * k * 0.15)
+			for p, base in pairs(r.Base) do
+				p.CFrame = shake * base
+			end
+			if caseId == "VoidCase" and r.Lid then
+				r.Lid.CFrame = shake * r.Base[r.Lid] * CFrame.new(0, k * 1.2, 0.6 * k) * CFrame.Angles(-k * 0.9, 0, 0)
+			elseif caseId == "ShatteredReality" then
+				for _, c in ipairs(r.Cracks) do
+					c.Size = Vector3.new(0.14 + k * 0.3, 0.14 + k * 0.3, c.Size.Z)
+				end
+				if r.Core then
+					r.Core.CFrame = shake * r.Base[r.Core] * CFrame.new(0, k * 1.5, 0) * CFrame.Angles(0, t * 8, 0)
+				end
+			elseif caseId == "BloodMoon" and r.Shards[1] then
+				r.Shards[1].CFrame = shake * r.Base[r.Shards[1]] * CFrame.new(0, -k * 2.8, 0)
+				overlay.BackgroundColor3 = Color3.fromRGB(5 + k * 60, 0, 10)
+			end
+			for i, s in ipairs(r.Shards) do
+				if not (caseId == "BloodMoon" and i == 1) then
+					s.CFrame = CFrame.Angles(0, t * (2 + k * 10), 0) * s.CFrame
+				end
+			end
+			if t >= nextTick then
+				nextTick = t + 0.45 - k * 0.3
+				FX.Sound("CaseShake", 1, 0.8 + k * 0.8)
+			end
+		elseif t < SHAKE + BURST then
+			-- фаза 2: разрушение — части разлетаются
+			if not r.Burst then
+				r.Burst = true
+				FX.Sound("CaseOpen", 1, 1)
+				local flash = new("Frame", { Parent = overlay, Size = UDim2.fromScale(1, 1), BackgroundColor3 = bestColor, BackgroundTransparency = 0.1, ZIndex = 30 })
+				tween(flash, 0.8, { BackgroundTransparency = 1 })
+				task.delay(0.85, function()
+					flash:Destroy()
+				end)
+			end
+			local k = (t - SHAKE) / BURST
+			for p, base in pairs(r.Base) do
+				local d = dirs[p]
+				p.CFrame = CFrame.new(d * k * 14) * base * CFrame.Angles(k * 4 * d.X, k * 5, k * 4 * d.Z)
+				p.Transparency = math.min(1, k * 1.3)
+			end
+		elseif not done then
+			done = true
+			conn:Disconnect()
+			stage:Destroy()
+			title.Text = best >= 4 and (bestName:upper() .. "!") or case.Name
+			title.TextColor3 = bestColor
+			if bestName == "Secret" then
+				-- SECRET: чёрный экран, красные молнии, тряска
+				FX.Sound("Secret", 1, 1)
+				FX.Shake(0.8, 1.2)
+				local black = new("Frame", { Parent = overlay, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), ZIndex = 40 })
+				local big = label({ Parent = black, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(900, 160), Position = UDim2.fromScale(0.5, 0.5), Text = "SECRET!!", TextColor3 = Color3.fromRGB(255, 30, 50), ZIndex = 41, StrokeThickness = 4 })
+				for i = 1, 8 do
+					task.delay(i * 0.12, function()
+						black.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(120, 0, 10) or Color3.new(0, 0, 0)
+						big.Rotation = (math.random() - 0.5) * 10
+					end)
+				end
+				task.delay(1.4, function()
+					tween(black, 0.4, { BackgroundTransparency = 1 })
+					tween(big, 0.4, { TextTransparency = 1 })
+					task.delay(0.45, function()
+						black:Destroy()
+					end)
+					showCards(overlay, results)
+				end)
+			else
+				showCards(overlay, results)
 			end
 		end
+	end)
+end
+
+local function buildCases()
+	local m = modal("Summon", "✦ КЕЙСЫ", UDim2.fromOffset(980, 590))
+	refs.CaseTabs = {}
+	local tabs = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.fromOffset(200, 480), Position = UDim2.fromOffset(18, 70), ZIndex = 6 }, {
+		new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	for i, id in ipairs(Config.CaseOrder) do
+		local case = Config.Cases[id]
+		local b = button({ Parent = tabs, Size = UDim2.fromOffset(200, 140), Text = "", BackgroundColor3 = THEME.BG2, StrokeColor = case.Color, LayoutOrder = i, ZIndex = 7 }, function()
+			UI.SelectCase(id)
+			FX.Sound("Click", 1, 1)
+		end)
+		caseViewport(b, id, { Size = UDim2.new(1, 0, 0, 100), ZIndex = 8 })
+		label({ Parent = b, Size = UDim2.new(1, -10, 0, 26), Position = UDim2.fromOffset(5, 104), Text = case.Name, TextColor3 = case.Color, ZIndex = 8 })
+		refs.CaseTabs[id] = b
 	end
-	refs.SummonGems = label({ Parent = m, Size = UDim2.fromOffset(240, 36), Position = UDim2.new(0, 18, 1, -70), Text = "💎 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(120, 200, 255), ZIndex = 6 })
+	refs.CaseBig = new("Frame", { Parent = m, BackgroundColor3 = THEME.BG2, BackgroundTransparency = 0.3, Size = UDim2.fromOffset(300, 300), Position = UDim2.fromOffset(236, 70), ZIndex = 6 }, { corner(10) })
+	refs.CaseName = label({ Parent = m, Size = UDim2.fromOffset(420, 40), Position = UDim2.fromOffset(548, 70), Text = "", TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6 })
+	refs.CaseDesc = label({ Parent = m, Size = UDim2.fromOffset(420, 40), Position = UDim2.fromOffset(548, 112), Text = "", TextScaled = false, TextSize = 15, TextWrapped = true, Font = Enum.Font.Gotham, TextColor3 = THEME.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 6 })
+	refs.CaseRates = label({ Parent = m, Size = UDim2.fromOffset(420, 150), Position = UDim2.fromOffset(548, 156), Text = "", RichText = true, TextScaled = false, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 6 })
+	label({ Parent = m, Size = UDim2.fromOffset(420, 20), Position = UDim2.fromOffset(548, 306), Text = "В x10 гарантирован минимум один Rare+", TextScaled = false, TextSize = 14, Font = Enum.Font.GothamBold, TextColor3 = THEME.Dim, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6 })
+	refs.CaseUnits = new("ScrollingFrame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.fromOffset(732, 150), Position = UDim2.fromOffset(236, 380), CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.X, ScrollingDirection = Enum.ScrollingDirection.X, ScrollBarThickness = 6, BorderSizePixel = 0, ZIndex = 6 }, {
+		new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	refs.CaseUnitsLayoutCell = UDim2.fromOffset(100, 106)
+	refs.SummonGems = label({ Parent = m, Size = UDim2.fromOffset(240, 36), Position = UDim2.new(0, 236, 1, -52), Text = "💎 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(120, 200, 255), ZIndex = 6 })
 	local busy = false
-	local function summon(count)
+	local function open(count)
 		if busy then
 			return
 		end
 		busy = true
-		local ok, res = ctx.Request("Summon", { Count = count })
+		local ok, res = ctx.Request("Summon", { Case = selectedCase, Count = count })
 		busy = false
 		if ok then
-			showSummonResults(res)
+			playCaseOpening(selectedCase, res)
 		end
 	end
-	button({ Parent = m, AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(200, 56), Position = UDim2.new(1, -238, 1, -16), Text = "x1  💎" .. Config.Settings.SummonCost1, BackgroundColor3 = THEME.AccentDark, ZIndex = 6 }, function()
-		summon(1)
+	refs.CaseBuy1 = button({ Parent = m, AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(200, 50), Position = UDim2.new(1, -238, 1, -12), Text = "x1", BackgroundColor3 = THEME.AccentDark, ZIndex = 6 }, function()
+		open(1)
 	end)
-	button({ Parent = m, AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(210, 56), Position = UDim2.new(1, -18, 1, -16), Text = "x10  💎" .. Config.Settings.SummonCost10, BackgroundColor3 = Color3.fromRGB(150, 60, 200), StrokeColor = THEME.Gold, ZIndex = 6 }, function()
-		summon(10)
+	refs.CaseBuy10 = button({ Parent = m, AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(210, 50), Position = UDim2.new(1, -18, 1, -12), Text = "x10", BackgroundColor3 = Color3.fromRGB(150, 60, 200), StrokeColor = THEME.Gold, ZIndex = 6 }, function()
+		open(10)
 	end)
+	UI.SelectCase(selectedCase)
+end
+
+------------------------------------------------------------------------
+-- МАГАЗИН КРИСТАЛЛОВ
+------------------------------------------------------------------------
+local function buildShop()
+	local m = modal("Shop", "🛒 МАГАЗИН КРИСТАЛЛОВ", UDim2.fromOffset(920, 470))
+	local row = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 270), Position = UDim2.fromOffset(18, 70), ZIndex = 6 }, {
+		new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+	})
+	for i, item in ipairs(Config.Shop) do
+		local card = panel({ Parent = row, Size = UDim2.fromOffset(165, 266), BackgroundColor3 = THEME.BG2, StrokeColor = Color3.fromRGB(90, 180, 255), LayoutOrder = i, ZIndex = 6 })
+		new("UIGradient", { Parent = card, Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(40, 70, 120), THEME.BG) })
+		label({ Parent = card, Size = UDim2.new(1, 0, 0, 70), Position = UDim2.fromOffset(0, 12), Text = string.rep("💎", math.min(i, 3)), ZIndex = 7 })
+		label({ Parent = card, Size = UDim2.new(1, -10, 0, 40), Position = UDim2.fromOffset(5, 86), Text = Config.FormatNumber(item.Gems), TextColor3 = Color3.fromRGB(130, 210, 255), ZIndex = 7 })
+		label({ Parent = card, Size = UDim2.new(1, -10, 0, 34), Position = UDim2.fromOffset(5, 128), Text = item.Title, TextScaled = false, TextSize = 14, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 7 })
+		if item.Bonus then
+			local tag = label({ Parent = card, Size = UDim2.fromOffset(70, 24), Position = UDim2.new(1, -74, 0, 6), Text = item.Bonus, TextColor3 = THEME.Gold, ZIndex = 8 })
+			tag.Rotation = 10
+		end
+		button({ Parent = card, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1, -20, 0, 48), Position = UDim2.new(0.5, 0, 1, -12), Text = "R$ " .. item.Robux, BackgroundColor3 = Color3.fromRGB(50, 140, 80), StrokeColor = THEME.Good, ZIndex = 7 }, function()
+			local ok, res = ctx.Request("BuyGems", { Key = item.Key })
+			if ok and res ~= "prompt" then
+				FX.Sound("Purchase", 1, 1)
+				UI.Toast("+" .. Config.FormatNumber(res) .. " 💎 (тестовая покупка в Studio)", "good")
+			end
+		end)
+	end
+	-- ежедневный подарок
+	local daily = panel({ Parent = m, Size = UDim2.new(1, -36, 0, 74), Position = UDim2.new(0, 18, 1, -90), BackgroundColor3 = THEME.BG2, StrokeColor = THEME.Gold, ZIndex = 6 })
+	label({ Parent = daily, Size = UDim2.new(0.6, 0, 1, -16), Position = UDim2.fromOffset(14, 8), Text = "🎁 Бесплатный подарок: " .. Config.Settings.DailyGems .. " 💎", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Gold, ZIndex = 7 })
+	refs.DailyButton = button({ Parent = daily, AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(260, 52), Position = UDim2.new(1, -12, 0.5, 0), Text = "ЗАБРАТЬ", BackgroundColor3 = Color3.fromRGB(150, 110, 30), StrokeColor = THEME.Gold, ZIndex = 7 }, function()
+		local ok, res = ctx.Request("ClaimDaily")
+		if ok then
+			FX.Sound("Purchase", 1, 1.2)
+			UI.Toast("+" .. tostring(res) .. " 💎 Подарок получен!", "gold")
+		end
+	end)
+end
+
+function UI.UpdateShop()
+	local prof = ctx.Profile
+	if not refs.DailyButton or not prof then
+		return
+	end
+	local left = (prof.DailyReadyAt or 0) - os.time()
+	if left > 0 then
+		refs.DailyButton.Text = string.format("через %d:%02d:%02d", left // 3600, (left % 3600) // 60, left % 60)
+	else
+		refs.DailyButton.Text = "ЗАБРАТЬ"
+	end
+end
+
+function UI.SpinCases(t)
+	local r = caseViews.Big
+	if r and r.Model.Parent then
+		r.Model:PivotTo(CFrame.Angles(0, t * 0.6, 0))
+	end
 end
 
 ------------------------------------------------------------------------
@@ -2843,11 +3414,15 @@ end
 -- ВЫБОР СЛОЖНОСТИ (круг ИГРАТЬ)
 ------------------------------------------------------------------------
 local function joinMatch(diffKey)
-	local ok = ctx.Request("JoinMatch", { Difficulty = diffKey })
-	if ok then
-		UI.Show("Mode", false)
-		FX.Sound("Ping", 0.5, 0.8)
-	end
+	UI.Show("Mode", false)
+	task.spawn(function()
+		local ok = UI.FadeTransition("ПОРТАЛ ОТКРЫВАЕТСЯ...", function()
+			return ctx.Request("JoinMatch", { Difficulty = diffKey })
+		end)
+		if not ok then
+			UI.Show("Mode", true)
+		end
+	end)
 end
 
 local function buildMode()
@@ -2929,7 +3504,7 @@ function UI.OnNotify(p)
 	if t == "Toast" then
 		UI.Toast(p.Text, p.Kind)
 	elseif t == "WaveStart" then
-		FX.Sound("Ping", 0.35, p.Boss and 0.6 or 1)
+		FX.Sound(p.Boss and "Boss" or "WaveStart", 1, 1)
 		if p.Boss then
 			FX.Shake(0.4, 0.8)
 			UI.Announce("WAVE " .. p.Wave, "⚠ BOSS: " .. p.Boss, THEME.Pink)
@@ -2943,14 +3518,22 @@ function UI.OnNotify(p)
 	elseif t == "CoreHit" then
 		if player:GetAttribute("InMatch") then
 			FX.Shake(0.35, 0.3)
+			FX.Sound("CoreHit", 1, 1)
 		end
 		local f = refs.CoreFill
 		f.BackgroundColor3 = THEME.Bad
 		tween(f, 0.4, { BackgroundColor3 = THEME.Accent })
 	elseif t == "Victory" then
+		FX.Sound("Victory", 1, 1)
 		showEnd(true, p)
 	elseif t == "Defeat" then
+		FX.Sound("Defeat", 1, 1)
 		showEnd(false, p)
+	elseif t == "Fade" then
+		task.spawn(UI.FadeTransition, p.Text or "")
+	elseif t == "Purchase" then
+		FX.Sound("Purchase", 1, 1)
+		UI.Toast("Покупка: +" .. Config.FormatNumber(p.Gems or 0) .. " 💎", "gold")
 	elseif t == "Reset" then
 		if refs.EndOverlay then
 			refs.EndOverlay:Destroy()
@@ -3053,6 +3636,10 @@ function UI.Update(dt)
 		end
 	end
 
+	UI.SpinCases(os.clock())
+	if modals.Shop and modals.Shop.Visible then
+		UI.UpdateShop()
+	end
 	lastRefresh = lastRefresh + dt
 	if lastRefresh > 0.25 then
 		lastRefresh = 0
@@ -3065,6 +3652,7 @@ end
 function UI.Init(c)
 	ctx = c
 	Config, UnitModels, Renderer, FX = c.Config, c.UnitModels, c.Renderer, c.FX
+	CaseModels = c.CaseModels
 	local pg = player:WaitForChild("PlayerGui")
 	local old = pg:FindFirstChild("VoidTD_UI")
 	if old then
@@ -3077,7 +3665,8 @@ function UI.Init(c)
 	buildHUD()
 	buildHotbar()
 	buildUnitPanel()
-	buildSummon()
+	buildCases()
+	buildShop()
 	buildInventory()
 	buildMode()
 	-- адаптация под маленькие экраны

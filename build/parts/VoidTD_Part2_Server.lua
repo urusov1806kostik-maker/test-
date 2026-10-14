@@ -45,6 +45,8 @@ FILES[#FILES + 1] = { "ServerScriptService", { "VoidTDServer" }, "Script", [====
 -- VOID TD :: Server bootstrap
 
 local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("VoidTD")
@@ -183,13 +185,45 @@ handlers.SetLite = function(player, data)
 	return true
 end
 
+handlers.ClaimDaily = function(player)
+	local ok, res = DataService.ClaimDaily(player)
+	if ok then
+		pushProfile(player)
+	end
+	return ok, res
+end
+
+handlers.BuyGems = function(player, data)
+	local key = type(data) == "table" and data.Key
+	local item
+	for _, it in ipairs(Config.Shop) do
+		if it.Key == key then
+			item = it
+		end
+	end
+	if not item then
+		return false, "Неизвестный товар"
+	end
+	if (item.ProductId or 0) > 0 then
+		MarketplaceService:PromptProductPurchase(player, item.ProductId)
+		return true, "prompt"
+	end
+	if Config.Settings.ShopTestMode and RunService:IsStudio() then
+		DataService.GrantPurchase(player, item.Gems, nil)
+		pushProfile(player)
+		return true, item.Gems
+	end
+	return false, "Товар не настроен: укажи ProductId в Config.Shop"
+end
+
 handlers.StartWave = function(player)
 	return GameService.RequestStartWave(player)
 end
 
 handlers.Summon = function(player, data)
 	local count = (type(data) == "table" and data.Count == 10) and 10 or 1
-	local ok, result = DataService.Summon(player, count)
+	local caseId = type(data) == "table" and data.Case or "VoidCase"
+	local ok, result = DataService.Summon(player, caseId, count)
 	if ok then
 		pushProfile(player)
 	end
@@ -224,6 +258,23 @@ request.OnServerInvoke = function(player, action, data)
 		return false, "Ошибка сервера"
 	end
 	return a, b
+end
+
+-- Покупки за Robux (Developer Products из Config.Shop)
+MarketplaceService.ProcessReceipt = function(info)
+	local player = Players:GetPlayerByUserId(info.PlayerId)
+	if not player or not DataService.Get(player) then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	for _, it in ipairs(Config.Shop) do
+		if it.ProductId == info.ProductId then
+			DataService.GrantPurchase(player, it.Gems, info.PurchaseId)
+			pushProfile(player)
+			remotes.Notify:FireClient(player, { Type = "Purchase", Gems = it.Gems })
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+	end
+	return Enum.ProductPurchaseDecision.NotProcessedYet
 end
 
 -- Гемы меняются от наград за волны — периодически отправляем профиль
@@ -1071,8 +1122,10 @@ function MapBuilder.BuildLobby()
 	-- платформа
 	local top = cylinderY(m, "Floor", R, 4, c - V(0, 2, 0), C.Ground, Enum.Material.Slate)
 	top:SetAttribute("Placeable", false)
-	cylinderY(m, "FloorInlay", 22, 0.2, c + V(0, 0.02, 0), C.Ground2, Enum.Material.Slate, { CanCollide = false })
-	cylinderY(m, "InnerRing", 22.6, 0.12, c + V(0, 0.01, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.3 })
+	cylinderY(m, "FloorInlay", 30, 0.2, c + V(0, 0.02, 0), C.Ground2, Enum.Material.Slate, { CanCollide = false })
+	cylinderY(m, "InnerRing", 30.6, 0.12, c + V(0, 0.01, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.3 })
+	cylinderY(m, "MidRing", 55.6, 0.1, c + V(0, 0.008, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.7 })
+	cylinderY(m, "MidFloor", 55, 0.11, c + V(0, 0.009, 0), C.Ground, Enum.Material.Slate, { CanCollide = false })
 	cylinderY(m, "OuterRing", R - 4, 0.1, c + V(0, 0.005, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.6 })
 	cylinderY(m, "OuterFloor", R - 4.4, 0.12, c + V(0, 0.01, 0), C.Ground, Enum.Material.Slate, { CanCollide = false })
 	-- низ острова
@@ -1082,8 +1135,8 @@ function MapBuilder.BuildLobby()
 	local root = part(m, { Name = "CrystalRoot", Size = V(7, 16, 7), CFrame = CF(c + V(0, -62, 0)) * ANG(rad(6), rad(45), 0), Color = C.Neon, Material = Enum.Material.Neon })
 	light(root, C.Neon, 40, 3)
 	-- край: камни и колонны с неоном
-	for i = 0, 23 do
-		local a = i / 24 * math.pi * 2
+	for i = 0, 35 do
+		local a = i / 36 * math.pi * 2
 		local p = c + V(math.cos(a) * (R - 1), 0, math.sin(a) * (R - 1))
 		local s = rng:NextNumber(4, 7)
 		part(m, { Name = "EdgeRock", Size = V(s, rng:NextNumber(1, 2.5), s), CFrame = CF(p) * ANG(0, rad(rng:NextNumber(0, 90)), 0), Color = C.Rock2, Material = Enum.Material.Slate })
@@ -1118,28 +1171,36 @@ function MapBuilder.BuildLobby()
 		zm:SetAttribute("Zone", key)
 	end
 
-	-- SUMMON: алтарь с парящим кристаллом
-	local sz = c + L.Zones.Summon.Offset + V(-13, 0, 0)
-	part(m, { Name = "Altar", Size = V(7, 2, 7), CFrame = CF(sz + V(0, 1, 0)), Color = C.Stone2, Material = Enum.Material.Slate })
-	part(m, { Name = "Altar2", Size = V(5, 1.5, 5), CFrame = CF(sz + V(0, 2.75, 0)) * ANG(0, rad(45), 0), Color = C.Stone, Material = Enum.Material.Slate })
-	local crystal = part(m, { Name = "SummonCrystal", Size = V(3, 5, 3), CFrame = CF(sz + V(0, 8, 0)) * ANG(0, 0, rad(10)), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
-	crystal:SetAttribute("Spin", 1)
-	crystal:SetAttribute("SpinAxis", "Y")
-	crystal:SetAttribute("BobAmp", 0.8)
-	light(crystal, C.NeonPink, 30, 3)
-	emitter(crystal, C.NeonPink, { Rate = 20, Size = 0.6 })
-	for i = 0, 3 do
-		local a = i / 4 * math.pi * 2 + math.pi / 4
-		local op = sz + V(math.cos(a) * 6, 0, math.sin(a) * 6)
-		part(m, { Name = "Obelisk", Size = V(1.4, 7 + (i % 2) * 2, 1.4), CFrame = CF(op + V(0, 3.5 + (i % 2), 0)), Color = C.Stone2, Material = Enum.Material.Slate })
-		part(m, { Name = "ObeliskRune", Size = V(0.4, 3, 0.2), CFrame = CF(op + V(0, 4, 0)) * CFrame.lookAt(Vector3.zero, sz - op).Rotation * CF(0, 0, -0.75), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
+	-- КЕЙСЫ: витрины с вращающимися 3D-кейсами за каждым кругом
+	local okCM, CaseModels = pcall(require, Shared:WaitForChild("CaseModels"))
+	for _, z in pairs(L.Zones) do
+		if z.Case then
+			local zc = c + z.Offset
+			local out = V(z.Offset.X, 0, z.Offset.Z).Unit
+			local sp = zc + out * 13
+			part(m, { Name = "CaseStand", Shape = Enum.PartType.Cylinder, Size = V(2.5, 9, 9), CFrame = CF(sp + V(0, 1.25, 0)) * ANG(0, 0, rad(90)), Color = C.Stone2, Material = Enum.Material.Slate })
+			part(m, { Name = "CaseStandRing", Shape = Enum.PartType.Cylinder, Size = V(0.3, 9.4, 9.4), CFrame = CF(sp + V(0, 2.4, 0)) * ANG(0, 0, rad(90)), Color = z.Color, Material = Enum.Material.Neon, CanCollide = false })
+			if okCM then
+				local cm = CaseModels.Build(z.Case).Model
+				cm:ScaleTo(1.6)
+				cm:PivotTo(CF(sp + V(0, 2.6, 0)) * CFrame.lookAt(Vector3.zero, -out).Rotation)
+				cm:SetAttribute("Spin", 0.5)
+				cm:SetAttribute("SpinAxis", "Y")
+				cm.Parent = m
+			end
+			local glow = part(m, { Name = "CaseGlow", Size = V(0.5, 0.5, 0.5), CFrame = CF(sp + V(0, 6, 0)), Transparency = 1, CanCollide = false })
+			light(glow, z.Color, 22, 2)
+			emitter(glow, z.Color, { Rate = 8, Size = 0.4, SpeedMin = 1, SpeedMax = 2 })
+			local case = Config.Cases[z.Case]
+			billboard(m, sp + V(0, 13, 0), case.Name, "💎" .. case.Cost1 .. " / x10 💎" .. case.Cost10, z.Color, 14)
+		end
 	end
 
 	-- ЮНИТЫ: статуи Common-героев
 	local uz = c + L.Zones.Units.Offset
-	statue(m, "VoidSoldier", uz + V(12, 0, -7), uz, 2.5)
-	statue(m, "ShadowArcher", uz + V(14, 0, 1), uz, 2.5)
-	statue(m, "LostMage", uz + V(12, 0, 9), uz, 2.5)
+	statue(m, "VoidSoldier", uz + V(13, 0, -9), uz, 2.5)
+	statue(m, "ShadowArcher", uz + V(15, 0, 0), uz, 2.5)
+	statue(m, "LostMage", uz + V(13, 0, 9), uz, 2.5)
 
 	-- ИГРАТЬ: портал в бой и мифические стражи
 	local pz = c + L.Zones.Play.Offset
@@ -1147,8 +1208,17 @@ function MapBuilder.BuildLobby()
 	part(m, { Name = "PortalBase", Size = V(24, 1, 8), CFrame = CF(pz + V(0, 0.5, -11)), Color = C.Stone2, Material = Enum.Material.Slate })
 	statue(m, "VoidEmperor", pz + V(-17, 0, -6), c, 4)
 	statue(m, "AbyssOverlord", pz + V(17, 0, -6), c, 4)
-	statue(m, "FallenAngel", c + V(-20, 0, 26), c, 3)
-	statue(m, "EclipseGuardian", c + V(20, 0, 26), c, 3)
+	statue(m, "RiftMonarch", pz + V(-32, 0, 2), c, 4)
+	statue(m, "LunarSeraph", pz + V(32, 0, 2), c, 4)
+	-- герои у точки появления
+	statue(m, "FallenAngel", c + V(-24, 0, 50), c, 3)
+	statue(m, "EclipseGuardian", c + V(24, 0, 50), c, 3)
+	statue(m, "Starbreaker", c + V(-42, 0, 42), c, 3)
+	statue(m, "BloodfangWarlord", c + V(42, 0, 42), c, 3)
+	-- секретные юниты в центре
+	statue(m, "RealityDestroyer", c + V(-8, 0, 0), c + V(0, 0, 60), 5)
+	statue(m, "CrimsonEclipse", c + V(8, 0, 0), c + V(0, 0, 60), 5)
+	billboard(m, c + V(0, 17, 0), "SECRET", "шанс 0.1% в новых кейсах", Color3.fromRGB(255, 40, 60), 12)
 
 	-- вывеска
 	local sign = part(m, { Name = "Sign", Size = V(30, 8, 1), CFrame = CF(pz + V(0, 27, -12)) * ANG(0, math.pi, 0), Color = C.Black, Material = Enum.Material.Slate })
@@ -1180,10 +1250,16 @@ function MapBuilder.BuildLobby()
 	local taken = {}
 	for key, z in pairs(L.Zones) do
 		taken[#taken + 1] = c + z.Offset
+		if z.Case then
+			taken[#taken + 1] = c + z.Offset + V(z.Offset.X, 0, z.Offset.Z).Unit * 13
+		end
 	end
-	for i = 1, 10 do
+	for _, off in ipairs({ V(-24, 0, 50), V(24, 0, 50), V(-42, 0, 42), V(42, 0, 42), V(0, 0, 0), V(77, 0, 8), V(-32, 0, -60), V(32, 0, -60), V(0, 0, -73) }) do
+		taken[#taken + 1] = c + off
+	end
+	for i = 1, 24 do
 		local a = rng:NextNumber(0, math.pi * 2)
-		local d = rng:NextNumber(38, R - 7)
+		local d = rng:NextNumber(36, R - 8)
 		local p = c + V(math.cos(a) * d, 0, math.sin(a) * d)
 		local free = true
 		for _, t in ipairs(taken) do
@@ -1289,6 +1365,8 @@ local function defaultProfile()
 		Equipped = {},
 		Stats = { Wins = 0, BestWave = 0, Summons = 0 },
 		Settings = {},
+		LastDaily = 0,
+		Receipts = {},
 	}
 	for i, id in ipairs(s.StarterUnits) do
 		p.Inventory[id] = 1
@@ -1307,6 +1385,8 @@ local function sanitize(p)
 	p.Equipped = type(p.Equipped) == "table" and p.Equipped or d.Equipped
 	p.Stats = type(p.Stats) == "table" and p.Stats or d.Stats
 	p.Settings = type(p.Settings) == "table" and p.Settings or {}
+	p.LastDaily = tonumber(p.LastDaily) or 0
+	p.Receipts = type(p.Receipts) == "table" and p.Receipts or {}
 	-- убрать неизвестные юниты
 	for id in pairs(p.Inventory) do
 		if not Config.Units[id] then
@@ -1406,65 +1486,77 @@ function DataService.Snapshot(player)
 		Equipped = eq,
 		Stats = deepCopy(p.Stats),
 		Settings = deepCopy(p.Settings or {}),
+		DailyReadyAt = (tonumber(p.LastDaily) or 0) + Config.Settings.DailyCooldown,
 	}
 end
 
 ------------------------------------------------------------------------
--- SUMMON
+-- КЕЙСЫ (SUMMON)
 ------------------------------------------------------------------------
-local byRarity = {}
-for _, id in ipairs(Config.UnitOrder) do
-	local r = Config.Units[id].Rarity
-	byRarity[r] = byRarity[r] or {}
-	table.insert(byRarity[r], id)
-end
-
 local rng = Random.new()
 
-local function rollRarity()
+local function unitsByRarity(case)
+	local map = {}
+	for _, id in ipairs(case.Units) do
+		local r = Config.Units[id].Rarity
+		map[r] = map[r] or {}
+		table.insert(map[r], id)
+	end
+	return map
+end
+
+local function rollRarity(case, pool)
 	local total = 0
 	for _, name in ipairs(Config.RarityOrder) do
-		total = total + Config.Rarities[name].Rate
+		if pool[name] then
+			total = total + (case.Rates[name] or 0)
+		end
 	end
 	local roll = rng:NextNumber() * total
 	local acc = 0
 	for _, name in ipairs(Config.RarityOrder) do
-		acc = acc + Config.Rarities[name].Rate
-		if roll <= acc then
-			return name
+		if pool[name] then
+			acc = acc + (case.Rates[name] or 0)
+			if roll <= acc then
+				return name
+			end
 		end
 	end
 	return "Common"
 end
 
-function DataService.Summon(player, count)
+function DataService.Summon(player, caseId, count)
 	local p = DataService.Profiles[player]
 	if not p then
 		return false, "Профиль не загружен"
 	end
+	local case = Config.Cases[caseId]
+	if not case then
+		return false, "Неизвестный кейс"
+	end
 	local s = Config.Settings
-	local cost = (count == 10) and s.SummonCost10 or s.SummonCost1
 	count = (count == 10) and 10 or 1
+	local cost = (count == 10) and case.Cost10 or case.Cost1
 	if p.Gems < cost then
-		return false, "Недостаточно гемов"
+		return false, "Недостаточно кристаллов"
 	end
 	p.Gems = p.Gems - cost
 	player:SetAttribute("Gems", p.Gems)
+	local pool = unitsByRarity(case)
 	local results = {}
 	local bestOrder = 0
 	for i = 1, count do
-		local rarity = rollRarity()
+		local rarity = rollRarity(case, pool)
 		-- гарантия: в x10 минимум один Rare+
-		if count == 10 and i == 10 and bestOrder < 2 then
+		if count == 10 and i == 10 and bestOrder < 2 and pool.Rare then
 			rarity = "Rare"
 		end
 		bestOrder = math.max(bestOrder, Config.Rarities[rarity].Order)
-		local pool = byRarity[rarity]
-		local id = pool[rng:NextInteger(1, #pool)]
+		local list = pool[rarity]
+		local id = list[rng:NextInteger(1, #list)]
 		local isNew = (p.Inventory[id] or 0) == 0
 		p.Inventory[id] = (p.Inventory[id] or 0) + 1
 		results[i] = { Id = id, New = isNew }
-		-- автоэкипировка новых юнитов в свободный слот
 		if isNew then
 			for slot = 1, s.EquipSlots do
 				if not p.Equipped[slot] then
@@ -1477,6 +1569,44 @@ function DataService.Summon(player, count)
 	p.Stats.Summons = (p.Stats.Summons or 0) + count
 	DataService.Save(player)
 	return true, results
+end
+
+------------------------------------------------------------------------
+-- МАГАЗИН
+------------------------------------------------------------------------
+function DataService.ClaimDaily(player)
+	local p = DataService.Profiles[player]
+	if not p then
+		return false, "Профиль не загружен"
+	end
+	local now = os.time()
+	local last = tonumber(p.LastDaily) or 0
+	local left = (last + Config.Settings.DailyCooldown) - now
+	if left > 0 then
+		return false, string.format("Подарок будет через %d ч %d мин", left // 3600, (left % 3600) // 60)
+	end
+	p.LastDaily = now
+	DataService.AddGems(player, Config.Settings.DailyGems)
+	DataService.Save(player, true)
+	return true, Config.Settings.DailyGems
+end
+
+-- Выдача кристаллов за покупку. receiptId защищает от повторной выдачи.
+function DataService.GrantPurchase(player, gems, receiptId)
+	local p = DataService.Profiles[player]
+	if not p then
+		return false
+	end
+	p.Receipts = p.Receipts or {}
+	if receiptId and p.Receipts[receiptId] then
+		return true
+	end
+	if receiptId then
+		p.Receipts[receiptId] = true
+	end
+	DataService.AddGems(player, gems)
+	DataService.Save(player, true)
+	return true
 end
 
 function DataService.Equip(player, unitId, slot)
@@ -1688,6 +1818,8 @@ local function spawnEnemy(typeId, startDist, lateral)
 		IsBoss = def.IsBoss == true,
 		SlowUntil = 0,
 		SlowAmount = 0,
+		Dots = {},
+		NextDot = 0,
 		Alive = true,
 		Wave = wave,
 	}
@@ -2117,19 +2249,85 @@ local function valid(u, myMatch)
 	return u.Alive and matchId == myMatch
 end
 
-local function aoeHit(u, center, radius, stats, kind)
-	-- один удар = один набор целей: каждый враг получает урон ровно один раз
+------------------------------------------------------------------------
+-- ЭФФЕКТЫ НА ВРАГАХ: периодический урон (кровотечение, нити) и замедление
+------------------------------------------------------------------------
+local function applyDot(e, dps, duration, u, kind)
+	if not e.Alive or not dps or dps <= 0 then
+		return
+	end
+	-- один источник обновляет свой эффект, а не стакает бесконечно
+	local key = tostring(u and u.Uid or 0) .. ":" .. kind
+	e.Dots[key] = { Dps = dps, Until = now() + duration, Unit = u }
+end
+
+local function applySlow(e, amount, duration)
+	if not e.Alive or not amount then
+		return
+	end
+	local t = now()
+	amount = amount * (e.IsBoss and S.BossSlowResist or 1)
+	if e.SlowUntil < t then
+		e.SlowAmount = 0
+	end
+	e.SlowAmount = math.max(e.SlowAmount, amount)
+	e.SlowUntil = math.max(e.SlowUntil, t + duration)
+end
+
+local function updateDots(t)
+	for _, e in pairs(enemies) do
+		if next(e.Dots) and t >= e.NextDot then
+			e.NextDot = t + 0.5
+			local total, unit = 0, nil
+			for key, d in pairs(e.Dots) do
+				if t >= d.Until then
+					e.Dots[key] = nil
+				else
+					total = total + d.Dps * 0.5
+					unit = unit or d.Unit
+				end
+			end
+			if total > 0 then
+				damageEnemy(e, total, false, unit, true)
+			end
+		end
+	end
+end
+
+-- AOE: каждый враг получает урон ровно один раз за удар.
+-- opts: Exclude (враг без урона), Mult, Bleed/BleedTime, Color, Extra (доп. поля события)
+local function aoeHit(u, center, radius, stats, kind, opts)
+	opts = opts or {}
 	local hitSet = {}
 	for _, e in pairs(enemies) do
-		if e.Alive and PathUtil.FlatDistance(e.Pos, center) <= radius + (e.IsBoss and 1.5 or 0.5) then
+		if e.Alive and e ~= opts.Exclude and PathUtil.FlatDistance(e.Pos, center) <= radius + (e.IsBoss and 1.5 or 0.5) then
 			hitSet[#hitSet + 1] = e
 		end
 	end
-	Remotes.Impact:FireAllClients({ K = kind, P = center, R = radius, L = u.Level, U = u.Uid, N = #hitSet })
+	local payload = { K = kind, P = center, R = radius, L = u.Level, U = u.Uid, N = #hitSet }
+	for k, v in pairs(opts.Extra or {}) do
+		payload[k] = v
+	end
+	Remotes.Impact:FireAllClients(payload)
 	for _, e in ipairs(hitSet) do
 		local dmg, crit = rollDamage(stats)
-		damageEnemy(e, dmg, crit, u)
+		if opts.Bleed then
+			applyDot(e, opts.Bleed, opts.BleedTime or 3, u, "Bleed")
+		end
+		damageEnemy(e, dmg * (opts.Mult or 1), crit, u)
 	end
+	return hitSet
+end
+
+local function distToSegment(p, a, b)
+	local abx, abz = b.X - a.X, b.Z - a.Z
+	local lenSq = abx * abx + abz * abz
+	local t = 0
+	if lenSq > 0 then
+		t = math.clamp(((p.X - a.X) * abx + (p.Z - a.Z) * abz) / lenSq, 0, 1)
+	end
+	local cx, cz = a.X + abx * t, a.Z + abz * t
+	return math.sqrt((p.X - cx) ^ 2 + (p.Z - cz) ^ 2)
 end
 
 local function attack(u, stats, list)
@@ -2137,39 +2335,134 @@ local function attack(u, stats, list)
 	local myMatch = matchId
 	local hitDelay = def.HitDelay or 0.2
 	local target = list[1]
+	local atype = def.AttackType
 
-	if def.AttackType == "Melee" or def.AttackType == "Laser" then
-		fireAttack(u, { target.Id }, { D = hitDelay })
-		task.delay(hitDelay, function()
-			if valid(u, myMatch) and target.Alive then
-				local dmg, crit = rollDamage(stats)
-				damageEnemy(target, dmg, crit, u)
+	local function later(delay, fn)
+		task.delay(delay, function()
+			if valid(u, myMatch) then
+				fn()
 			end
 		end)
-	elseif def.AttackType == "Projectile" then
-		local travel = PathUtil.FlatDistance(u.Pos, target.Pos) / (def.ProjectileSpeed or 80)
-		fireAttack(u, { target.Id }, { D = hitDelay, TR = travel })
-		task.delay(hitDelay + travel, function()
-			if valid(u, myMatch) and target.Alive then
-				local dmg, crit = rollDamage(stats)
-				damageEnemy(target, dmg, crit, u)
+	end
+
+	-- урон + эффекты при попадании (кровотечение)
+	local function strike(e, mult, forceCrit)
+		if not e or not e.Alive then
+			return
+		end
+		local dmg, crit = rollDamage(stats)
+		if stats.Bleed then
+			applyDot(e, stats.Bleed, stats.BleedTime or 3, u, "Bleed")
+		end
+		damageEnemy(e, dmg * (mult or 1), crit or forceCrit, u)
+	end
+
+	if atype == "Melee" or atype == "Laser" then
+		local mult, power = 1, false
+		if def.EveryNth then
+			u.HitCount = (u.HitCount or 0) + 1
+			if u.HitCount % def.EveryNth.N == 0 then
+				mult, power = def.EveryNth.Mult, true
+			end
+		end
+		fireAttack(u, { target.Id }, { D = hitDelay, PW = power })
+		later(hitDelay, function()
+			strike(target, mult, power)
+		end)
+	elseif atype == "Projectile" then
+		local shots = stats.Shots or 1
+		local ids, travels = {}, {}
+		for s = 1, shots do
+			local e = list[((s - 1) % #list) + 1]
+			ids[s] = e.Id
+			travels[s] = PathUtil.FlatDistance(u.Pos, e.Pos) / (def.ProjectileSpeed or 80)
+		end
+		fireAttack(u, ids, { D = hitDelay, TR = travels[1], TRS = travels, SG = 0.12 })
+		for s = 1, shots do
+			local e = list[((s - 1) % #list) + 1]
+			later(hitDelay + (s - 1) * 0.12 + travels[s], function()
+				if not e.Alive then
+					return
+				end
+				local center = e.Pos
+				strike(e)
+				if stats.Explode then
+					aoeHit(u, center, stats.Explode, stats, "Crystal", { Exclude = e, Mult = def.ExplodeMult or 0.5 })
+				end
+			end)
+		end
+	elseif atype == "Chain" then
+		-- лунный серп отскакивает к ближайшим врагам
+		local seq, times = { target }, {}
+		local used = { [target] = true }
+		local speed = def.ProjectileSpeed or 60
+		times[1] = hitDelay + PathUtil.FlatDistance(u.Pos, target.Pos) / speed
+		for i = 2, stats.Bounces or 3 do
+			local prev = seq[i - 1]
+			local best, bestD
+			for _, e in pairs(enemies) do
+				if e.Alive and not used[e] then
+					local d = PathUtil.FlatDistance(e.Pos, prev.Pos)
+					if d <= (def.BounceRange or 12) and (not bestD or d < bestD) then
+						best, bestD = e, d
+					end
+				end
+			end
+			if not best then
+				break
+			end
+			used[best] = true
+			seq[i] = best
+			times[i] = times[i - 1] + bestD / speed
+		end
+		local ids = {}
+		for i, e in ipairs(seq) do
+			ids[i] = e.Id
+		end
+		fireAttack(u, ids, { D = hitDelay, TT = times })
+		for i, e in ipairs(seq) do
+			later(times[i], function()
+				strike(e, (def.BounceMult or 0.8) ^ (i - 1))
+			end)
+		end
+	elseif atype == "Thread" then
+		local ids, targets = {}, {}
+		for i = 1, math.min(stats.Targets or 1, #list) do
+			targets[i] = list[i]
+			ids[i] = list[i].Id
+		end
+		fireAttack(u, ids, { D = hitDelay })
+		later(hitDelay, function()
+			for _, e in ipairs(targets) do
+				if e.Alive then
+					applySlow(e, stats.Slow, stats.SlowTime or 1.5)
+					applyDot(e, stats.Dot, stats.DotTime or 3, u, "Thread")
+					strike(e)
+				end
 			end
 		end)
-	elseif def.AttackType == "AOE" then
+	elseif atype == "AOE" then
 		local saved = target.Pos
 		fireAttack(u, { target.Id }, { D = hitDelay })
-		task.delay(hitDelay, function()
-			if not valid(u, myMatch) then
-				return
-			end
+		later(hitDelay, function()
 			local center = target.Alive and target.Pos or saved
-			local kind = def.ImpactKind or "Reap"
-			aoeHit(u, center, stats.AOERadius or 6, stats, kind)
+			aoeHit(u, center, stats.AOERadius or 6, stats, def.ImpactKind or "Reap", { Bleed = stats.Bleed, BleedTime = stats.BleedTime })
+			-- падающие звёздные осколки
+			for k = 1, stats.Shards or 0 do
+				later(0.35 + k * 0.15, function()
+					local pool = candidates(u, stats.Range + 4)
+					if #pool > 0 then
+						local e = pool[math.random(1, #pool)]
+						aoeHit(u, e.Pos, stats.ShardRadius or 4, stats, "Shard", { Mult = stats.ShardMult or 0.6 })
+					end
+				end)
+			end
 		end)
-	elseif def.AttackType == "MultiHit" then
+	elseif atype == "MultiHit" then
 		local hits = stats.Hits or 1
 		local interval = def.HitInterval or 0.15
-		local spread = (u.Id == "VoidEmperor")
+		local spread = def.Spread or (u.Id == "VoidEmperor")
+		local kind = def.ImpactKind or "Judgement"
 		local ids = {}
 		local plan = {}
 		for h = 1, hits do
@@ -2179,26 +2472,74 @@ local function attack(u, stats, list)
 		end
 		fireAttack(u, ids, { D = hitDelay, I = interval })
 		for h = 1, hits do
-			task.delay(hitDelay + (h - 1) * interval, function()
-				if not valid(u, myMatch) then
-					return
-				end
+			later(hitDelay + (h - 1) * interval, function()
 				local e = plan[h]
 				if not e.Alive then
-					-- цель умерла — ищем следующую в радиусе
-					local fresh = candidates(u, stats.Range)
-					e = fresh[1]
+					e = candidates(u, stats.Range)[1]
 				end
 				if e then
-					local dmg, crit = rollDamage(stats)
 					if spread then
-						Remotes.Impact:FireAllClients({ K = "Judgement", P = e.Pos, L = u.Level, U = u.Uid, H = h })
+						Remotes.Impact:FireAllClients({ K = kind, P = e.Pos, L = u.Level, U = u.Uid, H = h })
 					end
-					damageEnemy(e, dmg, crit, u)
+					strike(e)
 				end
 			end)
 		end
+		if stats.BigRift then
+			later(hitDelay + hits * interval + 0.2, function()
+				local pool = candidates(u, stats.Range)
+				if #pool > 0 then
+					aoeHit(u, pool[1].Pos, stats.BigRift, stats, "BigRift", { Mult = stats.BigRiftMult or 1.5 })
+				end
+			end)
+		end
+	elseif atype == "Splash" then
+		-- RED SPLASH: цель 100%, остальные в радиусе 50% (цель второй раз не задевается)
+		fireAttack(u, { target.Id }, { D = hitDelay })
+		local saved = target.Pos
+		later(hitDelay, function()
+			local center = target.Alive and target.Pos or saved
+			local primary = target.Alive and target or nil
+			strike(primary)
+			aoeHit(u, center, stats.AOERadius or 8, stats, "Splash", { Exclude = target, Mult = def.SplashMult or 0.5 })
+		end)
+	elseif atype == "Pierce" then
+		-- луч насквозь: все враги на линии от юнита через цель
+		local dir = Vector3.new(target.Pos.X - u.Pos.X, 0, target.Pos.Z - u.Pos.Z)
+		if dir.Magnitude < 0.1 then
+			dir = Vector3.new(0, 0, -1)
+		end
+		local endPos = u.Pos + dir.Unit * (stats.Range + 4)
+		fireAttack(u, { target.Id }, { D = hitDelay, E = endPos })
+		later(hitDelay, function()
+			Remotes.Impact:FireAllClients({ K = "Pierce", P = u.Pos, E = endPos, L = u.Level, U = u.Uid })
+			local half = (def.PierceWidth or 3) / 2
+			local hitSet = {}
+			for _, e in pairs(enemies) do
+				if e.Alive and distToSegment(e.Pos, u.Pos, endPos) <= half + (e.IsBoss and 1.2 or 0) then
+					hitSet[#hitSet + 1] = e
+				end
+			end
+			for _, e in ipairs(hitSet) do
+				strike(e)
+			end
+		end)
 	end
+end
+
+local function castBloodMoon(u, stats, list)
+	local bm = stats.BloodMoon
+	local myMatch = matchId
+	local target = list[1]
+	local pos = PathUtil.PositionAt(math.min(target.Dist + 3, PathUtil.Length - 1))
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = { target.Id }, L = u.Level, D = 0.6, AB = true })
+	Remotes.Impact:FireAllClients({ K = "BloodMoonFall", P = pos, R = bm.Radius, L = u.Level, U = u.Uid, DL = 1.0 })
+	task.delay(1.0, function()
+		if valid(u, myMatch) then
+			local big = { Damage = stats.Damage * (bm.Mult or 3) }
+			aoeHit(u, pos, bm.Radius, big, "BloodMoon", { Bleed = bm.Bleed, BleedTime = bm.BleedTime })
+		end
+	end)
 end
 
 local function castBlackHole(u, stats, list)
@@ -2248,6 +2589,14 @@ local function updateUnits(t)
 				castBlackHole(u, stats, list)
 				u.NextAbility = t + stats.BlackHole.Cooldown
 				u.NextAttack = math.max(u.NextAttack, t + 0.9)
+			end
+		end
+		if stats.BloodMoon and t >= u.NextAbility then
+			local list = candidates(u, stats.Range + (u.Def.AbilityExtraRange or 6))
+			if #list > 0 then
+				castBloodMoon(u, stats, list)
+				u.NextAbility = t + stats.BloodMoon.Cooldown
+				u.NextAttack = math.max(u.NextAttack, t + 1.0)
 			end
 		end
 		if t >= u.NextAttack then
@@ -2316,6 +2665,7 @@ local function step(dt)
 	if phase == "Wave" or phase == "Intermission" or phase == "Prep" then
 		updateEnemies(t, dt)
 		updateZones(t)
+		updateDots(t)
 		updateUnits(t)
 	end
 	if phase == "Wave" and not waveSpawning and next(enemies) == nil then
@@ -2360,7 +2710,11 @@ resetMatch = function()
 		if inMatch(pl) then
 			pl:SetAttribute("InMatch", false)
 			setMoney(pl, 0)
-			toLobby(pl)
+			-- чёрный экран-переход, затем телепорт в лобби
+			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = "ЛОББИ" })
+			task.delay(0.45, function()
+				toLobby(pl)
+			end)
 		end
 	end
 	notifyAll({ Type = "Reset" })

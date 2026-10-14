@@ -27,40 +27,39 @@ local numberCount = 0
 -- ЗВУКИ (встроенные звуки клиента Roblox, без загрузки ассетов)
 ------------------------------------------------------------------------
 local SoundService = game:GetService("SoundService")
-local SOUNDS = {
-	Slash = "rbxasset://sounds/swordslash.wav",
-	Lunge = "rbxasset://sounds/swordlunge.wav",
-	Place = "rbxasset://sounds/unsheath.wav",
-	Ping = "rbxasset://sounds/electronicpingshort.wav",
-}
+local SoundConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("VoidTD"):WaitForChild("Config")).Sounds
 local lastSound = {}
 
+-- Играет звук события из Config.Sounds. volume/pitch — множители (по умолчанию 1).
+-- Если у события указан Custom ("rbxassetid://..."), играет свой звук, иначе встроенный.
 function FX.Sound(name, volume, pitch, pos)
-	local id = SOUNDS[name]
-	if not id then
+	local def = SoundConfig[name]
+	if not def then
 		return
 	end
 	local t = os.clock()
 	if lastSound[name] and t - lastSound[name] < 0.07 then
 		return
 	end
+	volume = (volume or 1) * (def.Volume or 0.4)
 	-- приглушаем далёкие звуки
 	if pos then
 		local cam = workspace.CurrentCamera
 		local d = cam and (cam.CFrame.Position - pos).Magnitude or 0
-		if d > 120 then
+		if d > 140 then
 			return
 		end
-		volume = (volume or 0.4) * math.clamp(1 - d / 120, 0.15, 1)
+		volume = volume * math.clamp(1 - d / 140, 0.15, 1)
 	end
 	lastSound[name] = t
+	local custom = def.Custom and def.Custom ~= ""
 	local s = Instance.new("Sound")
-	s.SoundId = id
-	s.Volume = volume or 0.4
-	s.PlaybackSpeed = pitch or 1
+	s.SoundId = custom and def.Custom or def.Id
+	s.Volume = volume
+	s.PlaybackSpeed = (pitch or 1) * (custom and 1 or (def.Pitch or 1))
 	s.Parent = SoundService
 	s:Play()
-	task.delay(3, function()
+	task.delay(4, function()
 		s:Destroy()
 	end)
 end
@@ -303,6 +302,14 @@ function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 		local s = 0.7 + lv * 0.1
 		p = FX.Part({ Shape = Enum.PartType.Ball, Size = V(s, s, s), Color = NEON })
 		light(p, NEON, 8, 2)
+	elseif kind == "Crystal" then
+		p = FX.Part({ Size = V(0.4, 0.4, 1.3), Color = Color3.fromRGB(110, 190, 255) })
+		light(p, Color3.fromRGB(80, 170, 255), 7, 2)
+	elseif kind == "Bullet" then
+		p = FX.Part({ Size = V(0.15, 0.15, 0.9), Color = Color3.fromRGB(255, 90, 80) })
+	elseif kind == "Moon" then
+		p = FX.Part({ Size = V(0.2, 1.2, 1.2), Shape = Enum.PartType.Cylinder, Color = Color3.fromRGB(255, 200, 215) })
+		light(p, Color3.fromRGB(255, 120, 150), 8, 2)
 	else
 		p = FX.Part({ Size = V(0.25, 0.25, 1.4 + lv * 0.15), Color = lv >= 5 and NEON_PINK or NEON_SOFT })
 	end
@@ -324,7 +331,11 @@ function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 
 	local start = os.clock()
 	local last = getTarget() or from
-	p.CFrame = CFrame.lookAt(from, last)
+	if (last - from).Magnitude > 0.01 then
+		p.CFrame = CFrame.lookAt(from, last)
+	else
+		p.CFrame = CF(from)
+	end
 	local conn
 	conn = RunService.RenderStepped:Connect(function()
 		local alpha = math.clamp((os.clock() - start) / math.max(travel, 0.01), 0, 1)
@@ -384,9 +395,11 @@ end
 -- СПОСОБНОСТИ
 ------------------------------------------------------------------------
 -- ECLIPSE SHOCKWAVE
-function FX.Shockwave(pos, radius, lv)
+function FX.Shockwave(pos, radius, lv, color, soft)
+	local NEON = color or NEON
+	local NEON_SOFT = soft or NEON_SOFT
 	local g = V(pos.X, pos.Y + 0.2, pos.Z)
-	FX.Sound("Lunge", 0.6, 0.55, pos)
+	FX.Sound("Explosion", 1, 1, pos)
 	local cam = workspace.CurrentCamera
 	if cam and (cam.CFrame.Position - pos).Magnitude < 70 then
 		FX.Shake(lv >= 5 and 0.5 or 0.25, 0.35)
@@ -424,7 +437,8 @@ function FX.Shockwave(pos, radius, lv)
 end
 
 -- Удар косы: горизонтальная дуга + область
-function FX.Reap(unitPos, center, radius, lv)
+function FX.Reap(unitPos, center, radius, lv, color)
+	local NEON = color or NEON
 	local dir = (center - unitPos)
 	dir = V(dir.X, 0, dir.Z)
 	if dir.Magnitude < 0.1 then
@@ -441,7 +455,7 @@ end
 
 -- VOID JUDGEMENT: энергетический разрез по врагу
 function FX.Judgement(pos, lv, hitIndex)
-	FX.Sound("Slash", 0.5, 0.8 + (hitIndex or 1) * 0.08, pos)
+	FX.Sound("Magic", 1, 0.9 + (hitIndex or 1) * 0.08, pos)
 	local color = (hitIndex or 1) % 2 == 0 and NEON or NEON_PINK
 	local p = pos + V(0, 2, 0)
 	FX.SlashMark(p, rad(35 + rng:NextNumber(-10, 10)), 9 + lv, 0.7 + lv * 0.08, color, 0.45)
@@ -459,7 +473,7 @@ end
 -- BLACK HOLE
 function FX.BlackHole(pos, radius, duration, lv, delay)
 	task.delay(delay or 0, function()
-		FX.Sound("Lunge", 0.7, 0.4, pos)
+		FX.Sound("Portal", 1, 1, pos)
 		local center = pos + V(0, 2.2, 0)
 		local m = Instance.new("Model")
 		m.Name = "BlackHole"
@@ -532,7 +546,7 @@ function FX.Poof(pos, color, size)
 end
 
 function FX.LevelUp(pos, color)
-	FX.Sound("Ping", 0.4, 1.3, pos)
+	FX.Sound("Upgrade", 1, 1, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 4, color or NEON, 0.6, 0.3)
 	local col = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 3, 3), CFrame = CF(pos + V(0, 0.3, 0)) * ANG(0, 0, rad(90)), Color = color or NEON, Transparency = 0.2 })
 	tween(col, 0.7, { CFrame = CF(pos + V(0, 7, 0)) * ANG(0, 0, rad(90)), Transparency = 1, Size = V(0.1, 4.5, 4.5) })
@@ -541,7 +555,7 @@ function FX.LevelUp(pos, color)
 end
 
 function FX.Place(pos)
-	FX.Sound("Place", 0.5, 1, pos)
+	FX.Sound("Place", 1, 1, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 3.5, NEON_SOFT, 0.45, 0.25)
 	FX.Burst(pos + V(0, 0.5, 0), Color3.fromRGB(70, 60, 80), 8, 0.4, 5)
 end
@@ -591,6 +605,146 @@ function FX.DamageNumber(pos, amount, flag)
 		numberCount = numberCount - 1
 		anchor:Destroy()
 	end)
+end
+
+------------------------------------------------------------------------
+-- ЭФФЕКТЫ НОВЫХ ЮНИТОВ
+------------------------------------------------------------------------
+local RED = Color3.fromRGB(255, 35, 55)
+local GOLD = Color3.fromRGB(255, 205, 80)
+local BLUE = Color3.fromRGB(90, 180, 255)
+FX.Colors.Red, FX.Colors.Gold, FX.Colors.Blue = RED, GOLD, BLUE
+
+-- нить кукловода от руки к цели
+function FX.Thread(from, to, color)
+	local len = (to - from).Magnitude
+	if len < 0.1 then
+		return
+	end
+	local p = FX.Part({ Size = V(0.08, 0.08, len), CFrame = CFrame.lookAt((from + to) / 2, to), Color = color or NEON_SOFT })
+	tween(p, 0.5, { Transparency = 1, Size = V(0.02, 0.02, len) })
+	cleanup(p, 0.55)
+	FX.Ring(to - V(0, 1, 0), 2, color or NEON, 0.35, 0.2)
+end
+
+-- взрыв кристалла
+function FX.CrystalBurst(pos, radius)
+	FX.Sphere(pos, radius * 0.6, BLUE, 0.3)
+	FX.Ring(V(pos.X, pos.Y + 0.2, pos.Z), radius, Color3.fromRGB(170, 225, 255), 0.35, 0.25)
+	FX.Burst(pos + V(0, 1, 0), BLUE, 8, 0.35, 8)
+	FX.Sound("Explosion", 0.5, 1.6, pos)
+end
+
+-- падающий звёздный осколок
+function FX.FallingShard(pos, radius, color)
+	color = color or GOLD
+	local top = pos + V(rng:NextNumber(-3, 3), 22, rng:NextNumber(-3, 3))
+	local shard = FX.Part({ Size = V(0.7, 2.2, 0.7), CFrame = CF(top) * ANG(0, rng:NextNumber(0, 6), rad(15)), Color = color })
+	tween(shard, 0.28, { CFrame = CF(pos + V(0, 1, 0)) * ANG(0, 2, rad(15)) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	task.delay(0.28, function()
+		shard:Destroy()
+		FX.Ring(V(pos.X, pos.Y + 0.2, pos.Z), radius, color, 0.35, 0.3)
+		FX.Sphere(pos + V(0, 0.5, 0), radius * 0.4, Color3.fromRGB(255, 240, 200), 0.25)
+		FX.Burst(pos + V(0, 1, 0), color, 6, 0.4, 8)
+	end)
+end
+
+-- маленький портал с разрезом (RIFT STORM)
+function FX.RiftPortal(pos, lv)
+	local c = pos + V(0, 3.5, 0)
+	local ring = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 0.5, 0.5), CFrame = CF(c) * ANG(0, rng:NextNumber(0, 6), 0), Color = NEON })
+	tween(ring, 0.15, { Size = V(0.2, 3.2, 3.2) }, Enum.EasingStyle.Back)
+	local core = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.25, 0.3, 0.3), CFrame = ring.CFrame, Color = Color3.fromRGB(15, 0, 30) })
+	tween(core, 0.15, { Size = V(0.25, 2.4, 2.4) }, Enum.EasingStyle.Back)
+	task.delay(0.15, function()
+		FX.SlashMark(pos + V(0, 1.5, 0), rad(rng:NextNumber(-50, 50)), 6 + lv * 0.5, 0.5, NEON_PINK, 0.3)
+		FX.Burst(pos + V(0, 1, 0), NEON, 6, 0.35, 7)
+		tween(ring, 0.25, { Size = V(0.1, 0.2, 0.2), Transparency = 1 })
+		tween(core, 0.25, { Size = V(0.1, 0.1, 0.1), Transparency = 1 })
+	end)
+	cleanup(ring, 0.45)
+	cleanup(core, 0.45)
+	FX.Sound("Portal", 0.5, 1.4, pos)
+end
+
+-- большой центральный разлом
+function FX.BigRift(pos, radius)
+	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	local disk = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 1, 1), CFrame = CF(g) * ANG(0, 0, rad(90)), Color = Color3.fromRGB(15, 0, 30) })
+	tween(disk, 0.25, { Size = V(0.2, radius * 2, radius * 2) }, Enum.EasingStyle.Back)
+	FX.Ring(g, radius * 1.1, NEON, 0.6, 0.5, 1, 0.05)
+	FX.Ring(g + V(0, 0.1, 0), radius * 0.8, NEON_PINK, 0.5, 0.3, 0.5)
+	for i = 1, 4 do
+		task.delay(i * 0.05, function()
+			FX.SlashMark(g + V(rng:NextNumber(-radius / 2, radius / 2), 2, rng:NextNumber(-radius / 2, radius / 2)), rad(rng:NextNumber(-60, 60)), 9, 0.7, NEON, 0.4)
+		end)
+	end
+	task.delay(0.35, function()
+		tween(disk, 0.35, { Size = V(0.1, 0.5, 0.5), Transparency = 1 })
+	end)
+	cleanup(disk, 0.8)
+	FX.Shake(0.4, 0.4)
+	FX.Sound("Explosion", 1, 0.7, pos)
+end
+
+-- RED SPLASH: расширяющаяся красная волна, вспышка и осколки из меча
+function FX.RedSplash(pos, radius, from)
+	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	FX.Ring(g, radius, RED, 0.5, 0.5, 1, 0.05)
+	FX.Ring(g + V(0, 0.12, 0), radius * 0.7, Color3.fromRGB(255, 150, 150), 0.35, 0.25, 0.5, 0.2)
+	local flash = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.08, radius * 1.6, radius * 1.6), CFrame = CF(g + V(0, 0.05, 0)) * ANG(0, 0, rad(90)), Color = RED, Transparency = 0.3 })
+	tween(flash, 0.3, { Transparency = 1 })
+	cleanup(flash, 0.35)
+	FX.Sphere(pos + V(0, 1, 0), 2.5, RED, 0.25)
+	if from then
+		for _ = 1, FX.Lite and 2 or 6 do
+			local to = g + V(rng:NextNumber(-radius, radius) * 0.7, 0.5, rng:NextNumber(-radius, radius) * 0.7)
+			local shard = FX.Part({ Size = V(0.25, 0.25, 1.1), CFrame = CFrame.lookAt(from, to), Color = RED })
+			tween(shard, 0.25, { CFrame = CFrame.lookAt(to, to + (to - from)), Transparency = 0.6 })
+			cleanup(shard, 0.27)
+		end
+	end
+	FX.Cracks(g, radius * 0.8, RED, 6, 0.9)
+	FX.Sound("HeavyHit", 1, 0.9, pos)
+end
+
+-- рассекающий удар топора
+function FX.Cleave(unitPos, center, radius, color)
+	FX.Reap(unitPos, center, radius, 4, color or RED)
+	FX.Ring(V(center.X, center.Y + 0.2, center.Z), radius, color or RED, 0.4, 0.3)
+	FX.Sound("HeavyHit", 1, 1, center)
+end
+
+-- молот Starbreaker
+function FX.Hammer(pos, radius, lv)
+	FX.Shockwave(pos, radius, lv, GOLD, Color3.fromRGB(200, 140, 255))
+end
+
+-- кровавая луна падает с неба и взрывается
+function FX.BloodMoonFall(pos, radius, delay)
+	delay = delay or 1
+	local moon = FX.Part({ Shape = Enum.PartType.Ball, Size = V(5, 5, 5), CFrame = CF(pos + V(0, 45, 0)), Color = RED })
+	light(moon, RED, 40, 4)
+	local mark = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.1, radius * 2, radius * 2), CFrame = CF(pos + V(0, 0.25, 0)) * ANG(0, 0, rad(90)), Color = RED, Transparency = 0.75 })
+	tween(moon, delay, { CFrame = CF(pos + V(0, 2, 0)), Size = V(7, 7, 7) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	tween(mark, delay, { Transparency = 0.4 })
+	task.delay(delay, function()
+		moon:Destroy()
+		mark:Destroy()
+	end)
+	FX.Sound("Boss", 0.6, 1.4, pos)
+end
+
+function FX.BloodMoonBoom(pos, radius)
+	FX.Shockwave(pos, radius, 5, RED, Color3.fromRGB(255, 140, 140))
+	FX.Sphere(pos + V(0, 2, 0), radius * 0.6, Color3.fromRGB(120, 0, 15), 0.6, Enum.Material.Neon, 0.3)
+	FX.Shake(0.6, 0.6)
+end
+
+-- пробивающий лунный луч
+function FX.PierceBeam(from, to)
+	FX.Beam(from + V(0, 3, 0), to + V(0, 1.5, 0), 2.2, Color3.fromRGB(255, 190, 215), 0.45, true)
+	FX.Sound("Laser", 1, 1.2, from)
 end
 
 return FX

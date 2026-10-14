@@ -825,8 +825,10 @@ function MapBuilder.BuildLobby()
 	-- платформа
 	local top = cylinderY(m, "Floor", R, 4, c - V(0, 2, 0), C.Ground, Enum.Material.Slate)
 	top:SetAttribute("Placeable", false)
-	cylinderY(m, "FloorInlay", 22, 0.2, c + V(0, 0.02, 0), C.Ground2, Enum.Material.Slate, { CanCollide = false })
-	cylinderY(m, "InnerRing", 22.6, 0.12, c + V(0, 0.01, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.3 })
+	cylinderY(m, "FloorInlay", 30, 0.2, c + V(0, 0.02, 0), C.Ground2, Enum.Material.Slate, { CanCollide = false })
+	cylinderY(m, "InnerRing", 30.6, 0.12, c + V(0, 0.01, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.3 })
+	cylinderY(m, "MidRing", 55.6, 0.1, c + V(0, 0.008, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.7 })
+	cylinderY(m, "MidFloor", 55, 0.11, c + V(0, 0.009, 0), C.Ground, Enum.Material.Slate, { CanCollide = false })
 	cylinderY(m, "OuterRing", R - 4, 0.1, c + V(0, 0.005, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.6 })
 	cylinderY(m, "OuterFloor", R - 4.4, 0.12, c + V(0, 0.01, 0), C.Ground, Enum.Material.Slate, { CanCollide = false })
 	-- низ острова
@@ -836,8 +838,8 @@ function MapBuilder.BuildLobby()
 	local root = part(m, { Name = "CrystalRoot", Size = V(7, 16, 7), CFrame = CF(c + V(0, -62, 0)) * ANG(rad(6), rad(45), 0), Color = C.Neon, Material = Enum.Material.Neon })
 	light(root, C.Neon, 40, 3)
 	-- край: камни и колонны с неоном
-	for i = 0, 23 do
-		local a = i / 24 * math.pi * 2
+	for i = 0, 35 do
+		local a = i / 36 * math.pi * 2
 		local p = c + V(math.cos(a) * (R - 1), 0, math.sin(a) * (R - 1))
 		local s = rng:NextNumber(4, 7)
 		part(m, { Name = "EdgeRock", Size = V(s, rng:NextNumber(1, 2.5), s), CFrame = CF(p) * ANG(0, rad(rng:NextNumber(0, 90)), 0), Color = C.Rock2, Material = Enum.Material.Slate })
@@ -872,28 +874,36 @@ function MapBuilder.BuildLobby()
 		zm:SetAttribute("Zone", key)
 	end
 
-	-- SUMMON: алтарь с парящим кристаллом
-	local sz = c + L.Zones.Summon.Offset + V(-13, 0, 0)
-	part(m, { Name = "Altar", Size = V(7, 2, 7), CFrame = CF(sz + V(0, 1, 0)), Color = C.Stone2, Material = Enum.Material.Slate })
-	part(m, { Name = "Altar2", Size = V(5, 1.5, 5), CFrame = CF(sz + V(0, 2.75, 0)) * ANG(0, rad(45), 0), Color = C.Stone, Material = Enum.Material.Slate })
-	local crystal = part(m, { Name = "SummonCrystal", Size = V(3, 5, 3), CFrame = CF(sz + V(0, 8, 0)) * ANG(0, 0, rad(10)), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
-	crystal:SetAttribute("Spin", 1)
-	crystal:SetAttribute("SpinAxis", "Y")
-	crystal:SetAttribute("BobAmp", 0.8)
-	light(crystal, C.NeonPink, 30, 3)
-	emitter(crystal, C.NeonPink, { Rate = 20, Size = 0.6 })
-	for i = 0, 3 do
-		local a = i / 4 * math.pi * 2 + math.pi / 4
-		local op = sz + V(math.cos(a) * 6, 0, math.sin(a) * 6)
-		part(m, { Name = "Obelisk", Size = V(1.4, 7 + (i % 2) * 2, 1.4), CFrame = CF(op + V(0, 3.5 + (i % 2), 0)), Color = C.Stone2, Material = Enum.Material.Slate })
-		part(m, { Name = "ObeliskRune", Size = V(0.4, 3, 0.2), CFrame = CF(op + V(0, 4, 0)) * CFrame.lookAt(Vector3.zero, sz - op).Rotation * CF(0, 0, -0.75), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
+	-- КЕЙСЫ: витрины с вращающимися 3D-кейсами за каждым кругом
+	local okCM, CaseModels = pcall(require, Shared:WaitForChild("CaseModels"))
+	for _, z in pairs(L.Zones) do
+		if z.Case then
+			local zc = c + z.Offset
+			local out = V(z.Offset.X, 0, z.Offset.Z).Unit
+			local sp = zc + out * 13
+			part(m, { Name = "CaseStand", Shape = Enum.PartType.Cylinder, Size = V(2.5, 9, 9), CFrame = CF(sp + V(0, 1.25, 0)) * ANG(0, 0, rad(90)), Color = C.Stone2, Material = Enum.Material.Slate })
+			part(m, { Name = "CaseStandRing", Shape = Enum.PartType.Cylinder, Size = V(0.3, 9.4, 9.4), CFrame = CF(sp + V(0, 2.4, 0)) * ANG(0, 0, rad(90)), Color = z.Color, Material = Enum.Material.Neon, CanCollide = false })
+			if okCM then
+				local cm = CaseModels.Build(z.Case).Model
+				cm:ScaleTo(1.6)
+				cm:PivotTo(CF(sp + V(0, 2.6, 0)) * CFrame.lookAt(Vector3.zero, -out).Rotation)
+				cm:SetAttribute("Spin", 0.5)
+				cm:SetAttribute("SpinAxis", "Y")
+				cm.Parent = m
+			end
+			local glow = part(m, { Name = "CaseGlow", Size = V(0.5, 0.5, 0.5), CFrame = CF(sp + V(0, 6, 0)), Transparency = 1, CanCollide = false })
+			light(glow, z.Color, 22, 2)
+			emitter(glow, z.Color, { Rate = 8, Size = 0.4, SpeedMin = 1, SpeedMax = 2 })
+			local case = Config.Cases[z.Case]
+			billboard(m, sp + V(0, 13, 0), case.Name, "💎" .. case.Cost1 .. " / x10 💎" .. case.Cost10, z.Color, 14)
+		end
 	end
 
 	-- ЮНИТЫ: статуи Common-героев
 	local uz = c + L.Zones.Units.Offset
-	statue(m, "VoidSoldier", uz + V(12, 0, -7), uz, 2.5)
-	statue(m, "ShadowArcher", uz + V(14, 0, 1), uz, 2.5)
-	statue(m, "LostMage", uz + V(12, 0, 9), uz, 2.5)
+	statue(m, "VoidSoldier", uz + V(13, 0, -9), uz, 2.5)
+	statue(m, "ShadowArcher", uz + V(15, 0, 0), uz, 2.5)
+	statue(m, "LostMage", uz + V(13, 0, 9), uz, 2.5)
 
 	-- ИГРАТЬ: портал в бой и мифические стражи
 	local pz = c + L.Zones.Play.Offset
@@ -901,8 +911,17 @@ function MapBuilder.BuildLobby()
 	part(m, { Name = "PortalBase", Size = V(24, 1, 8), CFrame = CF(pz + V(0, 0.5, -11)), Color = C.Stone2, Material = Enum.Material.Slate })
 	statue(m, "VoidEmperor", pz + V(-17, 0, -6), c, 4)
 	statue(m, "AbyssOverlord", pz + V(17, 0, -6), c, 4)
-	statue(m, "FallenAngel", c + V(-20, 0, 26), c, 3)
-	statue(m, "EclipseGuardian", c + V(20, 0, 26), c, 3)
+	statue(m, "RiftMonarch", pz + V(-32, 0, 2), c, 4)
+	statue(m, "LunarSeraph", pz + V(32, 0, 2), c, 4)
+	-- герои у точки появления
+	statue(m, "FallenAngel", c + V(-24, 0, 50), c, 3)
+	statue(m, "EclipseGuardian", c + V(24, 0, 50), c, 3)
+	statue(m, "Starbreaker", c + V(-42, 0, 42), c, 3)
+	statue(m, "BloodfangWarlord", c + V(42, 0, 42), c, 3)
+	-- секретные юниты в центре
+	statue(m, "RealityDestroyer", c + V(-8, 0, 0), c + V(0, 0, 60), 5)
+	statue(m, "CrimsonEclipse", c + V(8, 0, 0), c + V(0, 0, 60), 5)
+	billboard(m, c + V(0, 17, 0), "SECRET", "шанс 0.1% в новых кейсах", Color3.fromRGB(255, 40, 60), 12)
 
 	-- вывеска
 	local sign = part(m, { Name = "Sign", Size = V(30, 8, 1), CFrame = CF(pz + V(0, 27, -12)) * ANG(0, math.pi, 0), Color = C.Black, Material = Enum.Material.Slate })
@@ -934,10 +953,16 @@ function MapBuilder.BuildLobby()
 	local taken = {}
 	for key, z in pairs(L.Zones) do
 		taken[#taken + 1] = c + z.Offset
+		if z.Case then
+			taken[#taken + 1] = c + z.Offset + V(z.Offset.X, 0, z.Offset.Z).Unit * 13
+		end
 	end
-	for i = 1, 10 do
+	for _, off in ipairs({ V(-24, 0, 50), V(24, 0, 50), V(-42, 0, 42), V(42, 0, 42), V(0, 0, 0), V(77, 0, 8), V(-32, 0, -60), V(32, 0, -60), V(0, 0, -73) }) do
+		taken[#taken + 1] = c + off
+	end
+	for i = 1, 24 do
 		local a = rng:NextNumber(0, math.pi * 2)
-		local d = rng:NextNumber(38, R - 7)
+		local d = rng:NextNumber(36, R - 8)
 		local p = c + V(math.cos(a) * d, 0, math.sin(a) * d)
 		local free = true
 		for _, t in ipairs(taken) do

@@ -249,7 +249,60 @@ Anims.Land = function()
 	}
 end
 
+-- анимации новых юнитов
+Anims.DualDagger = function(h)
+	return {
+		{ 0, {} },
+		{ h * 0.6, { RS = { 110, 0, 20 }, LS = { 40, 0, -10 }, Root = { 0, -20, 0 } } },
+		{ h, { RS = { 60, 0, -20 }, LS = { 100, 0, -20 }, Root = { 4, 20, 0 } } },
+		{ h + 0.12, { RS = { 75, 0, 0 }, LS = { 70, 0, 0 } } },
+		{ h + 0.3, {} },
+	}
+end
+Anims.Crossbow = function(h)
+	return {
+		{ 0, {} },
+		{ h, { RS = { 88, 0, 0 }, LS = { 82, 0, -28 }, Neck = { 6, 0, 0 } } },
+		{ h + 0.06, { RS = { 105, 0, 0 }, LS = { 96, 0, -28 }, Root = { -6, 0, 0 } } },
+		{ h + 0.3, { RS = { 88, 0, 0 }, LS = { 82, 0, -28 } } },
+		{ h + 0.6, {} },
+	}
+end
+Anims.Puppet = function(h)
+	return {
+		{ 0, {} },
+		{ h * 0.7, { RS = { 85, 0, 35 }, LS = { 85, 0, -35 }, Neck = { 10, 0, 0 } } },
+		{ h, { RS = { 105, 0, 12 }, LS = { 105, 0, -12 } } },
+		{ h + 0.15, { RS = { 90, 0, 28 }, LS = { 90, 0, -28 } } },
+		{ h + 0.5, {} },
+	}
+end
+Anims.Hammer = Anims.Slam
+Anims.RiftStorm = Anims.Judgement
+Anims.RedSplash = Anims.HeavySlash
+Anims.Sickle = Anims.Slash
+Anims.Axe = Anims.HeavySlash
+Anims.Revolver = function(h)
+	return {
+		{ 0, {} },
+		{ h, { RS = { 95, 0, 0 }, LS = { 70, 0, 0 } } },
+		{ h + 0.05, { RS = { 112, 0, 0 }, LS = { 70, 0, 0 }, Root = { -3, 0, 0 } } },
+		{ h + 0.12, { RS = { 92, 0, 0 }, LS = { 95, 0, 0 } } },
+		{ h + 0.17, { RS = { 92, 0, 0 }, LS = { 112, 0, 0 }, Root = { -3, 0, 0 } } },
+		{ h + 0.45, {} },
+	}
+end
+
 local FIDGETS = {
+	DualDagger = { "Twirl", "LookAround", "Flex" },
+	Crossbow = { "Reload", "LookAround" },
+	Puppet = { "Stretch", "LookAround" },
+	Hammer = { "Flex", "Stretch", "LookAround" },
+	RiftStorm = { "LookAround", "Stretch" },
+	RedSplash = { "Twirl", "Flex" },
+	Sickle = { "Twirl", "LookAround" },
+	Revolver = { "Twirl", "Reload" },
+	Axe = { "Flex", "LookAround" },
 	Slash = { "Twirl", "LookAround", "Flex" },
 	HeavySlash = { "Twirl", "LookAround", "Stretch" },
 	Katana = { "Twirl", "LookAround" },
@@ -335,8 +388,8 @@ local function applyPose(rig, pose, t, phase)
 			if name == "RS" or name == "LS" then
 				local side = name == "RS" and 1 or -1
 				cf = cf * ANG(rad(breathe * 2), 0, rad(breathe * 1.5 * side))
-			elseif name == "WingR" or name == "WingL" then
-				local side = name == "WingR" and 1 or -1
+			elseif name:sub(1, 4) == "Wing" then
+				local side = name:sub(5, 5) == "R" and 1 or -1
 				cf = cf * ANG(0, math.sin(t * 2.4 + phase) * 0.12 * side, math.sin(t * 2.4 + phase) * 0.1 * side)
 			elseif name == "Neck" then
 				cf = cf * ANG(0, math.sin(t * 0.7 + phase) * 0.08, 0)
@@ -423,7 +476,7 @@ function Renderer.SpawnEnemy(data)
 	if Config.Enemies[typeId].IsBoss then
 		view.RoarT = os.clock() + 0.6
 		task.delay(0.6, function()
-			FX.Sound("Lunge", 0.8, 0.3)
+			FX.Sound("Boss", 1, 1)
 			FX.Shake(0.5, 0.9)
 		end)
 	end
@@ -468,6 +521,7 @@ local function deathAnim(view, reason)
 		return
 	end
 	FX.Poof(root.Position + V(0, 0.5, 0), FX.Colors.Neon, size)
+	FX.Sound("EnemyDeath", 1, 1 / math.max(size, 0.6), root.Position)
 	if def.IsBoss then
 		FX.Shockwave(root.Position - V(0, rig.HipHeight - 0.2, 0), 10 * size, 5)
 	end
@@ -803,30 +857,82 @@ function Renderer.OnAttack(p)
 		task.delay(delay, fn)
 	end
 
+	local impactColor = def.ImpactColor or FX.Colors.Neon
 	if def.AttackType == "Projectile" then
+		for si, id in ipairs(p.T or { firstId }) do
+			local travel = (p.TRS and p.TRS[si]) or p.TR or 0.2
+			at(h + (si - 1) * (p.SG or 0.12), function()
+				if not view.Rig or not view.Rig.Model.Parent then
+					return
+				end
+				local from = muzzlePos(view)
+				FX.Sound("Shoot", def.Projectile == "Bolt" and 0.6 or 1, def.Projectile == "Bullet" and 0.8 or 1, from)
+				FX.Projectile(def.Projectile, from, function()
+					return Renderer.EnemyCenter(id)
+				end, travel, function(pos)
+					local orb = def.Projectile == "Orb"
+					FX.Burst(pos, orb and FX.Colors.Neon or impactColor, orb and 8 or 4, 0.3, 5)
+					if orb then
+						FX.Sphere(pos, 1.4 + lv * 0.15, FX.Colors.Neon, 0.25)
+					end
+				end, lv)
+				if def.Projectile == "Bolt" or def.Projectile == "Bullet" then
+					FX.Sphere(from, 0.6, impactColor, 0.12)
+				end
+			end)
+		end
+	elseif def.AttackType == "Chain" then
+		-- лунный серп летит от цели к цели
+		local times = p.TT or {}
+		for i, id in ipairs(p.T or {}) do
+			local prevT = i == 1 and h or times[i - 1]
+			at(prevT, function()
+				if not view.Rig.Model.Parent then
+					return
+				end
+				local from = i == 1 and muzzlePos(view) or Renderer.EnemyCenter(p.T[i - 1])
+				if not from then
+					return
+				end
+				FX.Sound("Magic", 0.8, 1.3 + i * 0.1, from)
+				FX.Projectile("Moon", from, function()
+					return Renderer.EnemyCenter(id)
+				end, math.max((times[i] or prevT) - prevT, 0.05), function(pos)
+					FX.Burst(pos, impactColor, 6, 0.3, 6)
+					FX.Ring(pos - V(0, 1, 0), 2.5, impactColor, 0.3, 0.2)
+				end, lv)
+			end)
+		end
+	elseif def.AttackType == "Thread" then
 		at(h, function()
-			if not view.Rig or not view.Rig.Model.Parent then
+			if not view.Rig.Model.Parent then
 				return
 			end
-			local from = muzzlePos(view)
-			FX.Sound("Lunge", def.Projectile == "Bolt" and 0.12 or 0.25, def.Projectile == "Bolt" and 1.8 or 1.3, from)
-			FX.Projectile(def.Projectile, from, function()
-				return Renderer.EnemyCenter(firstId)
-			end, p.TR or 0.2, function(pos)
-				FX.Burst(pos, def.Projectile == "Orb" and FX.Colors.Neon or FX.Colors.Soft, def.Projectile == "Orb" and 8 or 4, 0.3, 5)
-				if def.Projectile == "Orb" then
-					FX.Sphere(pos, 1.4 + lv * 0.15, FX.Colors.Neon, 0.25)
+			FX.Sound("Magic", 0.8, 0.7, view.Pos)
+			for _, id in ipairs(p.T or {}) do
+				local target = Renderer.EnemyCenter(id)
+				if target then
+					FX.Thread(muzzlePos(view), target, FX.Colors.Soft)
 				end
-			end, lv)
-			if def.Projectile == "Bolt" then
-				FX.Sphere(from, 0.6, FX.Colors.Soft, 0.12)
+			end
+		end)
+	elseif def.AttackType == "Splash" then
+		at(h, function()
+			if view.Rig.Model.Parent then
+				FX.Sphere(muzzlePos(view), 2.2, FX.Colors.Red, 0.25)
+			end
+		end)
+	elseif def.AttackType == "Pierce" then
+		at(h, function()
+			if view.Rig.Model.Parent then
+				FX.Sphere(muzzlePos(view), 2, Color3.fromRGB(255, 190, 215), 0.3)
 			end
 		end)
 	elseif def.AttackType == "Laser" then
 		at(h, function()
 			local target = Renderer.EnemyCenter(firstId) or tpos
 			if target and view.Rig.Model.Parent then
-				FX.Sound("Lunge", 0.5, 0.7, target)
+				FX.Sound("Laser", 1, 1, target)
 				FX.Beam(muzzlePos(view), target, (lv >= 5) and 2.6 or (1.2 + lv * 0.2), (lv >= 5) and FX.Colors.Soft or FX.Colors.Neon, 0.45, lv >= 5)
 			end
 		end)
@@ -839,9 +945,17 @@ function Renderer.OnAttack(p)
 			local origin = view.Rig.Root.Position + V(0, 1, 0)
 			local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z))
 			local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
-			local big = view.UnitId == "AbyssOverlord"
-			FX.Arc(cf, reach, rad(15), rad(150), big and FX.Colors.Neon or FX.Colors.Soft, big and 1 or (0.4 + lv * 0.05), 0.3)
-			FX.Sound("Slash", 0.35, big and 0.7 or 1.1, target)
+			local big = view.UnitId == "AbyssOverlord" or p.PW
+			local arcColor = def.ImpactColor or (big and FX.Colors.Neon or FX.Colors.Soft)
+			if p.PW then
+				arcColor = FX.Colors.Pink
+				FX.Sphere(target, 2.2, FX.Colors.Pink, 0.25)
+			end
+			FX.Arc(cf, reach, rad(15), rad(150), arcColor, big and 1 or (0.4 + lv * 0.05), 0.3)
+			if def.Anim == "DualDagger" then
+				FX.Arc(cf * ANG(0, 0, rad(60)), reach * 0.9, rad(20), rad(140), FX.Colors.Neon, 0.35, 0.25)
+			end
+			FX.Sound(big and "HeavyHit" or "Slash", 1, 1, target)
 			FX.Burst(target, FX.Colors.Neon, big and 12 or 5, big and 0.6 or 0.3, big and 10 or 5)
 			if big then
 				FX.Ring(V(target.X, view.Pos.Y + 0.2, target.Z), 4, FX.Colors.Neon, 0.35, 0.3)
@@ -881,13 +995,13 @@ function Renderer.OnAttack(p)
 					local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z)) * ANG(0, 0, rad(i % 2 == 0 and 50 or -50))
 					local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
 					FX.Arc(cf, reach, rad(10), rad(140), lv >= 5 and FX.Colors.Pink or FX.Colors.Neon, 0.35 + lv * 0.05, 0.25)
-					FX.Sound("Slash", 0.35, 1.25, target)
+					FX.Sound("Slash", 1, 1.15, target)
 					if lv >= 3 then
 						FX.SlashMark(target, rad(i % 2 == 0 and 40 or -40), 5 + lv * 0.5, 0.35, FX.Colors.Neon, 0.3)
 					end
 				else
-					-- Void Emperor: вспышка на мече, сам разрез — в Impact
-					FX.Sphere(muzzlePos(view), 1.6, FX.Colors.Pink, 0.2)
+					-- Void Emperor / Rift Monarch: вспышка на оружии, сам удар — в Impact
+					FX.Sphere(muzzlePos(view), 1.6, def.ImpactKind == "Rift" and FX.Colors.Neon or FX.Colors.Pink, 0.2)
 				end
 			end)
 		end
@@ -901,7 +1015,31 @@ function Renderer.OnImpact(p)
 		FX.Shockwave(p.P, p.R, lv)
 	elseif k == "Reap" then
 		local view = unitViews[p.U]
-		FX.Reap(view and view.Pos or p.P, p.P, p.R, lv)
+		local def = view and Config.Units[view.UnitId]
+		FX.Reap(view and view.Pos or p.P, p.P, p.R, lv, def and def.ImpactColor)
+		FX.Sound("Slash", 1, 0.8, p.P)
+	elseif k == "Crystal" then
+		FX.CrystalBurst(p.P, p.R)
+	elseif k == "Hammer" then
+		FX.Hammer(p.P, p.R, lv)
+	elseif k == "Shard" then
+		FX.FallingShard(p.P, p.R)
+	elseif k == "Rift" then
+		FX.RiftPortal(p.P, lv)
+	elseif k == "BigRift" then
+		FX.BigRift(p.P, p.R)
+	elseif k == "Splash" then
+		local view = unitViews[p.U]
+		FX.RedSplash(p.P, p.R, view and muzzlePos(view))
+	elseif k == "Cleave" then
+		local view = unitViews[p.U]
+		FX.Cleave(view and view.Pos or p.P, p.P, p.R)
+	elseif k == "BloodMoonFall" then
+		FX.BloodMoonFall(p.P, p.R, p.DL)
+	elseif k == "BloodMoon" then
+		FX.BloodMoonBoom(p.P, p.R)
+	elseif k == "Pierce" then
+		FX.PierceBeam(p.P, p.E)
 	elseif k == "Smash" then
 		local g = Vector3.new(p.P.X, p.P.Y + 0.2, p.P.Z)
 		FX.Ring(g, p.R, FX.Colors.Neon, 0.4, 0.4, 1, 0.1)

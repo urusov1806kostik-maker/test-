@@ -35,6 +35,8 @@ local function defaultProfile()
 		Equipped = {},
 		Stats = { Wins = 0, BestWave = 0, Summons = 0 },
 		Settings = {},
+		LastDaily = 0,
+		Receipts = {},
 	}
 	for i, id in ipairs(s.StarterUnits) do
 		p.Inventory[id] = 1
@@ -53,6 +55,8 @@ local function sanitize(p)
 	p.Equipped = type(p.Equipped) == "table" and p.Equipped or d.Equipped
 	p.Stats = type(p.Stats) == "table" and p.Stats or d.Stats
 	p.Settings = type(p.Settings) == "table" and p.Settings or {}
+	p.LastDaily = tonumber(p.LastDaily) or 0
+	p.Receipts = type(p.Receipts) == "table" and p.Receipts or {}
 	-- убрать неизвестные юниты
 	for id in pairs(p.Inventory) do
 		if not Config.Units[id] then
@@ -152,65 +156,77 @@ function DataService.Snapshot(player)
 		Equipped = eq,
 		Stats = deepCopy(p.Stats),
 		Settings = deepCopy(p.Settings or {}),
+		DailyReadyAt = (tonumber(p.LastDaily) or 0) + Config.Settings.DailyCooldown,
 	}
 end
 
 ------------------------------------------------------------------------
--- SUMMON
+-- КЕЙСЫ (SUMMON)
 ------------------------------------------------------------------------
-local byRarity = {}
-for _, id in ipairs(Config.UnitOrder) do
-	local r = Config.Units[id].Rarity
-	byRarity[r] = byRarity[r] or {}
-	table.insert(byRarity[r], id)
-end
-
 local rng = Random.new()
 
-local function rollRarity()
+local function unitsByRarity(case)
+	local map = {}
+	for _, id in ipairs(case.Units) do
+		local r = Config.Units[id].Rarity
+		map[r] = map[r] or {}
+		table.insert(map[r], id)
+	end
+	return map
+end
+
+local function rollRarity(case, pool)
 	local total = 0
 	for _, name in ipairs(Config.RarityOrder) do
-		total = total + Config.Rarities[name].Rate
+		if pool[name] then
+			total = total + (case.Rates[name] or 0)
+		end
 	end
 	local roll = rng:NextNumber() * total
 	local acc = 0
 	for _, name in ipairs(Config.RarityOrder) do
-		acc = acc + Config.Rarities[name].Rate
-		if roll <= acc then
-			return name
+		if pool[name] then
+			acc = acc + (case.Rates[name] or 0)
+			if roll <= acc then
+				return name
+			end
 		end
 	end
 	return "Common"
 end
 
-function DataService.Summon(player, count)
+function DataService.Summon(player, caseId, count)
 	local p = DataService.Profiles[player]
 	if not p then
 		return false, "Профиль не загружен"
 	end
+	local case = Config.Cases[caseId]
+	if not case then
+		return false, "Неизвестный кейс"
+	end
 	local s = Config.Settings
-	local cost = (count == 10) and s.SummonCost10 or s.SummonCost1
 	count = (count == 10) and 10 or 1
+	local cost = (count == 10) and case.Cost10 or case.Cost1
 	if p.Gems < cost then
-		return false, "Недостаточно гемов"
+		return false, "Недостаточно кристаллов"
 	end
 	p.Gems = p.Gems - cost
 	player:SetAttribute("Gems", p.Gems)
+	local pool = unitsByRarity(case)
 	local results = {}
 	local bestOrder = 0
 	for i = 1, count do
-		local rarity = rollRarity()
+		local rarity = rollRarity(case, pool)
 		-- гарантия: в x10 минимум один Rare+
-		if count == 10 and i == 10 and bestOrder < 2 then
+		if count == 10 and i == 10 and bestOrder < 2 and pool.Rare then
 			rarity = "Rare"
 		end
 		bestOrder = math.max(bestOrder, Config.Rarities[rarity].Order)
-		local pool = byRarity[rarity]
-		local id = pool[rng:NextInteger(1, #pool)]
+		local list = pool[rarity]
+		local id = list[rng:NextInteger(1, #list)]
 		local isNew = (p.Inventory[id] or 0) == 0
 		p.Inventory[id] = (p.Inventory[id] or 0) + 1
 		results[i] = { Id = id, New = isNew }
-		-- автоэкипировка новых юнитов в свободный слот
 		if isNew then
 			for slot = 1, s.EquipSlots do
 				if not p.Equipped[slot] then
@@ -223,6 +239,44 @@ function DataService.Summon(player, count)
 	p.Stats.Summons = (p.Stats.Summons or 0) + count
 	DataService.Save(player)
 	return true, results
+end
+
+------------------------------------------------------------------------
+-- МАГАЗИН
+------------------------------------------------------------------------
+function DataService.ClaimDaily(player)
+	local p = DataService.Profiles[player]
+	if not p then
+		return false, "Профиль не загружен"
+	end
+	local now = os.time()
+	local last = tonumber(p.LastDaily) or 0
+	local left = (last + Config.Settings.DailyCooldown) - now
+	if left > 0 then
+		return false, string.format("Подарок будет через %d ч %d мин", left // 3600, (left % 3600) // 60)
+	end
+	p.LastDaily = now
+	DataService.AddGems(player, Config.Settings.DailyGems)
+	DataService.Save(player, true)
+	return true, Config.Settings.DailyGems
+end
+
+-- Выдача кристаллов за покупку. receiptId защищает от повторной выдачи.
+function DataService.GrantPurchase(player, gems, receiptId)
+	local p = DataService.Profiles[player]
+	if not p then
+		return false
+	end
+	p.Receipts = p.Receipts or {}
+	if receiptId and p.Receipts[receiptId] then
+		return true
+	end
+	if receiptId then
+		p.Receipts[receiptId] = true
+	end
+	DataService.AddGems(player, gems)
+	DataService.Save(player, true)
+	return true
 end
 
 function DataService.Equip(player, unitId, slot)

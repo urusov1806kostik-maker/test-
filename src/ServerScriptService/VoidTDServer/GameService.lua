@@ -165,6 +165,8 @@ local function spawnEnemy(typeId, startDist, lateral)
 		IsBoss = def.IsBoss == true,
 		SlowUntil = 0,
 		SlowAmount = 0,
+		Dots = {},
+		NextDot = 0,
 		Alive = true,
 		Wave = wave,
 	}
@@ -594,19 +596,85 @@ local function valid(u, myMatch)
 	return u.Alive and matchId == myMatch
 end
 
-local function aoeHit(u, center, radius, stats, kind)
-	-- один удар = один набор целей: каждый враг получает урон ровно один раз
+------------------------------------------------------------------------
+-- ЭФФЕКТЫ НА ВРАГАХ: периодический урон (кровотечение, нити) и замедление
+------------------------------------------------------------------------
+local function applyDot(e, dps, duration, u, kind)
+	if not e.Alive or not dps or dps <= 0 then
+		return
+	end
+	-- один источник обновляет свой эффект, а не стакает бесконечно
+	local key = tostring(u and u.Uid or 0) .. ":" .. kind
+	e.Dots[key] = { Dps = dps, Until = now() + duration, Unit = u }
+end
+
+local function applySlow(e, amount, duration)
+	if not e.Alive or not amount then
+		return
+	end
+	local t = now()
+	amount = amount * (e.IsBoss and S.BossSlowResist or 1)
+	if e.SlowUntil < t then
+		e.SlowAmount = 0
+	end
+	e.SlowAmount = math.max(e.SlowAmount, amount)
+	e.SlowUntil = math.max(e.SlowUntil, t + duration)
+end
+
+local function updateDots(t)
+	for _, e in pairs(enemies) do
+		if next(e.Dots) and t >= e.NextDot then
+			e.NextDot = t + 0.5
+			local total, unit = 0, nil
+			for key, d in pairs(e.Dots) do
+				if t >= d.Until then
+					e.Dots[key] = nil
+				else
+					total = total + d.Dps * 0.5
+					unit = unit or d.Unit
+				end
+			end
+			if total > 0 then
+				damageEnemy(e, total, false, unit, true)
+			end
+		end
+	end
+end
+
+-- AOE: каждый враг получает урон ровно один раз за удар.
+-- opts: Exclude (враг без урона), Mult, Bleed/BleedTime, Color, Extra (доп. поля события)
+local function aoeHit(u, center, radius, stats, kind, opts)
+	opts = opts or {}
 	local hitSet = {}
 	for _, e in pairs(enemies) do
-		if e.Alive and PathUtil.FlatDistance(e.Pos, center) <= radius + (e.IsBoss and 1.5 or 0.5) then
+		if e.Alive and e ~= opts.Exclude and PathUtil.FlatDistance(e.Pos, center) <= radius + (e.IsBoss and 1.5 or 0.5) then
 			hitSet[#hitSet + 1] = e
 		end
 	end
-	Remotes.Impact:FireAllClients({ K = kind, P = center, R = radius, L = u.Level, U = u.Uid, N = #hitSet })
+	local payload = { K = kind, P = center, R = radius, L = u.Level, U = u.Uid, N = #hitSet }
+	for k, v in pairs(opts.Extra or {}) do
+		payload[k] = v
+	end
+	Remotes.Impact:FireAllClients(payload)
 	for _, e in ipairs(hitSet) do
 		local dmg, crit = rollDamage(stats)
-		damageEnemy(e, dmg, crit, u)
+		if opts.Bleed then
+			applyDot(e, opts.Bleed, opts.BleedTime or 3, u, "Bleed")
+		end
+		damageEnemy(e, dmg * (opts.Mult or 1), crit, u)
 	end
+	return hitSet
+end
+
+local function distToSegment(p, a, b)
+	local abx, abz = b.X - a.X, b.Z - a.Z
+	local lenSq = abx * abx + abz * abz
+	local t = 0
+	if lenSq > 0 then
+		t = math.clamp(((p.X - a.X) * abx + (p.Z - a.Z) * abz) / lenSq, 0, 1)
+	end
+	local cx, cz = a.X + abx * t, a.Z + abz * t
+	return math.sqrt((p.X - cx) ^ 2 + (p.Z - cz) ^ 2)
 end
 
 local function attack(u, stats, list)
@@ -614,39 +682,134 @@ local function attack(u, stats, list)
 	local myMatch = matchId
 	local hitDelay = def.HitDelay or 0.2
 	local target = list[1]
+	local atype = def.AttackType
 
-	if def.AttackType == "Melee" or def.AttackType == "Laser" then
-		fireAttack(u, { target.Id }, { D = hitDelay })
-		task.delay(hitDelay, function()
-			if valid(u, myMatch) and target.Alive then
-				local dmg, crit = rollDamage(stats)
-				damageEnemy(target, dmg, crit, u)
+	local function later(delay, fn)
+		task.delay(delay, function()
+			if valid(u, myMatch) then
+				fn()
 			end
 		end)
-	elseif def.AttackType == "Projectile" then
-		local travel = PathUtil.FlatDistance(u.Pos, target.Pos) / (def.ProjectileSpeed or 80)
-		fireAttack(u, { target.Id }, { D = hitDelay, TR = travel })
-		task.delay(hitDelay + travel, function()
-			if valid(u, myMatch) and target.Alive then
-				local dmg, crit = rollDamage(stats)
-				damageEnemy(target, dmg, crit, u)
+	end
+
+	-- урон + эффекты при попадании (кровотечение)
+	local function strike(e, mult, forceCrit)
+		if not e or not e.Alive then
+			return
+		end
+		local dmg, crit = rollDamage(stats)
+		if stats.Bleed then
+			applyDot(e, stats.Bleed, stats.BleedTime or 3, u, "Bleed")
+		end
+		damageEnemy(e, dmg * (mult or 1), crit or forceCrit, u)
+	end
+
+	if atype == "Melee" or atype == "Laser" then
+		local mult, power = 1, false
+		if def.EveryNth then
+			u.HitCount = (u.HitCount or 0) + 1
+			if u.HitCount % def.EveryNth.N == 0 then
+				mult, power = def.EveryNth.Mult, true
+			end
+		end
+		fireAttack(u, { target.Id }, { D = hitDelay, PW = power })
+		later(hitDelay, function()
+			strike(target, mult, power)
+		end)
+	elseif atype == "Projectile" then
+		local shots = stats.Shots or 1
+		local ids, travels = {}, {}
+		for s = 1, shots do
+			local e = list[((s - 1) % #list) + 1]
+			ids[s] = e.Id
+			travels[s] = PathUtil.FlatDistance(u.Pos, e.Pos) / (def.ProjectileSpeed or 80)
+		end
+		fireAttack(u, ids, { D = hitDelay, TR = travels[1], TRS = travels, SG = 0.12 })
+		for s = 1, shots do
+			local e = list[((s - 1) % #list) + 1]
+			later(hitDelay + (s - 1) * 0.12 + travels[s], function()
+				if not e.Alive then
+					return
+				end
+				local center = e.Pos
+				strike(e)
+				if stats.Explode then
+					aoeHit(u, center, stats.Explode, stats, "Crystal", { Exclude = e, Mult = def.ExplodeMult or 0.5 })
+				end
+			end)
+		end
+	elseif atype == "Chain" then
+		-- лунный серп отскакивает к ближайшим врагам
+		local seq, times = { target }, {}
+		local used = { [target] = true }
+		local speed = def.ProjectileSpeed or 60
+		times[1] = hitDelay + PathUtil.FlatDistance(u.Pos, target.Pos) / speed
+		for i = 2, stats.Bounces or 3 do
+			local prev = seq[i - 1]
+			local best, bestD
+			for _, e in pairs(enemies) do
+				if e.Alive and not used[e] then
+					local d = PathUtil.FlatDistance(e.Pos, prev.Pos)
+					if d <= (def.BounceRange or 12) and (not bestD or d < bestD) then
+						best, bestD = e, d
+					end
+				end
+			end
+			if not best then
+				break
+			end
+			used[best] = true
+			seq[i] = best
+			times[i] = times[i - 1] + bestD / speed
+		end
+		local ids = {}
+		for i, e in ipairs(seq) do
+			ids[i] = e.Id
+		end
+		fireAttack(u, ids, { D = hitDelay, TT = times })
+		for i, e in ipairs(seq) do
+			later(times[i], function()
+				strike(e, (def.BounceMult or 0.8) ^ (i - 1))
+			end)
+		end
+	elseif atype == "Thread" then
+		local ids, targets = {}, {}
+		for i = 1, math.min(stats.Targets or 1, #list) do
+			targets[i] = list[i]
+			ids[i] = list[i].Id
+		end
+		fireAttack(u, ids, { D = hitDelay })
+		later(hitDelay, function()
+			for _, e in ipairs(targets) do
+				if e.Alive then
+					applySlow(e, stats.Slow, stats.SlowTime or 1.5)
+					applyDot(e, stats.Dot, stats.DotTime or 3, u, "Thread")
+					strike(e)
+				end
 			end
 		end)
-	elseif def.AttackType == "AOE" then
+	elseif atype == "AOE" then
 		local saved = target.Pos
 		fireAttack(u, { target.Id }, { D = hitDelay })
-		task.delay(hitDelay, function()
-			if not valid(u, myMatch) then
-				return
-			end
+		later(hitDelay, function()
 			local center = target.Alive and target.Pos or saved
-			local kind = def.ImpactKind or "Reap"
-			aoeHit(u, center, stats.AOERadius or 6, stats, kind)
+			aoeHit(u, center, stats.AOERadius or 6, stats, def.ImpactKind or "Reap", { Bleed = stats.Bleed, BleedTime = stats.BleedTime })
+			-- падающие звёздные осколки
+			for k = 1, stats.Shards or 0 do
+				later(0.35 + k * 0.15, function()
+					local pool = candidates(u, stats.Range + 4)
+					if #pool > 0 then
+						local e = pool[math.random(1, #pool)]
+						aoeHit(u, e.Pos, stats.ShardRadius or 4, stats, "Shard", { Mult = stats.ShardMult or 0.6 })
+					end
+				end)
+			end
 		end)
-	elseif def.AttackType == "MultiHit" then
+	elseif atype == "MultiHit" then
 		local hits = stats.Hits or 1
 		local interval = def.HitInterval or 0.15
-		local spread = (u.Id == "VoidEmperor")
+		local spread = def.Spread or (u.Id == "VoidEmperor")
+		local kind = def.ImpactKind or "Judgement"
 		local ids = {}
 		local plan = {}
 		for h = 1, hits do
@@ -656,26 +819,74 @@ local function attack(u, stats, list)
 		end
 		fireAttack(u, ids, { D = hitDelay, I = interval })
 		for h = 1, hits do
-			task.delay(hitDelay + (h - 1) * interval, function()
-				if not valid(u, myMatch) then
-					return
-				end
+			later(hitDelay + (h - 1) * interval, function()
 				local e = plan[h]
 				if not e.Alive then
-					-- цель умерла — ищем следующую в радиусе
-					local fresh = candidates(u, stats.Range)
-					e = fresh[1]
+					e = candidates(u, stats.Range)[1]
 				end
 				if e then
-					local dmg, crit = rollDamage(stats)
 					if spread then
-						Remotes.Impact:FireAllClients({ K = "Judgement", P = e.Pos, L = u.Level, U = u.Uid, H = h })
+						Remotes.Impact:FireAllClients({ K = kind, P = e.Pos, L = u.Level, U = u.Uid, H = h })
 					end
-					damageEnemy(e, dmg, crit, u)
+					strike(e)
 				end
 			end)
 		end
+		if stats.BigRift then
+			later(hitDelay + hits * interval + 0.2, function()
+				local pool = candidates(u, stats.Range)
+				if #pool > 0 then
+					aoeHit(u, pool[1].Pos, stats.BigRift, stats, "BigRift", { Mult = stats.BigRiftMult or 1.5 })
+				end
+			end)
+		end
+	elseif atype == "Splash" then
+		-- RED SPLASH: цель 100%, остальные в радиусе 50% (цель второй раз не задевается)
+		fireAttack(u, { target.Id }, { D = hitDelay })
+		local saved = target.Pos
+		later(hitDelay, function()
+			local center = target.Alive and target.Pos or saved
+			local primary = target.Alive and target or nil
+			strike(primary)
+			aoeHit(u, center, stats.AOERadius or 8, stats, "Splash", { Exclude = target, Mult = def.SplashMult or 0.5 })
+		end)
+	elseif atype == "Pierce" then
+		-- луч насквозь: все враги на линии от юнита через цель
+		local dir = Vector3.new(target.Pos.X - u.Pos.X, 0, target.Pos.Z - u.Pos.Z)
+		if dir.Magnitude < 0.1 then
+			dir = Vector3.new(0, 0, -1)
+		end
+		local endPos = u.Pos + dir.Unit * (stats.Range + 4)
+		fireAttack(u, { target.Id }, { D = hitDelay, E = endPos })
+		later(hitDelay, function()
+			Remotes.Impact:FireAllClients({ K = "Pierce", P = u.Pos, E = endPos, L = u.Level, U = u.Uid })
+			local half = (def.PierceWidth or 3) / 2
+			local hitSet = {}
+			for _, e in pairs(enemies) do
+				if e.Alive and distToSegment(e.Pos, u.Pos, endPos) <= half + (e.IsBoss and 1.2 or 0) then
+					hitSet[#hitSet + 1] = e
+				end
+			end
+			for _, e in ipairs(hitSet) do
+				strike(e)
+			end
+		end)
 	end
+end
+
+local function castBloodMoon(u, stats, list)
+	local bm = stats.BloodMoon
+	local myMatch = matchId
+	local target = list[1]
+	local pos = PathUtil.PositionAt(math.min(target.Dist + 3, PathUtil.Length - 1))
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = { target.Id }, L = u.Level, D = 0.6, AB = true })
+	Remotes.Impact:FireAllClients({ K = "BloodMoonFall", P = pos, R = bm.Radius, L = u.Level, U = u.Uid, DL = 1.0 })
+	task.delay(1.0, function()
+		if valid(u, myMatch) then
+			local big = { Damage = stats.Damage * (bm.Mult or 3) }
+			aoeHit(u, pos, bm.Radius, big, "BloodMoon", { Bleed = bm.Bleed, BleedTime = bm.BleedTime })
+		end
+	end)
 end
 
 local function castBlackHole(u, stats, list)
@@ -725,6 +936,14 @@ local function updateUnits(t)
 				castBlackHole(u, stats, list)
 				u.NextAbility = t + stats.BlackHole.Cooldown
 				u.NextAttack = math.max(u.NextAttack, t + 0.9)
+			end
+		end
+		if stats.BloodMoon and t >= u.NextAbility then
+			local list = candidates(u, stats.Range + (u.Def.AbilityExtraRange or 6))
+			if #list > 0 then
+				castBloodMoon(u, stats, list)
+				u.NextAbility = t + stats.BloodMoon.Cooldown
+				u.NextAttack = math.max(u.NextAttack, t + 1.0)
 			end
 		end
 		if t >= u.NextAttack then
@@ -793,6 +1012,7 @@ local function step(dt)
 	if phase == "Wave" or phase == "Intermission" or phase == "Prep" then
 		updateEnemies(t, dt)
 		updateZones(t)
+		updateDots(t)
 		updateUnits(t)
 	end
 	if phase == "Wave" and not waveSpawning and next(enemies) == nil then
@@ -837,7 +1057,11 @@ resetMatch = function()
 		if inMatch(pl) then
 			pl:SetAttribute("InMatch", false)
 			setMoney(pl, 0)
-			toLobby(pl)
+			-- чёрный экран-переход, затем телепорт в лобби
+			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = "ЛОББИ" })
+			task.delay(0.45, function()
+				toLobby(pl)
+			end)
 		end
 	end
 	notifyAll({ Type = "Reset" })

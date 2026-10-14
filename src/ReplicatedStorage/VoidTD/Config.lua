@@ -35,6 +35,9 @@ Config.Settings = {
 	VictoryGems = 1000,
 	BossSlowResist = 0.5,         -- боссы получают только 50% силы замедления
 	StarterUnits = { "VoidSoldier", "ShadowArcher", "LostMage" },
+	DailyGems = 150,              -- бесплатные кристаллы в магазине раз в 20 часов
+	DailyCooldown = 20 * 3600,
+	ShopTestMode = true,          -- в Studio покупка с ProductId = 0 выдаёт кристаллы бесплатно (для теста)
 	DataStoreName = "VoidTD_Data_v1",
 	SyncRate = 0.1,               -- как часто сервер рассылает позиции врагов
 }
@@ -42,7 +45,7 @@ Config.Settings = {
 ------------------------------------------------------------------------
 -- РЕДКОСТИ
 ------------------------------------------------------------------------
-Config.RarityOrder = { "Common", "Rare", "Epic", "Legendary", "Mythic" }
+Config.RarityOrder = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret" }
 
 Config.Rarities = {
 	-- Rate — шанс выпадения в Summon (в процентах, сумма = 100)
@@ -51,6 +54,80 @@ Config.Rarities = {
 	Epic      = { Order = 3, Color = Color3.fromRGB(170, 80, 255),  Rate = 5.5, PlacementLimit = 4 },
 	Legendary = { Order = 4, Color = Color3.fromRGB(255, 195, 50),  Rate = 1.3, PlacementLimit = 3 },
 	Mythic    = { Order = 5, Color = Color3.fromRGB(235, 40, 130),  Rate = 0.2, PlacementLimit = 2 },
+	-- Secret есть только в новых кейсах (шанс задаётся в Config.Cases)
+	Secret    = { Order = 6, Color = Color3.fromRGB(255, 25, 45),   Rate = 0,   PlacementLimit = 1 },
+}
+
+------------------------------------------------------------------------
+-- КЕЙСЫ (Summon). Rates — шансы редкостей в процентах, сумма = 100.
+------------------------------------------------------------------------
+Config.CaseOrder = { "VoidCase", "ShatteredReality", "BloodMoon" }
+
+Config.Cases = {
+	VoidCase = {
+		Name = "VOID CASE", Color = Color3.fromRGB(170, 80, 255),
+		Description = "Оригинальные воины Пустоты.",
+		Cost1 = 50, Cost10 = 450,
+		Rates = { Common = 72, Rare = 21, Epic = 5.5, Legendary = 1.3, Mythic = 0.2 },
+		Units = { "VoidSoldier", "ShadowArcher", "LostMage", "VoidKnight", "DarkGunner", "AbyssReaper",
+			"CorruptedSamurai", "EclipseGuardian", "FallenAngel", "VoidEmperor", "AbyssOverlord" },
+	},
+	ShatteredReality = {
+		Name = "SHATTERED REALITY", Color = Color3.fromRGB(120, 40, 210),
+		Description = "Расколотая реальность. Шанс SECRET: 0.1%",
+		Cost1 = 80, Cost10 = 720,
+		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
+		Units = { "RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer" },
+	},
+	BloodMoon = {
+		Name = "BLOOD MOON", Color = Color3.fromRGB(210, 30, 50),
+		Description = "Кровавая луна. Шанс SECRET: 0.1%",
+		Cost1 = 100, Cost10 = 900,
+		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
+		Units = { "BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse" },
+	},
+}
+
+------------------------------------------------------------------------
+-- МАГАЗИН КРИСТАЛЛОВ
+-- ProductId — Developer Product из Creator Hub (Monetization → Developer Products).
+-- Пока ProductId = 0 и включён ShopTestMode, в Studio покупка бесплатная (для проверки).
+------------------------------------------------------------------------
+Config.Shop = {
+	{ Key = "Gems100",  Gems = 100,  Robux = 25,  ProductId = 0, Title = "Горсть кристаллов" },
+	{ Key = "Gems550",  Gems = 550,  Robux = 99,  ProductId = 0, Title = "Мешок кристаллов", Bonus = "+10%" },
+	{ Key = "Gems1200", Gems = 1200, Robux = 199, ProductId = 0, Title = "Сундук кристаллов", Bonus = "+20%" },
+	{ Key = "Gems2600", Gems = 2600, Robux = 399, ProductId = 0, Title = "Груда кристаллов", Bonus = "+30%" },
+	{ Key = "Gems7000", Gems = 7000, Robux = 999, ProductId = 0, Title = "Сокровищница Пустоты", Bonus = "+40%" },
+}
+
+------------------------------------------------------------------------
+-- ЗВУКИ. Custom — свой звук "rbxassetid://ID" (файлы для загрузки лежат в assets/sounds).
+-- Пока Custom пустой, играет встроенный звук Roblox с обработкой (Pitch).
+------------------------------------------------------------------------
+Config.Sounds = {
+	Slash      = { Custom = "", Id = "rbxasset://sounds/swordslash.wav",           Volume = 0.35, Pitch = 1.1 },
+	HeavyHit   = { Custom = "", Id = "rbxasset://sounds/swordslash.wav",           Volume = 0.5,  Pitch = 0.65 },
+	Shoot      = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.2,  Pitch = 1.6 },
+	Laser      = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.45, Pitch = 0.7 },
+	Magic      = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.3,  Pitch = 0.8 },
+	Explosion  = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.6,  Pitch = 0.45 },
+	Place      = { Custom = "", Id = "rbxasset://sounds/unsheath.wav",             Volume = 0.5,  Pitch = 1 },
+	Upgrade    = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.45, Pitch = 1.3 },
+	Sell       = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.4,  Pitch = 0.6 },
+	Click      = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.2,  Pitch = 1.8 },
+	WaveStart  = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.4,  Pitch = 1 },
+	Boss       = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.8,  Pitch = 0.3 },
+	CoreHit    = { Custom = "", Id = "rbxasset://sounds/swordslash.wav",           Volume = 0.5,  Pitch = 0.4 },
+	Victory    = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.6,  Pitch = 1.2 },
+	Defeat     = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.6,  Pitch = 0.45 },
+	CaseShake  = { Custom = "", Id = "rbxasset://sounds/unsheath.wav",             Volume = 0.4,  Pitch = 0.7 },
+	CaseOpen   = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.7,  Pitch = 0.5 },
+	Reveal     = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.35, Pitch = 1 },
+	Secret     = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.9,  Pitch = 0.25 },
+	Purchase   = { Custom = "", Id = "rbxasset://sounds/electronicpingshort.wav",  Volume = 0.5,  Pitch = 1.5 },
+	Portal     = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.5,  Pitch = 0.35 },
+	EnemyDeath = { Custom = "", Id = "rbxasset://sounds/swordlunge.wav",           Volume = 0.15, Pitch = 2.2 },
 }
 
 Config.TargetModes = { "First", "Last", "Strongest", "Weakest", "Closest" }
@@ -88,13 +165,16 @@ Config.Difficulties = {
 -- ЛОББИ: остров рядом с картой. Встань в круг, чтобы открыть меню.
 ------------------------------------------------------------------------
 Config.Lobby = {
-	Center = Vector3.new(0, 60, 400),
-	Radius = 58,
-	Spawn = Vector3.new(0, 60, 432),
+	Center = Vector3.new(0, 60, 440),
+	Radius = 95,
+	Spawn = Vector3.new(0, 60, 510),
 	Zones = {
-		Summon = { Offset = Vector3.new(-32, 0, 6), Radius = 7, Title = "SUMMON", Color = Color3.fromRGB(255, 70, 180) },
-		Units  = { Offset = Vector3.new(32, 0, 6),  Radius = 7, Title = "ЮНИТЫ",  Color = Color3.fromRGB(80, 170, 255) },
-		Play   = { Offset = Vector3.new(0, 0, -30), Radius = 8, Title = "ИГРАТЬ", Color = Color3.fromRGB(180, 80, 255) },
+		Play  = { Offset = Vector3.new(0, 0, -62), Radius = 9, Title = "ИГРАТЬ", Color = Color3.fromRGB(180, 80, 255) },
+		Units = { Offset = Vector3.new(64, 0, 8),  Radius = 8, Title = "ЮНИТЫ",  Color = Color3.fromRGB(80, 170, 255) },
+		-- кейсы: Case = ключ из Config.Cases
+		Case_VoidCase         = { Offset = Vector3.new(-58, 0, -22), Radius = 7, Title = "VOID CASE",         Color = Color3.fromRGB(170, 80, 255), Case = "VoidCase" },
+		Case_ShatteredReality = { Offset = Vector3.new(-70, 0, 6),   Radius = 7, Title = "SHATTERED REALITY", Color = Color3.fromRGB(130, 50, 230), Case = "ShatteredReality" },
+		Case_BloodMoon        = { Offset = Vector3.new(-58, 0, 34),  Radius = 7, Title = "BLOOD MOON",        Color = Color3.fromRGB(230, 40, 60),  Case = "BloodMoon" },
 	},
 }
 Config.BattleSpawn = Vector3.new(10, 60, 10)
@@ -111,6 +191,10 @@ Config.UnitOrder = {
 	"AbyssReaper", "CorruptedSamurai",
 	"EclipseGuardian", "FallenAngel",
 	"VoidEmperor", "AbyssOverlord",
+	-- Shattered Reality Case
+	"RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer",
+	-- Blood Moon Case
+	"BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse",
 }
 
 Config.Units = {
@@ -255,6 +339,179 @@ Config.Units = {
 				BlackHole = { Cooldown = 8,  Duration = 7.0, Radius = 14, Tick = 0.5, TickDamage = 285, Slow = 0.60 } },
 		},
 		BlackHoleExtraRange = 11, -- чёрная дыра достаёт дальше обычной атаки
+	},
+
+	--------------------------------------------------------------------
+	-- SHATTERED REALITY CASE
+	--------------------------------------------------------------------
+	RiftScout = {
+		Name = "Rift Scout", Rarity = "Common", AttackType = "Melee", Case = "ShatteredReality",
+		Description = "Разведчик с двумя кинжалами. Каждый 5-й удар наносит 150% урона.",
+		Anim = "DualDagger", HitDelay = 0.12, Scale = 1.0, DefaultTarget = "First",
+		EveryNth = { N = 5, Mult = 1.5 },
+		Levels = {
+			{ Damage = 9,  Range = 11, Cooldown = 0.55, Cost = 200 },
+			{ Damage = 13, Range = 11, Cooldown = 0.52, Cost = 150 },
+			{ Damage = 18, Range = 12, Cooldown = 0.48, Cost = 280 },
+			{ Damage = 26, Range = 12, Cooldown = 0.44, Cost = 450 },
+			{ Damage = 38, Range = 13, Cooldown = 0.40, Cost = 700 },
+		},
+	},
+	CrystalHunter = {
+		Name = "Crystal Hunter", Rarity = "Rare", AttackType = "Projectile", Case = "ShatteredReality",
+		Description = "Кристальный арбалет. Кристаллы взрываются по области. На 5-м уровне — двойной выстрел.",
+		Anim = "Crossbow", HitDelay = 0.2, ProjectileSpeed = 110, Projectile = "Crystal", Scale = 1.0, DefaultTarget = "First",
+		ExplodeMult = 0.5, ImpactColor = Color3.fromRGB(80, 170, 255),
+		Levels = {
+			{ Damage = 30,  Range = 22, Cooldown = 1.10, Cost = 800,  Explode = 4,   Shots = 1 },
+			{ Damage = 44,  Range = 23, Cooldown = 1.05, Cost = 550,  Explode = 4.5, Shots = 1 },
+			{ Damage = 64,  Range = 24, Cooldown = 1.00, Cost = 900,  Explode = 5,   Shots = 1 },
+			{ Damage = 92,  Range = 26, Cooldown = 0.95, Cost = 1400, Explode = 5.5, Shots = 1 },
+			{ Damage = 130, Range = 28, Cooldown = 0.90, Cost = 2200, Explode = 6,   Shots = 2 },
+		},
+	},
+	VoidPuppeteer = {
+		Name = "Void Puppeteer", Rarity = "Epic", AttackType = "Thread", Case = "ShatteredReality",
+		Description = "Кукловод. Нити замедляют и наносят периодический урон. На 5-м уровне — 3 цели.",
+		Anim = "Puppet", HitDelay = 0.25, Scale = 1.05, DefaultTarget = "First",
+		Levels = {
+			{ Damage = 35,  Range = 16, Cooldown = 1.3,  Cost = 1600, Targets = 1, Slow = 0.30, SlowTime = 1.5, Dot = 15, DotTime = 3 },
+			{ Damage = 50,  Range = 16, Cooldown = 1.25, Cost = 1100, Targets = 1, Slow = 0.35, SlowTime = 1.5, Dot = 22, DotTime = 3 },
+			{ Damage = 72,  Range = 17, Cooldown = 1.2,  Cost = 1800, Targets = 2, Slow = 0.40, SlowTime = 1.6, Dot = 32, DotTime = 3 },
+			{ Damage = 105, Range = 18, Cooldown = 1.1,  Cost = 2800, Targets = 2, Slow = 0.45, SlowTime = 1.7, Dot = 46, DotTime = 3 },
+			{ Damage = 150, Range = 19, Cooldown = 1.0,  Cost = 4200, Targets = 3, Slow = 0.50, SlowTime = 1.8, Dot = 68, DotTime = 3 },
+		},
+	},
+	Starbreaker = {
+		Name = "Starbreaker", Rarity = "Legendary", AttackType = "AOE", ImpactKind = "Hammer", Case = "ShatteredReality",
+		Description = "Разрушитель звёзд. Удар молотом — круговой взрыв. С 3-го уровня падают звёздные осколки.",
+		Ability = "STAR SMASH",
+		Anim = "Hammer", HitDelay = 0.55, Scale = 1.3, DefaultTarget = "First",
+		Levels = {
+			{ Damage = 150, Range = 14, Cooldown = 2.4, Cost = 3600, AOERadius = 8 },
+			{ Damage = 210, Range = 14, Cooldown = 2.3, Cost = 2400, AOERadius = 9 },
+			{ Damage = 300, Range = 15, Cooldown = 2.2, Cost = 3800, AOERadius = 10,   Shards = 2, ShardRadius = 4, ShardMult = 0.6 },
+			{ Damage = 430, Range = 16, Cooldown = 2.1, Cost = 5800, AOERadius = 11.5, Shards = 3, ShardRadius = 4.5, ShardMult = 0.6 },
+			{ Damage = 620, Range = 17, Cooldown = 1.9, Cost = 8600, AOERadius = 13,   Shards = 5, ShardRadius = 5, ShardMult = 0.7 },
+		},
+	},
+	RiftMonarch = {
+		Name = "Rift Monarch", Rarity = "Mythic", AttackType = "MultiHit", ImpactKind = "Rift", Case = "ShatteredReality",
+		Description = "Монарх Разломов. RIFT STORM — порталы бьют по разным врагам. На 5-м уровне — большой разлом.",
+		Ability = "RIFT STORM",
+		Anim = "RiftStorm", HitDelay = 0.5, HitInterval = 0.14, Spread = true, Scale = 1.4, DefaultTarget = "First",
+		Levels = {
+			{ Damage = 170, Range = 22, Cooldown = 3.0, Cost = 7200,  Hits = 3 },
+			{ Damage = 240, Range = 23, Cooldown = 2.9, Cost = 4600,  Hits = 4 },
+			{ Damage = 340, Range = 24, Cooldown = 2.8, Cost = 7200,  Hits = 4 },
+			{ Damage = 480, Range = 25, Cooldown = 2.7, Cost = 10500, Hits = 5 },
+			{ Damage = 690, Range = 27, Cooldown = 2.5, Cost = 15500, Hits = 6, BigRift = 12, BigRiftMult = 1.5 },
+		},
+	},
+	RealityDestroyer = {
+		Name = "REALITY DESTROYER", Rarity = "Secret", AttackType = "Splash", Case = "ShatteredReality",
+		Description = "SECRET. RED SPLASH: каждый удар — 100% по цели и 50% по всем врагам вокруг.",
+		Ability = "RED SPLASH",
+		Anim = "RedSplash", HitDelay = 0.35, Scale = 1.5, DefaultTarget = "First",
+		SplashMult = 0.5, ImpactColor = Color3.fromRGB(255, 30, 50),
+		Levels = {
+			{ Damage = 320,  Range = 15, Cooldown = 1.6,  Cost = 9000,  AOERadius = 8 },
+			{ Damage = 450,  Range = 15, Cooldown = 1.5,  Cost = 6000,  AOERadius = 9 },
+			{ Damage = 640,  Range = 16, Cooldown = 1.45, Cost = 9000,  AOERadius = 11 },
+			{ Damage = 900,  Range = 17, Cooldown = 1.35, Cost = 13000, AOERadius = 13 },
+			{ Damage = 1300, Range = 18, Cooldown = 1.25, Cost = 19000, AOERadius = 16 },
+		},
+	},
+
+	--------------------------------------------------------------------
+	-- BLOOD MOON CASE
+	--------------------------------------------------------------------
+	BloodAcolyte = {
+		Name = "Blood Acolyte", Rarity = "Common", AttackType = "Melee", Case = "BloodMoon",
+		Description = "Послушник с серпом. Удары вызывают кровотечение.",
+		Anim = "Sickle", HitDelay = 0.2, Scale = 1.0, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(220, 30, 50),
+		Levels = {
+			{ Damage = 10, Range = 12, Cooldown = 0.85, Cost = 180, Bleed = 4,  BleedTime = 3 },
+			{ Damage = 14, Range = 12, Cooldown = 0.80, Cost = 140, Bleed = 6,  BleedTime = 3 },
+			{ Damage = 20, Range = 13, Cooldown = 0.75, Cost = 260, Bleed = 8,  BleedTime = 3 },
+			{ Damage = 29, Range = 13, Cooldown = 0.70, Cost = 420, Bleed = 11, BleedTime = 3 },
+			{ Damage = 42, Range = 14, Cooldown = 0.65, Cost = 650, Bleed = 16, BleedTime = 3 },
+		},
+	},
+	CrimsonGunslinger = {
+		Name = "Crimson Gunslinger", Rarity = "Rare", AttackType = "Projectile", Case = "BloodMoon",
+		Description = "Стрелок с двумя револьверами. Всегда стреляет дуплетом.",
+		Anim = "Revolver", HitDelay = 0.05, ProjectileSpeed = 200, Projectile = "Bullet", Scale = 1.0, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(255, 70, 70),
+		Levels = {
+			{ Damage = 14, Range = 19, Cooldown = 0.80, Cost = 750,  Shots = 2 },
+			{ Damage = 20, Range = 20, Cooldown = 0.76, Cost = 520,  Shots = 2 },
+			{ Damage = 29, Range = 21, Cooldown = 0.72, Cost = 880,  Shots = 2 },
+			{ Damage = 42, Range = 22, Cooldown = 0.66, Cost = 1350, Shots = 2 },
+			{ Damage = 60, Range = 24, Cooldown = 0.60, Cost = 2100, Shots = 2 },
+		},
+	},
+	MoonWitch = {
+		Name = "Moon Witch", Rarity = "Epic", AttackType = "Chain", Case = "BloodMoon",
+		Description = "Лунная ведьма. Лунный серп отскакивает между врагами.",
+		Anim = "Cast", HitDelay = 0.3, ProjectileSpeed = 60, Projectile = "Moon", Scale = 1.05, DefaultTarget = "First",
+		BounceMult = 0.8, BounceRange = 12, ImpactColor = Color3.fromRGB(255, 120, 140),
+		Levels = {
+			{ Damage = 40,  Range = 17, Cooldown = 1.5,  Cost = 1500, Bounces = 3 },
+			{ Damage = 58,  Range = 18, Cooldown = 1.45, Cost = 1050, Bounces = 3 },
+			{ Damage = 84,  Range = 19, Cooldown = 1.4,  Cost = 1750, Bounces = 4 },
+			{ Damage = 120, Range = 20, Cooldown = 1.3,  Cost = 2700, Bounces = 4 },
+			{ Damage = 175, Range = 21, Cooldown = 1.2,  Cost = 4000, Bounces = 5 },
+		},
+	},
+	BloodfangWarlord = {
+		Name = "Bloodfang Warlord", Rarity = "Legendary", AttackType = "AOE", ImpactKind = "Cleave", Case = "BloodMoon",
+		Description = "Военачальник с двуручным топором. Рассекающий удар по области + кровотечение.",
+		Ability = "BLOOD CLEAVE",
+		Anim = "Axe", HitDelay = 0.4, Scale = 1.3, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(230, 30, 40),
+		Levels = {
+			{ Damage = 140, Range = 13, Cooldown = 2.0,  Cost = 3400, AOERadius = 7,   Bleed = 25,  BleedTime = 3 },
+			{ Damage = 200, Range = 13, Cooldown = 1.9,  Cost = 2300, AOERadius = 7.5, Bleed = 35,  BleedTime = 3 },
+			{ Damage = 285, Range = 14, Cooldown = 1.8,  Cost = 3600, AOERadius = 8,   Bleed = 50,  BleedTime = 3 },
+			{ Damage = 410, Range = 14, Cooldown = 1.7,  Cost = 5500, AOERadius = 9,   Bleed = 70,  BleedTime = 3 },
+			{ Damage = 590, Range = 15, Cooldown = 1.55, Cost = 8200, AOERadius = 10,  Bleed = 100, BleedTime = 3 },
+		},
+	},
+	LunarSeraph = {
+		Name = "Lunar Seraph", Rarity = "Mythic", AttackType = "Pierce", Case = "BloodMoon",
+		Description = "Лунный серафим. Луч пронзает всех врагов на линии.",
+		Ability = "LUNAR LANCE",
+		Anim = "Beam", HitDelay = 0.4, Scale = 1.35, DefaultTarget = "First",
+		PierceWidth = 3.2, ImpactColor = Color3.fromRGB(255, 200, 220),
+		Levels = {
+			{ Damage = 380,  Range = 26, Cooldown = 2.6, Cost = 7000,  CritChance = 0.15, CritMult = 2 },
+			{ Damage = 540,  Range = 27, Cooldown = 2.5, Cost = 4500,  CritChance = 0.17, CritMult = 2 },
+			{ Damage = 770,  Range = 28, Cooldown = 2.4, Cost = 7000,  CritChance = 0.2,  CritMult = 2.2 },
+			{ Damage = 1100, Range = 30, Cooldown = 2.3, Cost = 10000, CritChance = 0.22, CritMult = 2.3 },
+			{ Damage = 1600, Range = 32, Cooldown = 2.1, Cost = 15000, CritChance = 0.25, CritMult = 2.5 },
+		},
+	},
+	CrimsonEclipse = {
+		Name = "CRIMSON ECLIPSE", Rarity = "Secret", AttackType = "AOE", ImpactKind = "Reap", Case = "BloodMoon",
+		Description = "SECRET. Удары косой по области + BLOOD MOON: падающая кровавая луна.",
+		Ability = "BLOOD MOON",
+		Anim = "Reap", HitDelay = 0.35, Scale = 1.5, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(255, 30, 50),
+		Levels = {
+			{ Damage = 300,  Range = 15, Cooldown = 1.7, Cost = 9000,  AOERadius = 6,
+				BloodMoon = { Cooldown = 14, Radius = 12, Mult = 3, Bleed = 60,  BleedTime = 4 } },
+			{ Damage = 420,  Range = 15, Cooldown = 1.6, Cost = 6000,  AOERadius = 6.5,
+				BloodMoon = { Cooldown = 13, Radius = 13, Mult = 3, Bleed = 85,  BleedTime = 4 } },
+			{ Damage = 600,  Range = 16, Cooldown = 1.5, Cost = 9000,  AOERadius = 7,
+				BloodMoon = { Cooldown = 12, Radius = 14, Mult = 3, Bleed = 120, BleedTime = 4 } },
+			{ Damage = 850,  Range = 17, Cooldown = 1.4, Cost = 13000, AOERadius = 8,
+				BloodMoon = { Cooldown = 11, Radius = 16, Mult = 3, Bleed = 170, BleedTime = 4 } },
+			{ Damage = 1200, Range = 18, Cooldown = 1.3, Cost = 19000, AOERadius = 9,
+				BloodMoon = { Cooldown = 9,  Radius = 20, Mult = 3, Bleed = 240, BleedTime = 4 } },
+		},
+		AbilityExtraRange = 8,
 	},
 }
 
