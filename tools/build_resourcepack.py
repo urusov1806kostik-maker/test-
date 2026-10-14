@@ -211,7 +211,14 @@ def write_json(path, data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+ART = os.path.join(ROOT, "resourcepack", "art", "icons")
+
+
 def add_item(name, img, handheld):
+    # если есть нарисованная иконка (tools/slice_sheet.py) — берём её вместо сгенерированной
+    art = os.path.join(ART, name + ".png")
+    if os.path.exists(art):
+        img = Image.open(art).convert("RGBA")
     os.makedirs(os.path.join(NS, "textures", "item"), exist_ok=True)
     img.save(os.path.join(NS, "textures", "item", name + ".png"))
     write_json(os.path.join(NS, "models", "item", name + ".json"),
@@ -258,7 +265,9 @@ def main():
         add_item(name, fn(pal), hand)
     write_vanilla_overrides(["talisman_" + n for n in TALISMANS] + list(ITEMS))
     # иконка пака и сервера
-    icon = talisman("shadow", TALISMANS["shadow"]).resize((128, 128), Image.NEAREST)
+    art_icon = os.path.join(ART, "talisman_shadow.png")
+    icon = (Image.open(art_icon).convert("RGBA") if os.path.exists(art_icon)
+            else talisman("shadow", TALISMANS["shadow"])).resize((128, 128), Image.NEAREST)
     bg = Image.new("RGBA", (128, 128))
     for y in range(128):
         for x in range(128):
@@ -273,7 +282,7 @@ def main():
     files = sorted(f for f in os.listdir(os.path.join(NS, "textures", "item")))
     prev = Image.new("RGBA", (len(files) * 72, 72), (24, 16, 36, 255))
     for i, f in enumerate(files):
-        im = Image.open(os.path.join(NS, "textures", "item", f)).resize((64, 64), Image.NEAREST)
+        im = Image.open(os.path.join(NS, "textures", "item", f)).convert("RGBA").resize((64, 64), Image.NEAREST)
         prev.alpha_composite(im, (i * 72 + 4, 4))
     prev.save(os.path.join(ROOT, "resourcepack", "preview.png"))
     # zip (детерминированный)
