@@ -138,7 +138,7 @@ function Placement.Start(id)
 			if d.Transparency < 1 then
 				d.Transparency = 0.35 + d.Transparency * 0.5
 			end
-		elseif d:IsA("ParticleEmitter") or d:IsA("PointLight") then
+		elseif d:IsA("ParticleEmitter") or d:IsA("PointLight") or d:IsA("Trail") then
 			d:Destroy()
 		end
 	end

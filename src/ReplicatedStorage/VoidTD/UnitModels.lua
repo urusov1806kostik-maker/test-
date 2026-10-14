@@ -96,6 +96,7 @@ function Rig.new(o)
 	self.RLeg = limb("Right Leg", V(1, 2, 1), CF(0.5, -2, 0), o.Leg or P.Black)
 	self.LLeg = limb("Left Leg", V(1, 2, 1), CF(-0.5, -2, 0), o.Leg or P.Black)
 	self.Pending = {}
+	self.PendingTrails = {}
 
 	local function motor(name, p0, p1, c0, c1)
 		local m = Instance.new("Motor6D")
@@ -311,8 +312,16 @@ function Rig:Sword(limb, o)
 	self:Box(limb, V(0.3, gw, 0.26), CF(0, y, -0.45), o.Guard or P.Steel, M.Metal)
 	self:Ball(limb, 0.34, CF(0, y + gw / 2, -0.45), o.Guard or P.Steel, M.Metal)
 	self:Ball(limb, 0.34, CF(0, y - gw / 2, -0.45), o.Guard or P.Steel, M.Metal)
+	self:Ball(limb, 0.34, CF(0, y, -0.45), o.Gem or o.Edge or P.Neon, M.Neon) -- камень в гарде
 	local blade = self:Box(limb, V(0.14, w, len), CF(0, y, -0.58 - len / 2), o.Blade or P.Gray, o.BladeMat or M.Metal)
 	blade.Name = "Blade"
+	if not o.Core then
+		self:Box(limb, V(0.16, math.max(w * 0.22, 0.07), len * 0.72), CF(0, y, -0.58 - len * 0.42), P.Black, M.Metal) -- желобок
+	end
+	for i = 1, (o.Runes or 0) do
+		self:Neon(limb, V(0.17, 0.1, 0.18), CF(0, y - w * 0.22, -0.58 - len * (0.15 + i * 0.16)), o.Edge or P.Neon)
+	end
+	self:WeaponTrail(limb, V(0, y, -0.75), V(0, y, -0.58 - len), o.Edge or o.Core or P.NeonSoft)
 	self:Wedge(limb, V(0.14, w, w * 1.3), CF(0, y, -0.58 - len - w * 0.65) * ANG(0, math.pi, 0), o.Blade or P.Gray, o.BladeMat or M.Metal)
 	if o.Edge then
 		self:Neon(limb, V(0.16, 0.09, len), CF(0, y + w / 2 - 0.02, -0.58 - len / 2), o.Edge)
@@ -323,6 +332,33 @@ function Rig:Sword(limb, o)
 	local tip = self:Box(limb, V(0.2, 0.2, 0.2), CF(0, y, -0.58 - len), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
 	self.Muzzle = tip
 	return blade
+end
+
+-- Светящийся шлейф оружия (включается Renderer'ом во время анимаций)
+function Rig:WeaponTrail(limb, a, b, color)
+	table.insert(self.PendingTrails, { limb, a, b, color or P.NeonSoft })
+end
+
+-- Лицо: брови и рот. mood: "angry" | "calm" | "old"
+function Rig:Face(o)
+	local hs = self.HeadSize
+	local z = -hs.Z / 2 - 0.03
+	local y = (o.EyeY or 0.08) + 0.2
+	local sp = o.Spacing or 0.3
+	local tilt = o.Mood == "angry" and 18 or (o.Mood == "old" and -10 or 4)
+	local size = o.Mood == "old" and V(0.36, 0.13, 0.08) or V(0.3, 0.08, 0.06)
+	self:Box(self.Head, size, CF(-sp, y, z) * ANG(0, 0, rad(-tilt)), o.BrowColor or P.Black)
+	self:Box(self.Head, size, CF(sp, y, z) * ANG(0, 0, rad(tilt)), o.BrowColor or P.Black)
+	if o.Mouth ~= false then
+		self:Box(self.Head, V(o.Mood == "angry" and 0.4 or 0.3, 0.07, 0.06), CF(0, -0.32, z), o.MouthColor or P.Coal)
+	end
+end
+
+-- Округлые кисти рук
+function Rig:Hands(color, material)
+	for _, A in ipairs({ self.RArm, self.LArm }) do
+		self:Sphere(A, V(1.08, 0.52, 1.08), CF(0, -0.93, 0), color or P.Coal, material or M.Plastic)
+	end
 end
 
 function Rig:Horn(limb, side, base, size, color)
@@ -343,7 +379,11 @@ end
 function Rig:Cape(width, length, color, tatter)
 	local T = self.Torso
 	color = color or P.DeepViolet
-	local cape = self:Joint("Cape", T, V(width, length, 0.12), CF(0, 0.95, 0.58), ANG(rad(7), 0, 0) * CF(0, -length / 2, 0.02), color, M.Fabric)
+	local l1 = length * 0.58
+	local l2 = length - l1
+	local cape = self:Joint("Cape", T, V(width, l1, 0.12), CF(0, 0.95, 0.58), ANG(rad(7), 0, 0) * CF(0, -l1 / 2, 0.02), color, M.Fabric)
+	-- нижняя часть плаща на своём моторе: колышется с запаздыванием
+	local cape2 = self:Joint("Cape2", cape, V(width * 0.98, l2, 0.12), CF(0, -l1 / 2, 0), CF(0, -l2 / 2, 0), color, M.Fabric)
 	-- застёжки плаща
 	self:Box(T, V(0.3, 0.3, 0.2), CF(-0.75, 0.85, 0.55), P.Gold, M.Metal)
 	self:Box(T, V(0.3, 0.3, 0.2), CF(0.75, 0.85, 0.55), P.Gold, M.Metal)
@@ -352,10 +392,11 @@ function Rig:Cape(width, length, color, tatter)
 		for i = -2, 2 do
 			seed = seed + 1
 			local h = 0.4 + ((seed * 37) % 5) * 0.12
-			self:Wedge(cape, V(width / 5.2, h, 0.12), CF(i * width / 5, -length / 2 - h / 2 + 0.02, 0) * ANG(0, 0, math.pi), color, M.Fabric)
+			self:Wedge(cape2, V(width / 5.2, h, 0.12), CF(i * width / 5, -l2 / 2 - h / 2 + 0.02, 0) * ANG(0, 0, math.pi), color, M.Fabric)
 		end
 		-- кайма
-		self:Box(cape, V(width + 0.04, 0.12, 0.14), CF(0, length / 2 - 0.25, 0), color:Lerp(P.Black, 0.4), M.Fabric)
+		self:Box(cape, V(width + 0.04, 0.12, 0.14), CF(0, l1 / 2 - 0.25, 0), color:Lerp(P.Black, 0.4), M.Fabric)
+		self:Box(cape2, V(width * 0.98 + 0.04, 0.1, 0.14), CF(0, -l2 / 2 + 0.15, 0), color:Lerp(P.White, 0.25), M.Fabric)
 	end
 	return cape
 end
@@ -421,6 +462,30 @@ function Rig:Finish(scale, idle)
 		mesh.Parent = p
 	end
 	self.Pending = {}
+	for _, t in ipairs(self.PendingTrails or {}) do
+		local limb = t[1]
+		local a0 = Instance.new("Attachment")
+		a0.Name = "TrailA"
+		a0.Position = t[2] * scale
+		a0.Parent = limb
+		local a1 = Instance.new("Attachment")
+		a1.Name = "TrailB"
+		a1.Position = t[3] * scale
+		a1.Parent = limb
+		local trail = Instance.new("Trail")
+		trail.Name = "WeaponTrail"
+		trail.Attachment0 = a0
+		trail.Attachment1 = a1
+		trail.Color = ColorSequence.new(t[4])
+		trail.LightEmission = 1
+		trail.LightInfluence = 0
+		trail.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
+		trail.Lifetime = 0.22
+		trail.MinLength = 0.05
+		trail.Enabled = false
+		trail.Parent = limb
+	end
+	self.PendingTrails = {}
 	self.Scale = scale
 	for name, m in pairs(self.Motors) do
 		self.Base[name] = m.C0
@@ -821,6 +886,7 @@ local function ShadowArcher(lv)
 		r:Horn(H, -1, V(-0.45, 0.8, 0.1), 0.6, P.Black)
 		r:Glow(quiver, P.Neon, 6, 1)
 	end
+	r:Hands(P.Coal, M.Fabric)
 	Details.ShadowArcher(r, lv)
 	levelAura(r, lv)
 	return r:Finish(1, { LS = { 20, 0, 0 } })
@@ -872,6 +938,9 @@ local function LostMage(lv)
 		r:Ball(LA, 0.55, CF(0, -1.6, -0.3), P.NeonSoft, M.Neon)
 		r:Cape(1.9, 3.2, P.Coal, true)
 	end
+	r:Face({ Mood = "old", EyeY = 0.12, BrowColor = P.White, Mouth = false })
+	r:Hands(P.Pale)
+	r:WeaponTrail(RA, V(0, 2.0, -0.55), V(0, 3.0, -0.55), P.Neon)
 	Details.LostMage(r, lv)
 	levelAura(r, lv)
 	return r:Finish(1, { RS = { 10, 0, 0 }, LS = { 8, 0, 0 } })
@@ -917,6 +986,7 @@ local function VoidKnight(lv)
 		Core = lv >= 3 and P.NeonSoft or nil,
 		Guard = P.Black,
 		GuardWidth = 1.4,
+		Runes = lv >= 3 and 3 or 0,
 	})
 	if lv >= 2 then
 		r:Cyl(LA, 0.22, 1.7, CF(-0.62, -0.6, 0), P.Dark, M.Metal, "X") -- круглый щит-наруч
@@ -994,6 +1064,7 @@ local function DarkGunner(lv)
 		r:Neon(RA, V(0.7, 0.12, 0.85), CF(0, -2.4, -0.15), P.NeonPink)
 		r:Box(T, V(0.6, 2.2, 0.15), CF(0.5, -0.3, 0.55) * ANG(0, 0, rad(10)), P.DeepViolet, M.Fabric)
 	end
+	r:Hands(P.Black)
 	Details.DarkGunner(r, lv)
 	levelAura(r, lv)
 	return r:Finish(1.05, { RS = { 75, 0, 0 }, LS = { 70, 0, -25 }, Neck = { 0, 0, 0 } })
@@ -1063,6 +1134,8 @@ local function AbyssReaper(lv)
 		end
 		r:Chain(RA, back, 0.3, P.Steel, M.Metal, 0.8)
 	end
+	r:Hands(P.Pale)
+	r:WeaponTrail(RA, top + V(0, -0.2, -0.6) * bl, top + V(0, -1.3, -3.2) * bl, P.Neon)
 	Details.AbyssReaper(r, lv)
 	levelAura(r, lv)
 	return r:Finish(1.15, { RS = { 8, 0, 0 } })
@@ -1126,6 +1199,8 @@ local function CorruptedSamurai(lv)
 		r:Cape(1.6, 3.0, P.Crimson, true)
 		r:Rod(T, V(1.05, -0.8, 0.4), V(1.2, -1.2, -1.6), 0.24, P.Maroon) -- вторая катана
 	end
+	r:Hands(P.Black)
+	r:WeaponTrail(RA, V(0, -0.95, -0.9), V(0, -0.8, -0.6 - len), lv >= 5 and P.NeonPink or P.Neon)
 	Details.CorruptedSamurai(r, lv)
 	levelAura(r, lv, lv >= 5 and P.NeonPink or P.Neon)
 	return r:Finish(1.1, { RS = { 25, 0, 0 }, LS = { 10, 0, 0 } })
@@ -1173,6 +1248,8 @@ local function EclipseGuardian(lv)
 		Core = P.Neon,
 		Guard = P.Black,
 		GuardWidth = 2.2,
+		Runes = 2 + lv,
+		Gem = P.NeonSoft,
 	})
 	if lv >= 2 then
 		r:Neon(LL, V(0.08, 1.0, 0.06), CF(0.2, -0.3, -0.62), P.Neon)
@@ -1255,6 +1332,9 @@ local function FallenAngel(lv)
 	if lv >= 5 then
 		r:Cape(1.8, 3.4, P.Black, true)
 	end
+	r:Face({ Mood = "calm", EyeY = 0.05, BrowColor = P.Coal })
+	r:Hands(P.Coal)
+	r:WeaponTrail(RA, V(0, 3.0 * sl, -0.55), V(0, 5.2 * sl, -0.55), P.NeonSoft)
 	Details.FallenAngel(r, lv)
 	levelAura(r, lv, P.NeonSoft)
 	return r:Finish(1.25, { RS = { 10, 0, 0 } })
@@ -1308,6 +1388,8 @@ local function VoidEmperor(lv)
 		Core = P.Neon,
 		Guard = P.Gold,
 		GuardWidth = 1.8,
+		Runes = lv >= 2 and 4 or 2,
+		Gem = P.NeonPink,
 	})
 	r:Glow(blade, P.NeonPink, 9, 1.4)
 	if lv >= 2 then
@@ -1323,6 +1405,8 @@ local function VoidEmperor(lv)
 			r:Neon(T, V(0.15, 1.6, 0.15), CF(math.sin(a) * 1.4, 2.6 + math.cos(a) * 0.4, 0.9) * ANG(0, 0, -a), P.NeonPink)
 		end
 	end
+	r:Face({ Mood = "angry", EyeY = 0.1, BrowColor = P.Black, Mouth = false })
+	r:Hands(P.Black, M.Metal)
 	Details.VoidEmperor(r, lv)
 	levelAura(r, lv, P.NeonPink)
 	return r:Finish(1.4, { RS = { 15, 0, 0 } })
@@ -1384,6 +1468,8 @@ local function AbyssOverlord(lv)
 		r:Ball(T, 0.55, CF(-1.9, 2.1, 0.5), P.Neon, M.Neon)
 		r:Glow(orbit, P.Neon, 8, 1)
 	end
+	r:WeaponTrail(RA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
+	r:WeaponTrail(LA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
 	Details.AbyssOverlord(r, lv)
 	levelAura(r, lv)
 	return r:Finish(1.55, { RS = { 12, 0, 8 }, LS = { 12, 0, -8 } })
@@ -1405,6 +1491,18 @@ local Builders = {
 }
 
 -- Построить модель юнита. Модель стоит в начале координат, ноги на высоте -HipHeight.
+-- Аура редкости у ног: Epic — фиолетовые искры, Legendary — золото, Mythic — красно-фиолетовый вихрь
+local UNIT_RARITY = {
+	AbyssReaper = "Epic", CorruptedSamurai = "Epic",
+	EclipseGuardian = "Legendary", FallenAngel = "Legendary",
+	VoidEmperor = "Mythic", AbyssOverlord = "Mythic",
+}
+local RARITY_AURA = {
+	Epic = { Color = ColorSequence.new(Color3.fromRGB(170, 80, 255)), Rate = 3, Size = 0.22 },
+	Legendary = { Color = ColorSequence.new(Color3.fromRGB(255, 205, 70), Color3.fromRGB(190, 110, 255)), Rate = 5, Size = 0.28 },
+	Mythic = { Color = ColorSequence.new(Color3.fromRGB(255, 50, 150), Color3.fromRGB(150, 60, 255)), Rate = 8, Size = 0.34 },
+}
+
 function UnitModels.Build(unitId, level)
 	local builder = Builders[unitId]
 	if not builder then
@@ -1412,6 +1510,28 @@ function UnitModels.Build(unitId, level)
 	end
 	local rig = builder(math.clamp(level or 1, 1, 5))
 	rig.Model.Name = unitId
+	local aura = RARITY_AURA[UNIT_RARITY[unitId] or ""]
+	if aura then
+		local at = Instance.new("Attachment")
+		at.Name = "AuraPoint"
+		at.Position = V(0, -rig.HipHeight + 0.2, 0)
+		at.Parent = rig.Root
+		local e = Instance.new("ParticleEmitter")
+		e.Name = "RarityAura"
+		e.Color = aura.Color
+		e.LightEmission = 1
+		e.LightInfluence = 0
+		e.Rate = aura.Rate
+		e.Lifetime = NumberRange.new(1.2, 2)
+		e.Speed = NumberRange.new(0.6, 1.6)
+		e.EmissionDirection = Enum.NormalId.Top
+		e.SpreadAngle = Vector2.new(70, 70)
+		e.Acceleration = V(0, 1.2, 0)
+		e.RotSpeed = NumberRange.new(-90, 90)
+		e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, aura.Size), NumberSequenceKeypoint.new(1, 0) })
+		e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+		e.Parent = at
+	end
 	rig.Model:SetAttribute("UnitId", unitId)
 	rig.Model:SetAttribute("Level", level or 1)
 	return rig

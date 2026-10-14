@@ -148,7 +148,7 @@ local function viewport(parent, unitId, level, props)
 		return vf
 	end
 	for _, d in ipairs(rig.Model:GetDescendants()) do
-		if d:IsA("ParticleEmitter") or d:IsA("PointLight") then
+		if d:IsA("ParticleEmitter") or d:IsA("PointLight") or d:IsA("Trail") then
 			d:Destroy()
 		end
 	end

@@ -1288,6 +1288,10 @@ local function applyPose(rig, pose, t, phase)
 			elseif name == "Cape" or name == "Scarf" then
 				local gust = (rig.Gust or 0)
 				cf = cf * ANG(rad(6 + math.sin(t * 1.7 + phase) * 4 + gust * 22), 0, rad(math.sin(t * 1.1 + phase) * 3))
+			elseif name == "Cape2" then
+				-- нижняя часть плаща догоняет верхнюю с запаздыванием
+				local gust = (rig.Gust or 0)
+				cf = cf * ANG(rad(5 + math.sin(t * 1.7 + phase - 0.8) * 7 + gust * 28), 0, rad(math.sin(t * 1.1 + phase - 0.6) * 5))
 			elseif name:sub(1, 5) == "Orbit" then
 				cf = cf * ANG(0, t * 1.4 + phase, 0)
 			end
@@ -1596,6 +1600,13 @@ local function buildUnitView(view)
 	prepareUnitModel(rig.Model, view.Uid)
 	rig.Root.CFrame = CF(view.Pos + V(0, rig.HipHeight, 0)) * ANG(0, view.Yaw, 0)
 	rig.Model.Parent = unitFolder
+	view.Trails = {}
+	view.TrailOn = false
+	for _, d in ipairs(rig.Model:GetDescendants()) do
+		if d:IsA("Trail") then
+			table.insert(view.Trails, d)
+		end
+	end
 	-- метка владельца
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "Tag"
@@ -1900,6 +1911,14 @@ local function updateUnits(t, dt)
 			end
 			rig.Root.CFrame = CF(v.Pos + V(0, rig.HipHeight + drop, 0)) * ANG(0, v.Yaw, 0)
 			applyPose(rig, evalPose(v, t), t, v.Phase)
+			-- шлейф оружия виден только во время анимаций
+			local on = v.Anim ~= nil
+			if on ~= v.TrailOn then
+				v.TrailOn = on
+				for _, tr in ipairs(v.Trails or {}) do
+					tr.Enabled = on
+				end
+			end
 		end
 	end
 end
@@ -2093,7 +2112,7 @@ local function viewport(parent, unitId, level, props)
 		return vf
 	end
 	for _, d in ipairs(rig.Model:GetDescendants()) do
-		if d:IsA("ParticleEmitter") or d:IsA("PointLight") then
+		if d:IsA("ParticleEmitter") or d:IsA("PointLight") or d:IsA("Trail") then
 			d:Destroy()
 		end
 	end
@@ -3146,7 +3165,7 @@ function Placement.Start(id)
 			if d.Transparency < 1 then
 				d.Transparency = 0.35 + d.Transparency * 0.5
 			end
-		elseif d:IsA("ParticleEmitter") or d:IsA("PointLight") then
+		elseif d:IsA("ParticleEmitter") or d:IsA("PointLight") or d:IsA("Trail") then
 			d:Destroy()
 		end
 	end
