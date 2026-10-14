@@ -1612,6 +1612,192 @@ local function makeHealthBar(view)
 	view.Fill = fill
 end
 
+------------------------------------------------------------------------
+-- ВТОРИЧНОЕ ДВИЖЕНИЕ (по префиксу имени мотора, см. EnemyModels)
+------------------------------------------------------------------------
+local SEC_KINDS = { "Sway", "Cape", "Orbit", "Spin", "Bob", "Twitch" }
+local LOD_DISTANCE = 200 -- дальше этого от камеры вторичная анимация не считается
+
+local function collectSecondary(rig)
+	local list = {}
+	for name, motor in pairs(rig.Motors) do
+		for _, kind in ipairs(SEC_KINDS) do
+			if name:sub(1, #kind) == kind and rig.Base[name] then
+				local p = (rig.Sec and rig.Sec[name]) or {}
+				list[#list + 1] = { Motor = motor, Base = rig.Base[name], Kind = kind, Amp = p.Amp or 0.2, Speed = p.Speed or 1.5, Phase = math.random() * 6 }
+				break
+			end
+		end
+	end
+	return list
+end
+
+local function applySecondary(view, t, dt)
+	local sc = view.Rig.Scale or 1
+	local aggro = view.Aggro or 1
+	for _, s in ipairs(view.Sec) do
+		local k, ph = s.Kind, s.Phase
+		local cf
+		if k == "Sway" or k == "Cape" then
+			local sp = s.Speed * (0.8 + 0.2 * aggro)
+			cf = s.Base * ANG(math.sin(t * sp + ph) * s.Amp + (k == "Cape" and s.Amp * 0.8 or 0), 0, math.sin(t * sp * 0.7 + ph) * s.Amp * 0.5)
+		elseif k == "Orbit" then
+			cf = s.Base * ANG(0, t * s.Speed * aggro + ph, 0)
+		elseif k == "Spin" then
+			cf = s.Base * ANG(0, 0, t * s.Speed * aggro + ph)
+		elseif k == "Bob" then
+			cf = s.Base * CF(0, math.sin(t * s.Speed + ph) * s.Amp * sc, 0) * ANG(0, math.sin(t * s.Speed * 0.5 + ph) * 0.25, 0)
+		else -- Twitch: резкий поворот к случайной цели, пауза, снова рывок
+			if t >= (s.Next or 0) then
+				s.Next = t + 0.25 + math.random() * 0.7
+				s.TY = (math.random() * 2 - 1) * s.Amp
+				s.TP = (math.random() * 2 - 1) * s.Amp * 0.5
+			end
+			local a = math.min(1, dt * 22)
+			s.Y = (s.Y or 0) + ((s.TY or 0) - (s.Y or 0)) * a
+			s.P = (s.P or 0) + ((s.TP or 0) - (s.P or 0)) * a
+			cf = s.Base * ANG(s.P, s.Y, 0)
+		end
+		s.Motor.C0 = cf
+	end
+end
+
+------------------------------------------------------------------------
+-- ВИЗУАЛЬНЫЕ ФАЗЫ БОССОВ (только внешний вид, без новых способностей)
+------------------------------------------------------------------------
+local function groundOf(view)
+	return view.Rig.Root.Position - V(0, view.Rig.HipHeight - 0.3, 0)
+end
+
+-- Деталь отрывается от модели и падает на землю
+local function breakPart(view, p, silent)
+	if not p or not p.Parent then
+		return
+	end
+	local cf = p.CFrame
+	for _, w in ipairs(p:GetChildren()) do
+		if w:IsA("Weld") then
+			w:Destroy()
+		end
+	end
+	if silent or FX.Lite then
+		p:Destroy()
+		return
+	end
+	p.Anchored = true
+	p.CFrame = cf
+	p.Parent = workspace:FindFirstChild("VoidTD_FX") or workspace
+	local root = view.Rig.Root.Position
+	local out = V(cf.Position.X - root.X, 0, cf.Position.Z - root.Z)
+	out = out.Magnitude > 0.01 and out.Unit or V(0, 0, 1)
+	local groundY = root.Y - view.Rig.HipHeight + p.Size.Y * 0.3
+	local dest = V(cf.Position.X, groundY, cf.Position.Z) + out * (2 + math.random() * 4)
+	FX.Tween(p, 0.35, { CFrame = cf + out * 1.5 + V(0, 1.5, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	task.delay(0.35, function()
+		if p.Parent then
+			FX.Tween(p, 0.6, { CFrame = CF(dest) * ANG(math.random() * 3, math.random() * 3, math.random() * 3) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		end
+	end)
+	task.delay(1.6, function()
+		if p.Parent then
+			FX.Tween(p, 0.8, { Transparency = 1 })
+		end
+	end)
+	task.delay(2.5, function()
+		p:Destroy()
+	end)
+end
+
+local function applyPhase(view, idx, silent)
+	local ph = view.Rig.Phases[idx]
+	view.VisualPhase = idx + 1
+	view.Aggro = ph.Aggro or view.Aggro
+	for _, p in ipairs(ph.Reveal or {}) do
+		local target = p:GetAttribute("PT") or 0
+		if silent or FX.Lite then
+			p.Transparency = target
+		else
+			FX.Tween(p, 0.6, { Transparency = target })
+		end
+	end
+	for _, e in ipairs(ph.Emit or {}) do
+		if e then
+			if e.Enabled then
+				e.Rate = e.Rate * 1.8
+			else
+				e.Enabled = true
+			end
+		end
+	end
+	for _, l in ipairs(ph.Lights or {}) do
+		if l[1] then
+			l[1].Brightness = l[2]
+			l[1].Range = l[1].Range * 1.25
+		end
+	end
+	for _, p in ipairs(ph.Break or {}) do
+		breakPart(view, p, silent)
+	end
+	if silent then
+		return
+	end
+	-- переход: рёв, волна энергии, вспышка
+	local sc = view.Rig.Scale or 1
+	local center = Renderer.EnemyCenter(view.Id) or view.Rig.Root.Position
+	view.RoarT = os.clock()
+	FX.Sound("Boss", 1, 0.8 + idx * 0.12, center)
+	FX.Shake(0.3 + idx * 0.15, 0.6)
+	FX.Ring(groundOf(view), 8 * sc, FX.Colors.Neon, 0.8, 0.5, 1, 0.05)
+	FX.Sphere(center, 2.5 * sc, FX.Colors.Soft, 0.5)
+	FX.Burst(center, FX.Colors.Neon, 16, 0.4 * sc, 9 * sc, 0.7)
+end
+
+local function checkPhases(view, silent)
+	local phases = view.Rig.Phases
+	if not phases then
+		return
+	end
+	local ratio = view.HP / math.max(view.MaxHP, 1)
+	while phases[view.NextPhase] and ratio <= phases[view.NextPhase].At do
+		applyPhase(view, view.NextPhase, silent)
+		view.NextPhase = view.NextPhase + 1
+	end
+end
+
+------------------------------------------------------------------------
+-- ПОЯВЛЕНИЕ
+------------------------------------------------------------------------
+-- Вступление босса: портал вспыхивает, по земле идёт волна энергии
+local function portalSurge(isFinal)
+	local map = workspace:FindFirstChild("VoidTDMap")
+	local portal = map and map:FindFirstChild("VoidPortal")
+	if not portal then
+		return
+	end
+	local disc = portal:FindFirstChild("PortalDisc")
+	local core = portal:FindFirstChild("PortalCore")
+	local light = core and core:FindFirstChildOfClass("PointLight")
+	if light then
+		local b = light.Brightness
+		light.Brightness = b * 3
+		FX.Tween(light, 1.8, { Brightness = b })
+	end
+	if disc then
+		local col = disc.Color
+		disc.Color = Color3.fromRGB(235, 200, 255)
+		FX.Tween(disc, 1.2, { Color = col })
+		local pos = disc.Position
+		local gy = Config.Map.GroundY
+		FX.Sphere(pos, isFinal and 16 or 11, FX.Colors.Neon, 0.8, nil, 0.3)
+		FX.Ring(V(pos.X, gy + 0.3, pos.Z), isFinal and 45 or 30, FX.Colors.Neon, 1.1, 0.6, 3, 0.05)
+		task.delay(0.15, function()
+			FX.Ring(V(pos.X, gy + 0.4, pos.Z), isFinal and 32 or 22, FX.Colors.White, 0.9, 0.3, 2, 0.2)
+		end)
+		FX.Burst(pos, FX.Colors.Soft, isFinal and 30 or 18, 0.7, 18, 0.9)
+	end
+	FX.Sound("Portal", 1.2, isFinal and 0.7 or 0.85)
+end
+
 function Renderer.SpawnEnemy(data)
 	local id, typeId, maxHp, speed, lateral, dist, hp = data[1], data[2], data[3], data[4], data[5], data[6], data[7]
 	if enemyViews[id] then
@@ -1622,6 +1808,7 @@ function Renderer.SpawnEnemy(data)
 		warn(rig)
 		return
 	end
+	local def = Config.Enemies[typeId]
 	local view = {
 		Id = id,
 		Type = typeId,
@@ -1635,17 +1822,36 @@ function Renderer.SpawnEnemy(data)
 		LastSync = os.clock(),
 		Slowed = false,
 		Phase = math.random() * 10,
+		Aggro = 1,
+		NextPhase = 1,
+		VisualPhase = 1,
 	}
+	view.Sec = collectSecondary(rig)
 	local pos, dir = PathUtil.OffsetPositionAt(dist, lateral)
 	view.CF = CFrame.lookAt(pos + V(0, rig.HipHeight, 0), pos + dir + V(0, rig.HipHeight, 0))
 	view.SpawnT = os.clock()
 	view.Emerge = dist <= 1
-	if Config.Enemies[typeId].IsBoss then
-		view.RoarT = os.clock() + 0.6
+	-- если враг пришёл уже раненым (переподключение) — фазы применяются без эффектов
+	checkPhases(view, true)
+	if def.IsBoss then
+		view.RoarT = os.clock() + (rig.SpawnStyle == "Titan" and 1.1 or 0.6)
+		if dist <= 1 then
+			portalSurge(typeId == "TheEntity")
+		end
 		task.delay(0.6, function()
-			FX.Sound("Boss", 1, 1)
-			FX.Shake(0.5, 0.9)
+			FX.Sound("Boss", 1, typeId == "TheEntity" and 0.75 or 1)
+			FX.Shake(typeId == "TheEntity" and 0.8 or 0.5, 1.0)
 		end)
+	end
+	-- появление из дыма: прозрачность плавно возвращается
+	if rig.SpawnStyle == "Fade" and not FX.Lite then
+		view.FadeParts = {}
+		for _, d in ipairs(rig.Model:GetDescendants()) do
+			if d:IsA("BasePart") and d.Transparency < 1 then
+				view.FadeParts[#view.FadeParts + 1] = { d, d.Transparency }
+				d.Transparency = 1
+			end
+		end
 	end
 	rig.Root.CFrame = view.CF
 	makeHealthBar(view)
@@ -1653,6 +1859,17 @@ function Renderer.SpawnEnemy(data)
 	enemyViews[id] = view
 	if dist <= 1 then
 		FX.Burst(pos + V(0, 2, 0), FX.Colors.Neon, 6, 0.3, 5)
+		if rig.SpawnStyle == "Titan" then
+			-- мини-босс выбирается из земли и выпрямляется, кристалл в груди вспыхивает
+			FX.Cracks(pos + V(0, 0.2, 0), 7, FX.Colors.Neon, 10, 1.6)
+			task.delay(1.1, function()
+				local c = Renderer.EnemyCenter(id)
+				if c then
+					FX.Sphere(c, 4, FX.Colors.Neon, 0.5)
+					FX.Burst(c, FX.Colors.Soft, 14, 0.5, 10, 0.6)
+				end
+			end)
+		end
 	end
 end
 
@@ -1672,6 +1889,12 @@ function Renderer.EnemyCenter(id)
 	return nil
 end
 
+------------------------------------------------------------------------
+-- СМЕРТЬ (своя анимация для каждого типа)
+------------------------------------------------------------------------
+local DEATH_LIFE = { Dissipate = 0.7, Scatter = 0.85, Collapse = 0.75, Topple = 1.0, Implode = 2.4 }
+local LEGS = { FR = 1, BR = 1, FL = -1, BL = -1 }
+
 local function deathAnim(view, reason)
 	local rig = view.Rig
 	local model = rig.Model
@@ -1687,28 +1910,109 @@ local function deathAnim(view, reason)
 		model:Destroy()
 		return
 	end
-	FX.Poof(root.Position + V(0, 0.5, 0), FX.Colors.Neon, size)
+	local style = rig.DeathStyle or "Topple"
+	local sc = rig.Scale or 1
+	local hip = rig.HipHeight
+	if style ~= "Implode" then
+		FX.Poof(root.Position + V(0, 0.5, 0), FX.Colors.Neon, size)
+	end
 	FX.Sound("EnemyDeath", 1, 1 / math.max(size, 0.6), root.Position)
-	if def.IsBoss then
-		FX.Shockwave(root.Position - V(0, rig.HipHeight - 0.2, 0), 10 * size, 5)
+	if def.IsBoss and style ~= "Implode" then
+		FX.Shockwave(root.Position - V(0, hip - 0.2, 0), 10 * size, 5)
 	end
 	local start = os.clock()
 	local startCF = root.CFrame
-	local life = def.IsBoss and 1.4 or 0.6
+	local life = DEATH_LIFE[style] or 1
+	if def.IsBoss and style == "Topple" then
+		life = 1.5
+	end
 	local parts = {}
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") and d.Transparency < 1 then
 			parts[#parts + 1] = { d, d.Transparency }
-		elseif d:IsA("ParticleEmitter") then
+		elseif d:IsA("ParticleEmitter") or d:IsA("Trail") then
 			d.Enabled = false
 		end
 	end
+	-- исходные C0 моторов (для разлёта частей и подкашивания лап)
+	local motors = {}
+	for name, m in pairs(rig.Motors) do
+		if name ~= "Root" then
+			local dir = V(math.random() - 0.5, math.random() * 0.6, math.random() - 0.5)
+			motors[#motors + 1] = { m, m.C0, name, dir.Magnitude > 0.01 and dir.Unit or V(0, 1, 0) }
+		end
+	end
+	if style == "Dissipate" then
+		FX.Burst(root.Position, FX.Colors.Soft, 10, 0.4 * size, 4, 0.9)
+	elseif style == "Implode" then
+		FX.Sound("Boss", 1.2, 0.6, root.Position)
+		FX.Shake(0.6, life)
+	end
+	local exploded = false
 	local conn
 	conn = RunService.RenderStepped:Connect(function()
 		local a = math.clamp((os.clock() - start) / life, 0, 1)
-		root.CFrame = startCF * CF(0, -a * rig.HipHeight * 0.8, 0) * ANG(rad(-75 * ease(a)), 0, rad(15 * a))
+		local fade = a
+		if style == "Dissipate" then
+			-- дух растворяется вверх, закручиваясь
+			root.CFrame = startCF * CF(0, ease(a) * 2.5 * sc, 0) * ANG(0, a * 4, 0)
+		elseif style == "Scatter" then
+			-- разделённые части разлетаются в стороны
+			root.CFrame = startCF * CF(0, a * 1.2 * sc, 0)
+			for _, mm in ipairs(motors) do
+				mm[1].C0 = mm[2] * CF(mm[4] * ease(a) * 3 * sc) * ANG(a * mm[4].X * 4, a * 3, a * mm[4].Z * 4)
+			end
+		elseif style == "Collapse" then
+			-- лапы разъезжаются, тело падает на землю
+			root.CFrame = startCF * CF(0, -ease(a) * hip * 0.7, 0) * ANG(rad(-8 * a), 0, rad(20 * ease(a)))
+			for _, mm in ipairs(motors) do
+				local side = LEGS[mm[3]]
+				if side then
+					mm[1].C0 = mm[2] * ANG(0, 0, side * ease(a) * 1.1)
+				end
+			end
+			fade = math.clamp((a - 0.4) / 0.6, 0, 1)
+		elseif style == "Implode" then
+			-- финальный босс: дрожит, поднимается, раскидывает руки, затем коллапсирует во вспышке
+			if a < 0.55 then
+				local k = a / 0.55
+				root.CFrame = startCF * CF((math.random() - 0.5) * 0.4 * k * sc, k * 1.5 * sc, 0) * ANG(rad(-15 * k), 0, 0)
+				for _, mm in ipairs(motors) do
+					if mm[3] == "RS" or mm[3] == "LS" then
+						mm[1].C0 = mm[2] * ANG(rad(120 * k), 0, rad((mm[3] == "RS" and 40 or -40) * k))
+					end
+				end
+				if math.random() < 0.25 and not FX.Lite then
+					FX.Burst(root.Position + V((math.random() - 0.5) * 6 * sc, (math.random() - 0.3) * 6 * sc, (math.random() - 0.5) * 6 * sc), FX.Colors.Neon, 3, 0.4 * sc, 6, 0.4)
+				end
+				fade = 0
+			else
+				if not exploded then
+					exploded = true
+					local g = root.Position - V(0, hip - 0.2, 0)
+					FX.Sphere(root.Position, 9 * sc, FX.Colors.White, 0.6)
+					FX.Sphere(root.Position, 14 * sc, FX.Colors.Neon, 0.9, nil, 0.2)
+					FX.Shockwave(g, 14 * size, 5)
+					FX.Burst(root.Position, FX.Colors.Soft, 30, 0.8, 22, 1)
+					FX.Shake(1.2, 0.8)
+				end
+				local k = (a - 0.55) / 0.45
+				root.CFrame = startCF * CF(0, 1.5 * sc - ease(k) * hip * 0.6, 0) * ANG(rad(-15 + 30 * k), k * 2, 0)
+				fade = k
+			end
+		else -- Topple: колени подгибаются, тело валится вперёд
+			root.CFrame = startCF * CF(0, -a * hip * 0.8, 0) * ANG(rad(-75 * ease(a)), 0, rad(15 * a))
+			for _, mm in ipairs(motors) do
+				if mm[3] == "RS" or mm[3] == "LS" then
+					mm[1].C0 = mm[2] * ANG(rad(70 * ease(a)), 0, 0)
+				elseif mm[3] == "RH" or mm[3] == "LH" then
+					mm[1].C0 = mm[2] * ANG(rad(40 * ease(a)), 0, 0)
+				end
+			end
+			fade = math.clamp((a - 0.3) / 0.7, 0, 1)
+		end
 		for _, p in ipairs(parts) do
-			p[1].Transparency = p[2] + (1 - p[2]) * a
+			p[1].Transparency = p[2] + (1 - p[2]) * fade
 		end
 		if a >= 1 then
 			conn:Disconnect()
@@ -1757,73 +2061,155 @@ function Renderer.OnSync(payload)
 	end
 end
 
-local function animateEnemy(view, t, dt)
+------------------------------------------------------------------------
+-- ХОДЬБА / ПАРЕНИЕ
+------------------------------------------------------------------------
+local DUST = Color3.fromRGB(70, 60, 82)
+
+local function heavyStep(view, power, camDist)
+	if camDist < 90 then
+		FX.Shake(power * (1 - camDist / 90), 0.18)
+	end
+	if not FX.Lite and camDist < 120 then
+		local sc = view.Rig.Scale or 1
+		FX.Ring(groundOf(view), 2.2 * sc, DUST, 0.45, 0.2, 0.4 * sc, 0.45)
+	end
+end
+
+local CRAWL_LEGS = { { "FR", 1, 0 }, { "BL", -1, 0 }, { "FL", -1, math.pi }, { "BR", 1, math.pi } }
+local FLOAT_ARMS = { "ArmR", "ArmL", "ArmR2", "ArmL2", "RS", "LS" }
+
+local function animateEnemy(view, t, dt, camDist)
 	local rig = view.Rig
 	local base = rig.Base
 	local m = rig.Motors
-	-- отшатывание от удара
-	local hitA = t - (view.HitT or -10)
-	local flinch = hitA < 0.2 and (1 - hitA / 0.2) * 0.22 or 0
+	local g = rig.Gait or {}
+	local sc = rig.Scale or 1
+	local idle = rig.Idle or {}
 	local def = Config.Enemies[view.Type]
-	local freq = (view.Speed * (view.Slowed and 0.5 or 1)) / math.max(def.Scale or 1, 0.5) * 1.1
-	local w = t * freq + view.Phase
+	local aggro = view.Aggro or 1
+	local far = camDist > LOD_DISTANCE
+	local spd = view.Speed * (view.Slowed and 0.5 or 1)
+	-- частота шага привязана к скорости врага
+	local freq = spd / math.max(def.Scale or 1, 0.5) * 1.1 * (g.Speed or 1) * (1 + (aggro - 1) * 0.3)
+	view.W = (view.W or view.Phase) + dt * freq
+	local w = view.W
 	local s = math.sin(w)
-	if rig.Style == "Biped" then
-		if m.RH then
-			m.RH.C0 = base.RH * ANG(s * 0.6, 0, 0)
-			m.LH.C0 = base.LH * ANG(-s * 0.6, 0, 0)
-			m.RS.C0 = base.RS * ANG(-s * 0.5, 0, 0)
-			m.LS.C0 = base.LS * ANG(s * 0.5, 0, 0)
-			local idle = rig.Idle.Root
-			local tilt = idle and rad(idle[1]) or 0
-			m.Root.C0 = base.Root * CF(0, math.abs(s) * 0.12 * (rig.Scale or 1), 0) * ANG(tilt, 0, s * 0.04)
+	local stride = (g.Stride or 0.55) * (0.85 + 0.15 * aggro)
+	local bob = (g.Bob or 0.12) * sc
+	local hitA = t - (view.HitT or -10)
+	local flinch = hitA < 0.22 and (1 - hitA / 0.22) * (def.IsBoss and 0.35 or 1) or 0
+
+	local function pose(name, x, y, z)
+		local b = base[name]
+		if not b or not m[name] then
+			return
 		end
-	elseif rig.Style == "Quad" then
-		if m.FR then
-			m.FR.C0 = base.FR * ANG(s * 0.6, 0, 0)
-			m.BL.C0 = base.BL * ANG(s * 0.6, 0, 0)
-			m.FL.C0 = base.FL * ANG(-s * 0.6, 0, 0)
-			m.BR.C0 = base.BR * ANG(-s * 0.6, 0, 0)
+		local id = idle[name]
+		if id then
+			m[name].C0 = b * ANG(rad(id[1]) + x, rad(id[2]) + y, rad(id[3]) + z)
+		else
+			m[name].C0 = b * ANG(x, y, z)
 		end
-		m.Root.C0 = base.Root * CF(0, math.abs(s) * 0.1 * (rig.Scale or 1), 0) * ANG(s * 0.03, 0, 0)
-		if m.Neck then
-			m.Neck.C0 = base.Neck * ANG(math.sin(w * 2) * 0.06, 0, 0)
+	end
+	local idleRoot = idle.Root and rad(idle.Root[1]) or 0
+
+	local rootCF
+	local style = rig.Style
+	if style == "Biped" or style == "Heavy" then
+		local heavy = style == "Heavy"
+		pose("RH", s * stride, 0, 0)
+		pose("LH", -s * stride, 0, 0)
+		local arm = stride * (heavy and 0.55 or 0.8) * aggro
+		pose("RS", -s * arm, 0, heavy and math.abs(s) * 0.08 or 0)
+		pose("LS", s * arm, 0, heavy and -math.abs(s) * 0.08 or 0)
+		local sway = g.Sway or 0.04
+		local lean = rad((g.Lean or 0) + (aggro - 1) * 20)
+		-- тяжёлые проседают на каждом шаге, лёгкие подпрыгивают
+		local y = heavy and ((1 - math.abs(s)) * bob - bob * 0.5) or math.abs(s) * bob
+		rootCF = base.Root * CF(0, y, 0) * ANG(idleRoot + lean, s * sway * 0.5, -s * sway)
+		pose("Neck", heavy and -math.abs(s) * 0.05 or 0, 0, s * sway * 0.8)
+		local c = math.cos(w)
+		if g.Shake and not far and view.LastC and (view.LastC > 0) ~= (c > 0) then
+			heavyStep(view, g.Shake * (0.8 + 0.2 * aggro), camDist)
 		end
+		view.LastC = c
+	elseif style == "Gallop" then
+		-- галоп: передние лапы парой, задние парой со сдвигом
+		pose("FR", s * stride, 0, 0)
+		pose("FL", math.sin(w + 0.35) * stride, 0, 0)
+		pose("BR", math.sin(w - 1.6) * stride, 0, 0)
+		pose("BL", math.sin(w - 1.25) * stride, 0, 0)
+		rootCF = base.Root * CF(0, math.abs(s) * bob, 0) * ANG(math.cos(w) * 0.09, 0, 0)
+		pose("Neck", -math.cos(w) * 0.12, 0, 0)
+	elseif style == "Crawl" then
+		-- диагональные пары лап: мах вперёд-назад + подъём
+		for _, l in ipairs(CRAWL_LEGS) do
+			local p = w + l[3]
+			pose(l[1], 0, math.sin(p) * stride * l[2], math.max(0, math.cos(p)) * 0.35 * l[2])
+		end
+		rootCF = base.Root * CF(0, math.abs(math.sin(w * 2)) * bob, 0) * ANG(0, s * 0.06, s * (g.Sway or 0.05))
+	elseif style == "Quad" then
+		pose("FR", s * 0.6, 0, 0)
+		pose("BL", s * 0.6, 0, 0)
+		pose("FL", -s * 0.6, 0, 0)
+		pose("BR", -s * 0.6, 0, 0)
+		rootCF = base.Root * CF(0, math.abs(s) * 0.1 * sc, 0) * ANG(s * 0.03, 0, 0)
+		pose("Neck", math.sin(w * 2) * 0.06, 0, 0)
 	else -- Float
-		m.Root.C0 = base.Root * CF(0, math.sin(t * 2 + view.Phase) * 0.3 * (rig.Scale or 1), 0) * ANG(0.12, 0, math.sin(t * 1.3 + view.Phase) * 0.06)
-		for _, name in ipairs({ "ArmR", "ArmL", "ArmR2", "ArmL2", "RS", "LS" }) do
+		local amp = (g.Bob or 0.3) * sc
+		rootCF = base.Root * CF(0, math.sin(t * 2 + view.Phase) * amp, 0) * ANG(0.12 + (aggro - 1) * 0.2, 0, math.sin(t * 1.3 + view.Phase) * 0.06)
+		for _, name in ipairs(FLOAT_ARMS) do
 			if m[name] and base[name] then
 				local side = (name:sub(-1) == "R" or name == "RS" or name == "ArmR2") and 1 or -1
-				m[name].C0 = base[name] * ANG(math.sin(t * 2.2 + view.Phase + side) * 0.3 + 0.3, 0, math.sin(t * 1.7) * 0.15 * side)
+				pose(name, math.sin(t * 2.2 + view.Phase + side) * 0.3 + 0.3, 0, math.sin(t * 1.7) * 0.15 * side)
 			end
 		end
 	end
-	if flinch > 0 then
-		m.Root.C0 = m.Root.C0 * ANG(-flinch, 0, flinch * 0.3)
+
+	-- особое появление мини-босса: выбирается из земли согнувшись и выпрямляется
+	if rig.SpawnStyle == "Titan" then
+		local sa = (t - view.SpawnT) / 1.6
+		if sa < 1 then
+			local k = 1 - ease(math.clamp(sa, 0, 1))
+			rootCF = rootCF * CF(0, -k * 1.2 * sc, 0) * ANG(rad(40) * k, 0, 0)
+			pose("RS", rad(-30) * k, 0, rad(20) * k)
+			pose("LS", rad(-30) * k, 0, rad(-20) * k)
+		end
 	end
-	-- рёв босса при появлении
+	-- отшатывание от удара
+	if flinch > 0 then
+		rootCF = rootCF * CF(0, 0, flinch * 0.25 * sc) * ANG(-flinch * 0.25, 0, flinch * 0.08)
+		if m.Neck and base.Neck then
+			m.Neck.C0 = m.Neck.C0 * ANG(-flinch * 0.3, 0, 0)
+		end
+	end
+	-- рёв босса (появление, смена фазы)
 	local roarA = t - (view.RoarT or -10)
 	local roar = (roarA > 0 and roarA < 1.4) and math.sin(roarA / 1.4 * math.pi) or 0
 	if roar > 0 then
 		if m.RS and base.RS then
-			m.RS.C0 = base.RS * ANG(rad(150 * roar), 0, rad(30 * roar))
-			m.LS.C0 = base.LS * ANG(rad(150 * roar), 0, rad(-30 * roar))
+			pose("RS", rad(150 * roar), 0, rad(30 * roar))
+			pose("LS", rad(150 * roar), 0, rad(-30 * roar))
 		end
 		if m.Neck and base.Neck then
 			m.Neck.C0 = base.Neck * ANG(rad(-30 * roar), 0, 0)
 		end
-		m.Root.C0 = m.Root.C0 * ANG(rad(-12 * roar), 0, 0)
+		rootCF = rootCF * ANG(rad(-12 * roar), 0, 0)
 	end
+	m.Root.C0 = rootCF
 	if m.Jaw then
-		m.Jaw.C0 = base.Jaw * ANG(math.max(0, math.sin(t * 3 + view.Phase)) * 0.45 + roar * 0.6, 0, 0)
+		m.Jaw.C0 = base.Jaw * ANG(math.max(0, math.sin(t * 3 + view.Phase)) * 0.4 + roar * 0.6 + flinch * 0.3, 0, 0)
 	end
-	if m.Halo then
-		m.Halo.C0 = base.Halo * ANG(0, t * 1.5, 0)
+	if not far then
+		applySecondary(view, t, dt)
 	end
 end
 
 local function updateEnemies(t, dt)
 	local nowc = os.clock()
+	local cam = workspace.CurrentCamera
+	local camPos = cam and cam.CFrame.Position or V()
 	for _, v in pairs(enemyViews) do
 		local speed = v.Speed * (v.Slowed and 0.5 or 1)
 		local predicted = v.ServerDist + speed * math.min(nowc - v.LastSync, 0.35)
@@ -1841,8 +2227,18 @@ local function updateEnemies(t, dt)
 				v.Emerge = false
 			end
 		end
+		if v.FadeParts then
+			local a = math.clamp((t - v.SpawnT) / 0.7, 0, 1)
+			for _, p in ipairs(v.FadeParts) do
+				p[1].Transparency = 1 - (1 - p[2]) * a
+			end
+			if a >= 1 then
+				v.FadeParts = nil
+			end
+		end
 		v.Rig.Root.CFrame = v.CF - V(0, rise, 0)
-		animateEnemy(v, t, dt)
+		checkPhases(v, false)
+		animateEnemy(v, t, dt, (camPos - pos).Magnitude)
 		if v.Fill then
 			v.Fill.Size = UDim2.fromScale(math.clamp(v.HP / v.MaxHP, 0, 1), 1)
 		end
