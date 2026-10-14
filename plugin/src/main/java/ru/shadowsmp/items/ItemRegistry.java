@@ -110,7 +110,7 @@ public class ItemRegistry {
         ItemMeta m = it.getItemMeta();
         m.setDisplayName(Text.color("&r" + d.name()));
         m.setLore(Text.color(d.lore()));
-        if (d.model() != null && !d.model().isBlank()) m.setItemModel(NamespacedKey.fromString(d.model()));
+        if (d.model() != null && !d.model().isBlank()) applyModel(m, d.model());
         if (d.glint()) m.setEnchantmentGlintOverride(true);
         if (d.unbreakable()) { m.setUnbreakable(true); m.addItemFlags(ItemFlag.HIDE_UNBREAKABLE); }
         d.enchants().forEach((e, l) -> m.addEnchant(e, l, true));
@@ -122,6 +122,28 @@ public class ItemRegistry {
         it.setItemMeta(m);
         d.customEnchants().forEach((id, lvl) -> plugin.enchants().apply(it, id, lvl));
         return it;
+    }
+
+    /**
+     * Текстура через custom_model_data (строка). Если ресурспак не загружен — видно обычный
+     * ванильный предмет, а не фиолетово-чёрный квадрат.
+     */
+    public static void applyModel(ItemMeta m, String model) {
+        org.bukkit.inventory.meta.components.CustomModelDataComponent c = m.getCustomModelDataComponent();
+        c.setStrings(List.of(model));
+        m.setCustomModelDataComponent(c);
+    }
+
+    /** Переводит старые предметы (item_model) на новый способ, чтобы не было «квадратов». */
+    public static boolean migrate(ItemStack it) {
+        if (it == null || !it.hasItemMeta()) return false;
+        ItemMeta m = it.getItemMeta();
+        if (!m.hasItemModel() || !"shadowsmp".equals(m.getItemModel().getNamespace())) return false;
+        String model = m.getItemModel().toString();
+        m.setItemModel(null);
+        applyModel(m, model);
+        it.setItemMeta(m);
+        return true;
     }
 
     public static EquipmentSlotGroup slotGroup(String slot) {

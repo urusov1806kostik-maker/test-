@@ -221,6 +221,30 @@ def add_item(name, img, handheld):
                {"model": {"type": "minecraft:model", "model": "shadowsmp:item/" + name}})
 
 
+# Базовый ванильный предмет для каждой текстуры (плагин ставит custom_model_data = "shadowsmp:<имя>")
+BASE = {"shadow_blade": "netherite_sword", "frostbite": "diamond_sword", "inferno_axe": "netherite_axe",
+        "void_pickaxe": "netherite_pickaxe", "enchant_book": "enchanted_book"}
+
+
+def base_of(name):
+    if name.startswith("talisman_"):
+        return "totem_of_undying"
+    return BASE.get(name, "paper")
+
+
+def write_vanilla_overrides(names):
+    by_base = {}
+    for n in names:
+        by_base.setdefault(base_of(n), []).append(n)
+    for base, ns in by_base.items():
+        write_json(os.path.join(PACK, "assets", "minecraft", "items", base + ".json"), {"model": {
+            "type": "minecraft:select",
+            "property": "minecraft:custom_model_data",
+            "index": 0,
+            "cases": [{"when": "shadowsmp:" + n, "model": {"type": "minecraft:model", "model": "shadowsmp:item/" + n}} for n in ns],
+            "fallback": {"type": "minecraft:model", "model": "minecraft:item/" + base}}})
+
+
 def main():
     if os.path.exists(PACK):
         shutil.rmtree(PACK)
@@ -232,6 +256,7 @@ def main():
         add_item("talisman_" + name, talisman(name, c), False)
     for name, (fn, pal, hand) in ITEMS.items():
         add_item(name, fn(pal), hand)
+    write_vanilla_overrides(["talisman_" + n for n in TALISMANS] + list(ITEMS))
     # иконка пака и сервера
     icon = talisman("shadow", TALISMANS["shadow"]).resize((128, 128), Image.NEAREST)
     bg = Image.new("RGBA", (128, 128))

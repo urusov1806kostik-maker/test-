@@ -1,0 +1,41 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "shadowsmp:shadow_shard",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/shadow_shard"
+        }
+      },
+      {
+        "when": "shadowsmp:demon_heart",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/demon_heart"
+        }
+      },
+      {
+        "when": "shadowsmp:coin",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/coin"
+        }
+      },
+      {
+        "when": "shadowsmp:shadowcoin",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/shadowcoin"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/paper"
+    }
+  }
+}

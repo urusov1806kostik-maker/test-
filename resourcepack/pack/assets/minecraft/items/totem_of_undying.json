@@ -1,0 +1,55 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "shadowsmp:talisman_demon",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/talisman_demon"
+        }
+      },
+      {
+        "when": "shadowsmp:talisman_ice",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/talisman_ice"
+        }
+      },
+      {
+        "when": "shadowsmp:talisman_storm",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/talisman_storm"
+        }
+      },
+      {
+        "when": "shadowsmp:talisman_shadow",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/talisman_shadow"
+        }
+      },
+      {
+        "when": "shadowsmp:talisman_life",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/talisman_life"
+        }
+      },
+      {
+        "when": "shadowsmp:talisman_ocean",
+        "model": {
+          "type": "minecraft:model",
+          "model": "shadowsmp:item/talisman_ocean"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/totem_of_undying"
+    }
+  }
+}

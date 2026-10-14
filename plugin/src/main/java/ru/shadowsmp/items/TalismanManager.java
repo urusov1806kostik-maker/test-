@@ -115,6 +115,12 @@ public class TalismanManager implements Listener {
     }
 
     @EventHandler
+    public void onJoinMigrate(org.bukkit.event.player.PlayerJoinEvent e) {
+        for (ItemStack it : e.getPlayer().getInventory().getContents()) ItemRegistry.migrate(it);
+        for (ItemStack it : e.getPlayer().getEnderChest().getContents()) ItemRegistry.migrate(it);
+    }
+
+    @EventHandler
     public void onQuit(PlayerQuitEvent e) {
         applied.remove(e.getPlayer().getUniqueId());
     }

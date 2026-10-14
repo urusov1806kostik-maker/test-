@@ -135,7 +135,7 @@ public class EnchantManager implements Listener {
         m.setDisplayName(Text.color("&5&lКнига: &r" + ce.name() + " " + roman(lvl)));
         m.setLore(Text.color(List.of("&7" + ce.description(), "&8Для: " + ce.target().ru(), "",
                 "&eПоложи в наковальню вместе с предметом")));
-        m.setItemModel(NamespacedKey.fromString("shadowsmp:enchant_book"));
+        ru.shadowsmp.items.ItemRegistry.applyModel(m, "shadowsmp:enchant_book");
         m.getPersistentDataContainer().set(Keys.ITEM_ID, PersistentDataType.STRING, "book:" + id);
         m.getPersistentDataContainer().set(key(id), PersistentDataType.INTEGER, lvl);
         m.setMaxStackSize(1);
