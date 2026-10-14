@@ -7,6 +7,13 @@ local UnitModels = {}
 -- Облегчённый режим: без мелких деталей, частиц, подсветки и шлейфов (меняется на клиенте)
 UnitModels.Lite = false
 
+-- общий набор угловатых деталей (фаска, шипы, ромбы, наплечники) — см. ModelKit
+local Kit = require(script.Parent.ModelKit)
+Kit.IsLite = function()
+	return UnitModels.Lite
+end
+UnitModels.Kit = Kit
+
 local V = Vector3.new
 local V2 = Vector2.new
 local CF = CFrame.new
@@ -608,28 +615,6 @@ function Details.LostMage(r, lv)
 	end
 end
 
-function Details.VoidKnight(r, lv)
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.25, 0.24, 1.29), CF(0, -0.55, 0), P.Coal)
-	r:Neon(T, V(0.4, 0.28, 0.08), CF(0, -0.55, -0.66), P.Neon)
-	for _, x in ipairs({ -0.55, 0.55 }) do
-		r:Box(T, V(0.8, 0.7, 0.15), CF(x, -1.32, -0.62) * ANG(rad(-8), 0, 0), P.Black, M.Metal) -- набедренники
-	end
-	for _, A in ipairs({ RA, LA }) do
-		r:Box(A, V(1.14, 0.32, 1.14), CF(0, -1.05, 0), P.Steel, M.Metal) -- латные перчатки
-	end
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(0.7, 0.5, 0.3), CF(0, 0.05, -0.62), P.Steel, M.Metal) -- наколенники
-	end
-	for i = -1, 1 do
-		r:Ball(RA, 0.16, CF(0.45 + i * 0.1, 1.05, -0.62 + i * 0.55), P.Gray, M.Metal) -- заклёпки
-	end
-	if lv >= 5 then
-		r:Seg(H, V(-0.5, 0.6, -0.77), V(-0.2, 0.25, -0.77), 0.07, P.Neon, M.Neon)
-		r:Seg(H, V(0.45, -0.5, -0.77), V(0.2, -0.2, -0.77), 0.07, P.Neon, M.Neon)
-	end
-end
-
 function Details.DarkGunner(r, lv)
 	local T, RL, LL = r.Torso, r.RLeg, r.LLeg
 	r:Seg(T, V(-0.9, 0.95, -0.66), V(0.85, -0.7, -0.66), V2(0.3, 0.1), P.Maroon) -- патронташ
@@ -973,62 +958,135 @@ end
 ------------------------------------------------------------------------
 -- 4. VOID KNIGHT (Rare)
 ------------------------------------------------------------------------
-local function VoidKnight(lv)
-	local r = Rig.new({ Name = "VoidKnight", Torso = P.Coal, Arm = P.Coal, Leg = P.Coal, Head = P.Black, TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- кираса
-	r:Box(T, V(2.2, 1.6, 1.25), CF(0, 0.25, 0), P.Black, M.Metal)
-	r:Box(T, V(2.1, 0.5, 1.15), CF(0, -0.8, 0), P.Dark, M.Metal)
-	-- фиолетовые трещины
-	r:Seg(T, V(-0.6, 0.8, -0.64), V(-0.2, 0.2, -0.64), 0.09, P.Neon, M.Neon)
-	r:Seg(T, V(-0.2, 0.2, -0.64), V(-0.45, -0.3, -0.64), 0.09, P.Neon, M.Neon)
-	r:Seg(T, V(0.5, 0.6, -0.64), V(0.25, -0.1, -0.64), 0.09, P.Neon, M.Neon)
-	-- шлем (большой, с Т-визором)
-	r:Cyl(H, 1.45, 1.6, CF(0, 0.0, 0), P.Black, M.Metal, "Y") -- шлем-ведро
-	r:Sphere(H, V(1.6, 0.6, 1.6), CF(0, 0.72, 0), P.Black, M.Metal)
-	r:Cyl(H, 0.14, 1.66, CF(0, 0.45, 0), P.Steel, M.Metal, "Y")
-	r:Box(H, V(1.0, 0.12, 0.08), CF(0, 0.15, -0.81), P.Neon, M.Neon)
-	r:Box(H, V(0.14, 0.5, 0.08), CF(0, -0.1, -0.81), P.Neon, M.Neon)
-	r:Box(H, V(0.3, 0.35, 1.3), CF(0, 0.88, 0.05), P.Steel, M.Metal)
-	r:Wedge(H, V(0.22, 0.7, 0.9), CF(0, 1.3, 0.4) * ANG(rad(-10), 0, 0), lv >= 3 and P.Crimson or P.Steel)
-	-- наплечники (асимметрия: правый крупнее)
-	local ps = lv >= 5 and 1.25 or 1
-	r:Pauldron(RA, 1, 1.05 * ps, P.Black, P.Neon, 0, M.Neon)
-	r:Sphere(RA, V(1.1, 0.7, 1.05) * ps, CF(0.2, 1.25 * ps, 0) * ANG(0, 0, rad(-14)), P.Steel, M.Metal)
-	r:Pauldron(LA, -1, 0.95 * ps, P.Black, P.Steel)
-	-- наручи и поножи
-	r:Box(RA, V(1.1, 0.8, 1.1), CF(0, -0.55, 0), P.Black, M.Metal)
-	r:Box(LA, V(1.1, 0.8, 1.1), CF(0, -0.55, 0), P.Black, M.Metal)
-	r:Box(RL, V(1.1, 1.1, 1.12), CF(0, -0.45, 0), P.Black, M.Metal)
-	r:Box(LL, V(1.1, 1.1, 1.12), CF(0, -0.45, 0), P.Black, M.Metal)
-	-- длинный меч
-	local blade = r:Sword(RA, {
-		Length = 3.8 + (lv >= 4 and 0.7 or 0),
-		Width = 0.55,
-		Blade = lv >= 5 and P.Purple or P.Steel,
-		Edge = P.Neon,
-		Core = lv >= 3 and P.NeonSoft or nil,
-		Guard = P.Black,
-		GuardWidth = 1.4,
-		Runes = lv >= 3 and 3 or 0,
-	})
-	if lv >= 2 then
-		r:Cyl(LA, 0.22, 1.7, CF(-0.62, -0.6, 0), P.Dark, M.Metal, "X") -- круглый щит-наруч
-		r:Cyl(LA, 0.16, 1.85, CF(-0.6, -0.6, 0), P.Steel, M.Metal, "X")
-		r:Ball(LA, 0.4, CF(-0.76, -0.6, 0), P.Neon, M.Neon)
+-- Угловатый клинок Пустоты: тёмный клинок с неоновыми кромками, гарда с рогами и самоцветом
+local function voidBlade(r, A, lv)
+	local K, AC = Kit, Kit.Colors
+	local y = -1.05
+	local len = 3.5 + (lv >= 4 and 0.5 or 0) + (lv >= 5 and 0.4 or 0)
+	local w = 0.62 + (lv >= 3 and 0.08 or 0)
+	local glow = lv >= 5 and P.NeonSoft or P.Neon
+	-- рукоять, навершие
+	r:Box(A, V(0.24, 0.24, 0.95), CF(0, y, 0.1), AC.ClothDark, M.Fabric)
+	r:Box(A, V(0.34, 0.34, 0.3), CF(0, y, 0.65) * ANG(0, 0, rad(45)), AC.Armor, M.Metal)
+	-- гарда с загнутыми рогами и самоцветом
+	K.bevel(r, A, V(0.32, 1.4, 0.32), CF(0, y, -0.45), AC.Armor, AC.Edge)
+	for _, s in ipairs({ -1, 1 }) do
+		K.spike(r, A, V(0, y + 0.62 * s, -0.45), V(0, y + 0.95 * s, -0.85), 0.32, AC.Armor, M.Metal, true, 0.14)
 	end
+	K.gem(r, A, 0.3, CF(-0.17, y, -0.45) * ANG(0, math.pi / 2, 0), P.Neon)
+	K.gem(r, A, 0.3, CF(0.17, y, -0.45) * ANG(0, -math.pi / 2, 0), P.Neon)
+	-- клинок: тёмное тело, светящиеся кромки и дол
+	local z0 = -0.6
+	r:Box(A, V(0.14, w, len), CF(0, y, z0 - len / 2), lv >= 5 and AC.Cloth or AC.ArmorMid, M.Metal)
+	r:Neon(A, V(0.16, 0.08, len * 0.97), CF(0, y + w / 2 - 0.03, z0 - len / 2), glow)
+	r:Neon(A, V(0.16, 0.08, len * 0.97), CF(0, y - w / 2 + 0.03, z0 - len / 2), glow)
+	if lv >= 3 then
+		r:Neon(A, V(0.17, 0.08, len * 0.7), CF(0, y, z0 - len * 0.42), P.NeonSoft)
+	end
+	K.spike(r, A, V(0, y, z0 - len + 0.02), V(0, y, z0 - len - w * 1.3), w, lv >= 5 and AC.Cloth or AC.ArmorMid, M.Metal, true, 0.14)
+	K.spike(r, A, V(0, y, z0 - len + 0.02), V(0, y, z0 - len - w * 1.15), w * 0.75, glow, M.Neon, true, 0.16)
+	local tip = r:Box(A, V(0.2, 0.2, 0.2), CF(0, y, z0 - len - w), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r.Muzzle = tip
+	r:WeaponTrail(A, V(0, y, z0 - 0.15), V(0, y, z0 - len - w), P.NeonSoft)
+	return tip
+end
+
+local function VoidKnight(lv)
+	local K, AC = Kit, Kit.Colors
+	local r = Rig.new({ Name = "VoidKnight", Torso = AC.Armor, Arm = AC.Armor, Leg = AC.Armor, Head = AC.Armor, TorsoMat = M.Metal })
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	for _, L in ipairs({ T, H, RA, LA, RL, LL }) do
+		L.Transparency = 1
+	end
+	local leather = Color3.fromRGB(40, 30, 38)
+	-- КИРАСА
+	K.bevel(r, T, V(2.05, 2.0, 1.05), CF(), AC.Armor, AC.Edge)
+	K.bevel(r, T, V(2.25, 1.0, 1.25), CF(0, 0.5, -0.02), AC.ArmorMid, AC.Edge)
+	K.bevel(r, T, V(1.85, 0.32, 1.15), CF(0, -0.15, 0), AC.ArmorMid, AC.Edge)
+	K.bevel(r, T, V(1.8, 0.32, 1.12), CF(0, -0.45, 0), AC.Armor, AC.Edge)
+	if lv >= 2 then
+		K.bevel(r, T, V(0.34, 0.95, 0.18), CF(0, 0.5, -0.7), AC.Armor, AC.Edge)
+		K.gem(r, T, 0.42, CF(0, 0.55, -0.8), P.Neon, AC.Edge)
+	end
+	if lv >= 3 then
+		K.crack(r, T, { V(-0.85, 0.85, -0.66), V(-0.5, 0.45, -0.66), V(-0.7, 0.1, -0.66) }, 0.06)
+		K.crack(r, T, { V(0.55, 0.9, -0.66), V(0.8, 0.4, -0.66) }, 0.05)
+	end
+	-- пояс с пряжкой, табард, набедренники
+	K.bevel(r, T, V(2.15, 0.32, 1.2), CF(0, -0.8, 0), leather, AC.Edge, M.Fabric)
+	K.bevel(r, T, V(0.48, 0.44, 0.14), CF(0, -0.8, -0.66), AC.Edge, AC.ArmorMid)
+	K.gem(r, T, 0.2, CF(0, -0.8, -0.75), P.Neon)
+	r:Box(T, V(0.95, 1.0, 0.08), CF(0, -1.45, -0.6), AC.Cloth, M.Fabric)
+	if lv >= 2 then
+		K.tatter(r, T, -1.95, -0.6, 0.95, 3, AC.Cloth, M.Fabric, 1)
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		K.bevel(r, T, V(0.75, 0.7, 0.95), CF(0.78 * s, -1.25, -0.02) * ANG(0, 0, rad(10 * s)), AC.ArmorMid, AC.Edge)
+	end
+	if lv >= 3 then
+		K.chain(r, T, 4, 0.26, nil, CF(0.75, -1.0, -0.62))
+		K.chain(r, T, 3, 0.26, nil, CF(-0.7, -1.0, 0.62))
+	end
+	-- ШЛЕМ: гранёный, лицевая пластина, Т-визор, гребень, нащёчники
+	K.bevel(r, H, V(1.35, 1.4, 1.4), CF(0, 0.05, 0), AC.Armor, AC.Edge)
+	K.bevel(r, H, V(1.12, 1.05, 0.22), CF(0, -0.05, -0.72), AC.ArmorMid, AC.Edge)
+	r:Neon(H, V(0.5, 0.09, 0.06), CF(0, 0.2, -0.84), P.Neon)
+	r:Neon(H, V(0.1, 0.62, 0.06), CF(0, -0.08, -0.84), P.Neon)
+	-- двускатный верх шлема
+	r:Wedge(H, V(1.36, 0.42, 0.7), CF(0, 0.96, -0.35), AC.Armor, M.Metal)
+	r:Wedge(H, V(1.36, 0.42, 0.7), CF(0, 0.96, 0.35) * ANG(0, math.pi, 0), AC.Armor, M.Metal)
+	r:Box(H, V(1.38, 0.06, 0.06), CF(0, 1.16, 0), AC.Edge, M.Metal)
+	for _, s in ipairs({ -1, 1 }) do
+		r:Wedge(H, V(0.28, 0.55, 0.55), CF(0.58 * s, -0.5, -0.5) * ANG(math.pi, 0, 0), AC.Armor, M.Metal)
+	end
+	if lv >= 2 then
+		K.spike(r, H, V(0, 1.0, -0.3), V(0, 1.45 + lv * 0.12, 0.2), 0.8, AC.Armor, M.Metal, true, 0.14)
+	end
+	if lv >= 2 then
+		local big = lv >= 5 and 1.6 or (lv >= 4 and 1.2 or 0.85)
+		for _, s in ipairs({ -1, 1 }) do
+			K.hornA(r, H, { V(0.6 * s, 0.3, 0), V(0.95 * s, 0.45 + 0.1 * big, 0.05), V(1.05 * s, 0.8 * big, 0.05), V(0.85 * s, 1.35 * big, -0.1) }, 0.24 + 0.04 * big, AC.Armor, M.Metal)
+			if lv >= 5 then
+				K.spike(r, H, V(0.95 * s, 1.0 * big, -0.05), V(0.85 * s, 1.35 * big, -0.1), 0.2, P.Neon, M.Neon, false, 0.1)
+			end
+		end
+	end
+	-- НАПЛЕЧНИКИ
+	for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
+		local A, s = a[1], a[2]
+		if lv == 1 then
+			K.bevel(r, A, V(1.35, 0.55, 1.3), CF(0.12 * s, 0.85, 0) * ANG(0, 0, rad(-12 * s)), AC.ArmorMid, AC.Edge)
+		else
+			local size = lv >= 5 and 1.22 or (lv >= 4 and 1.1 or 1.0)
+			K.pauldron(r, A, s, size, AC.Armor, AC.Edge, lv >= 3 and P.Neon or nil, lv >= 5 and 3 or (lv >= 4 and 2 or 1))
+		end
+		-- рука: плечо, наруч с манжетой, латная перчатка
+		K.bevel(r, A, V(1.0, 0.9, 1.0), CF(0, 0.15, 0), AC.Armor, AC.Edge)
+		K.bevel(r, A, V(1.15, 0.85, 1.15), CF(0, -0.55, 0), AC.ArmorMid, AC.Edge)
+		K.bevel(r, A, V(1.28, 0.24, 1.28), CF(0, -0.15, 0), AC.Armor, AC.Edge)
+		K.bevel(r, A, V(1.02, 0.42, 1.02), CF(0, -1.12, 0), AC.Armor, AC.Edge)
+		if lv >= 3 then
+			K.spike(r, A, V(0.55 * s, -0.5, 0), V(0.95 * s, -0.4, 0.15), 0.32, AC.Armor, M.Metal, true, 0.1)
+		end
+	end
+	-- НОГИ
+	for _, Lg in ipairs({ RL, LL }) do
+		K.bevel(r, Lg, V(1.0, 0.95, 1.02), CF(0, 0.45, 0), AC.Armor, AC.Edge)
+		if lv >= 2 then
+			K.bevel(r, Lg, V(0.75, 0.45, 0.25), CF(0, 0.0, -0.58), AC.ArmorMid, AC.Edge)
+		end
+		K.bevel(r, Lg, V(1.08, 0.7, 1.1), CF(0, -0.38, 0), AC.ArmorMid, AC.Edge)
+		K.bootA(r, Lg, AC.Armor, AC.Edge, 1.1)
+	end
+	-- МЕЧ
+	local blade = voidBlade(r, RA, lv)
 	if lv >= 3 then
 		r:Sparkles(blade, P.Neon, { Rate = 10, Size = 0.3 })
 	end
+	-- рваный плащ с эмблемой
 	if lv >= 4 then
-		r:Cape(2.1, 3.3, P.Maroon, true)
-	end
-	if lv >= 5 then
-		r:Horn(H, 1, V(0.6, 0.55, 0.1), 0.8, P.Black)
-		r:Horn(H, -1, V(-0.6, 0.55, 0.1), 0.8, P.Black)
-	end
-	if not UnitModels.Lite then
-		Details.VoidKnight(r, lv)
+		local cape = r:Cape(2.1, 3.5, AC.Cloth, true)
+		K.gem(r, cape, 0.55, CF(0, 0.1, 0.08) * ANG(0, math.pi, 0), P.NeonSoft)
 	end
 	levelAura(r, lv)
 	return r:Finish(1.1, { RS = { 20, 0, 0 } })

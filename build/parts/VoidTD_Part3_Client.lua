@@ -2853,6 +2853,48 @@ local function button(props, onClick)
 	return b
 end
 
+-- Квадратная иконка с эмодзи и подписью (панель справа)
+local function iconButton(parent, order, icon, caption, top, bottom, edge, onClick, size)
+	size = size or 76
+	local b = new("TextButton", {
+		Parent = parent,
+		LayoutOrder = order,
+		Size = UDim2.fromOffset(size, size),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = icon,
+		Font = Enum.Font.GothamBold,
+		TextScaled = true,
+		TextColor3 = Color3.new(1, 1, 1),
+	})
+	corner(18).Parent = b
+	stroke(edge, 3).Parent = b
+	new("UIGradient", { Parent = b, Rotation = 90, Color = ColorSequence.new(top, bottom) })
+	new("UIPadding", { Parent = b, PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, size * 0.3), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) })
+	-- блик сверху
+	local shine = new("Frame", { Parent = b, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.82, BorderSizePixel = 0, Position = UDim2.new(0, -6, 0, -4), Size = UDim2.new(1, 12, 0.32, 0) })
+	corner(12).Parent = shine
+	local cap = label({ Parent = b, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 1, 2), Size = UDim2.new(1, 14, 0, size * 0.22), Text = caption, Font = Enum.Font.FredokaOne })
+	local scale = new("UIScale", { Parent = b })
+	b.MouseEnter:Connect(function()
+		tween(scale, 0.12, { Scale = 1.1 })
+	end)
+	b.MouseLeave:Connect(function()
+		tween(scale, 0.12, { Scale = 1 })
+	end)
+	b.MouseButton1Down:Connect(function()
+		tween(scale, 0.06, { Scale = 0.92 })
+	end)
+	b.MouseButton1Up:Connect(function()
+		tween(scale, 0.1, { Scale = 1.06 })
+	end)
+	if onClick then
+		b.Activated:Connect(onClick)
+	end
+	return b, cap
+end
+
 local function rarityColor(id)
 	return Config.Rarities[Config.Units[id].Rarity].Color
 end
@@ -2991,24 +3033,22 @@ local function buildHUD()
 		ctx.Request("StartWave")
 	end)
 
-	-- инвентарь всегда на экране
-	refs.InvButton = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "☰ ЮНИТЫ (G)", BackgroundColor3 = THEME.BG3 }, function()
-		UI.Toggle("Inventory")
-	end)
-
-	-- облегчённая графика
-	refs.LiteButton = button({ Parent = gui, AnchorPoint = Vector2.new(1, 0), Size = UDim2.fromOffset(190, 40), Position = UDim2.new(1, -16, 0, 16), Text = "⚙ ГРАФИКА: ПОЛНАЯ", BackgroundColor3 = THEME.BG3 }, function()
-		ctx.SetLite(not ctx.Lite, true)
-	end)
-
-	-- магазин кристаллов
-	refs.ShopButton = button({ Parent = gui, AnchorPoint = Vector2.new(1, 0), Size = UDim2.fromOffset(190, 46), Position = UDim2.new(1, -16, 0, 64), Text = "🛒 МАГАЗИН", BackgroundColor3 = Color3.fromRGB(50, 120, 80), StrokeColor = THEME.Good }, function()
+	-- панель иконок справа: магазин, юниты, графика
+	local dock = new("Frame", { Parent = gui, Name = "IconDock", AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, -40), Size = UDim2.fromOffset(84, 290), BackgroundTransparency = 1 })
+	new("UIListLayout", { Parent = dock, Padding = UDim.new(0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder })
+	refs.ShopButton = iconButton(dock, 1, "🛒", "МАГАЗИН", Color3.fromRGB(40, 150, 90), Color3.fromRGB(18, 70, 45), THEME.Good, function()
 		UI.Toggle("Shop")
 		FX.Sound("Click", 1, 1)
 	end)
+	refs.InvButton = iconButton(dock, 2, "🎒", "ЮНИТЫ", Color3.fromRGB(140, 70, 230), Color3.fromRGB(55, 22, 100), THEME.Accent, function()
+		UI.Toggle("Inventory")
+	end)
+	refs.LiteButton, refs.LiteCaption = iconButton(dock, 3, "⚙", "ГРАФИКА", Color3.fromRGB(80, 80, 110), Color3.fromRGB(30, 28, 46), THEME.Dim, function()
+		ctx.SetLite(not ctx.Lite, true)
+	end, 62)
 
 	-- выход из матча в лобби
-	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 170), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
+	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
 		ctx.Placement.Stop()
 		UI.CloseUnit()
 		task.spawn(UI.FadeTransition, "ВОЗВРАЩЕНИЕ В ЛОББИ", function()
@@ -3020,7 +3060,7 @@ local function buildHUD()
 	local hint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(640, 86), Position = UDim2.new(0.5, 0, 1, -18), StrokeColor = THEME.Accent })
 	refs.LobbyHint = hint
 	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 36), Position = UDim2.fromOffset(10, 6), Text = "ЛОББИ", TextColor3 = THEME.Accent })
-	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Круги слева — 3 КЕЙСА  •  ▶ ИГРАТЬ — в бой  •  ☰ ЮНИТЫ — G  •  🛒 МАГАЗИН — справа" })
+	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Круги слева — 3 КЕЙСА  •  ▶ ИГРАТЬ — в бой  •  🎒 ЮНИТЫ (G) и 🛒 МАГАЗИН — иконки справа" })
 
 	-- подсказка размещения
 	refs.PlaceHint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(520, 34), Position = UDim2.new(0.5, 0, 1, -150), Visible = false })
@@ -3136,7 +3176,7 @@ local function statLine(parent, order, name)
 end
 
 local function buildUnitPanel()
-	local p = panel({ Parent = gui, AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(310, 470), Position = UDim2.new(1, -16, 0.45, 0), Visible = false })
+	local p = panel({ Parent = gui, AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(310, 470), Position = UDim2.new(1, -112, 0.45, 0), Visible = false })
 	refs.UnitPanel = p
 	refs.UPName = label({ Parent = p, Size = UDim2.new(1, -60, 0, 32), Position = UDim2.fromOffset(12, 10), Text = "Unit", TextXAlignment = Enum.TextXAlignment.Left })
 	button({ Parent = p, Size = UDim2.fromOffset(32, 32), Position = UDim2.new(1, -42, 0, 10), Text = "✕", BackgroundColor3 = Color3.fromRGB(120, 30, 50) }, function()
@@ -3941,8 +3981,8 @@ function UI.OnNotify(p)
 end
 
 function UI.SetLiteText(on)
-	refs.LiteButton.Text = on and "⚙ ГРАФИКА: ЛЁГКАЯ" or "⚙ ГРАФИКА: ПОЛНАЯ"
-	refs.LiteButton.BackgroundColor3 = on and Color3.fromRGB(60, 110, 70) or THEME.BG3
+	refs.LiteCaption.Text = on and "ЛЁГКАЯ" or "ПОЛНАЯ"
+	refs.LiteCaption.TextColor3 = on and THEME.Good or THEME.Text
 end
 
 function UI.SetProfile(prof)
@@ -3974,7 +4014,6 @@ function UI.Update(dt)
 	refs.Money.Visible = inMatch
 	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
 	refs.Gems.Position = UDim2.fromOffset(12, inMatch and 50 or 8)
-	refs.InvButton.Position = UDim2.fromOffset(16, inMatch and 118 or 76)
 	refs.LobbyHint.Visible = not inMatch and not (modals.Mode.Visible or modals.Summon.Visible or modals.Inventory.Visible)
 	if not inMatch and UI.SelectedUid then
 		UI.CloseUnit()

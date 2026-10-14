@@ -1,7 +1,8 @@
 --!nocheck
 -- VOID TD :: EnemyModels
--- Процедурные модели врагов (без внешних ассетов). Модели — только визуал: урон и попадания
--- считаются на сервере по дистанции пути, поэтому размер брони не влияет на хитбокс.
+-- Процедурные модели врагов (без внешних ассетов) в угловатом стиле: блоки с фаской и светлым кантом,
+-- клинья, шипы, кристаллы-ромбы, рваная ткань, цепи. Модели — только визуал: урон и попадания считаются
+-- на сервере по дистанции пути, поэтому размер брони не влияет на хитбокс.
 --
 -- EnemyModels.Build(enemyId) -> rig:
 --   Model, Root, Motors, Base, Scale, Idle
@@ -20,9 +21,25 @@ local UnitModels = require(script.Parent.UnitModels)
 local Config = require(script.Parent.Config)
 
 local Rig = UnitModels.Rig
-local P = UnitModels.Palette
+local Kit = require(script.Parent.ModelKit)
+local A_ = Kit.Colors
+local spike = Kit.spike
+local crack = Kit.crack
+local ring = Kit.ring
+local hide = Kit.hide
+local join = Kit.join
+local bevel = Kit.bevel
+local bar = Kit.bar
+local hornA = Kit.hornA
+local gem = Kit.gem
+local tatter = Kit.tatter
+local pauldron = Kit.pauldron
+local bootA = Kit.bootA
+local squareRing = Kit.squareRing
+local chain = Kit.chain
 
 local V = Vector3.new
+local V2 = Vector2.new
 local CF = CFrame.new
 local ANG = CFrame.Angles
 local rad = math.rad
@@ -34,28 +51,40 @@ local M = {
 	Neon = Enum.Material.Neon,
 	Fabric = Enum.Material.Fabric,
 	Slate = Enum.Material.Slate,
-	Glass = Enum.Material.Glass,
-	Basalt = Enum.Material.Basalt,
-	Rock = Enum.Material.Rock,
 }
 
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+-- Палитра Пустоты: тёмная база, средний тон, светлый край, кость, металл, золото, неон
 local C = {
-	Ghost = Color3.fromRGB(196, 182, 236),
-	GhostDeep = Color3.fromRGB(122, 96, 178),
-	Obsidian = Color3.fromRGB(13, 10, 19),
-	Shell = Color3.fromRGB(30, 22, 42),
-	Bone = Color3.fromRGB(186, 176, 162),
-	Crystal = Color3.fromRGB(165, 85, 255),
-	CrystalPale = Color3.fromRGB(215, 170, 255),
-	Flesh = Color3.fromRGB(78, 22, 40),
-	FleshDark = Color3.fromRGB(52, 14, 28),
-	Iron = Color3.fromRGB(58, 56, 68),
-	IronDark = Color3.fromRGB(36, 34, 44),
-	Rune = Color3.fromRGB(200, 110, 255),
-	Maw = Color3.fromRGB(255, 70, 200),
+	Obsidian = rgb(22, 16, 30),
+	Night = rgb(32, 23, 46),
+	Deep = rgb(46, 31, 70),
+	Mid = rgb(74, 50, 112),
+	Lilac = rgb(122, 92, 170),
+	Ghost = rgb(206, 192, 245),
+	GhostMid = rgb(160, 132, 222),
+	Bone = rgb(214, 204, 186),
+	BoneDark = rgb(150, 138, 122),
+	Gun = rgb(52, 50, 66),
+	GunLight = rgb(92, 90, 112),
+	Gold = rgb(196, 150, 64),
+	GoldDark = rgb(130, 94, 40),
+	Flesh = rgb(86, 26, 48),
+	FleshLight = rgb(128, 44, 70),
+	FleshDark = rgb(52, 16, 32),
+	Stone = rgb(64, 60, 78),
+	StoneLight = rgb(98, 92, 116),
+	Neon = rgb(180, 80, 255),
+	NeonSoft = rgb(222, 170, 255),
+	Magenta = rgb(255, 60, 170),
+	White = rgb(250, 244, 255),
+	Steel = rgb(110, 110, 128),
 }
 
--- встроенная текстура дыма клиента Roblox (папка content/textures/particles, не ассет из каталога)
+-- встроенная текстура дыма клиента Roblox (content/textures/particles), не ассет из каталога
 local SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
 
 local EnemyModels = {}
@@ -64,12 +93,14 @@ local function lite()
 	return UnitModels.Lite
 end
 
+
+
 ------------------------------------------------------------------------
 -- БАЗОВЫЕ ХЕЛПЕРЫ
 ------------------------------------------------------------------------
 
 -- Существо без человеческого скелета: Root -> Torso (мотор "Root")
-local function newCreature(name, bodySize, bodyColor, bodyMat)
+local function newCreature(name, bodySize)
 	local self = setmetatable({}, Rig)
 	local model = Instance.new("Model")
 	model.Name = name
@@ -91,13 +122,11 @@ local function newCreature(name, bodySize, bodyColor, bodyMat)
 	local body = Instance.new("Part")
 	body.Name = "Torso"
 	body.Size = bodySize
-	body.Color = bodyColor
-	body.Material = bodyMat or M.Plastic
+	body.Color = C.Night
+	body.Transparency = 1 -- форма тела строится эллипсоидами
 	body.CanCollide = false
 	body.CanTouch = false
 	body.Massless = true
-	body.TopSurface = Enum.SurfaceType.Smooth
-	body.BottomSurface = Enum.SurfaceType.Smooth
 	body.CFrame = CF()
 	body.Parent = model
 	self.Torso = body
@@ -114,7 +143,15 @@ local function newCreature(name, bodySize, bodyColor, bodyMat)
 	return self
 end
 
--- Общие поля, которые читает Renderer
+-- Скелет R6 с невидимыми базовыми конечностями: форма строится поверх
+local function newBiped(name, headSize)
+	local r = Rig.new({ Name = name, HeadSize = headSize or V(1.3, 1.3, 1.3), Torso = C.Night, Arm = C.Night, Leg = C.Night, Head = C.Night })
+	for _, L in ipairs({ r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+		L.Transparency = 1
+	end
+	return r
+end
+
 local function setup(r, o)
 	r.Style = o.Style
 	r.Gait = o.Gait or {}
@@ -124,58 +161,20 @@ local function setup(r, o)
 	r.SpawnStyle = o.Spawn or "Rise"
 end
 
--- Невидимый узел на моторе: к нему привариваются детали, которые двигаются вместе
+
+
+
+-- Невидимый узел на моторе
 local function hub(r, name, limb, pivot, sec)
-	local h = r:Joint(name, limb, V(0.2, 0.2, 0.2), pivot, CF(), P.Black)
+	local h = r:Joint(name, limb, V(0.2, 0.2, 0.2), pivot, CF(), C.Obsidian)
 	h.Transparency = 1
 	if sec then
-		r.Sec = r.Sec or {}
 		r.Sec[name] = sec
 	end
 	return h
 end
 
--- Трещина из светящихся сегментов по точкам
-local function crack(r, limb, pts, thick, color)
-	local parts = {}
-	for i = 1, #pts - 1 do
-		parts[#parts + 1] = r:Seg(limb, pts[i], pts[i + 1], thick or 0.1, color or P.Neon, M.Neon)
-	end
-	return parts
-end
 
--- Кольцо из сегментов в плоскости XY узла cf. skip(i) -> true пропускает сегмент (разлом)
-local function ring(r, limb, cf, radius, count, thick, depth, color, mat, skip)
-	local parts = {}
-	local segLen = 2 * PI * radius / count * 1.08
-	for i = 0, count - 1 do
-		if not (skip and skip(i)) then
-			local a = i / count * PI * 2
-			local p = r:Box(limb, V(segLen, thick, depth), cf * CF(math.cos(a) * radius, math.sin(a) * radius, 0) * ANG(0, 0, a + PI / 2), color, mat or M.Metal)
-			parts[#parts + 1] = p
-		end
-	end
-	return parts
-end
-
--- Скрыть детали до нужной фазы
-local function hide(parts, target)
-	for _, p in ipairs(parts) do
-		p:SetAttribute("PT", target or p.Transparency)
-		p.Transparency = 1
-	end
-	return parts
-end
-
-local function join(...)
-	local out = {}
-	for _, list in ipairs({ ... }) do
-		for _, p in ipairs(list) do
-			out[#out + 1] = p
-		end
-	end
-	return out
-end
 
 -- Эмиттер частиц (nil в облегчённом режиме)
 local function emitter(part, color, o)
@@ -184,17 +183,17 @@ local function emitter(part, color, o)
 	end
 	o = o or {}
 	local e = Instance.new("ParticleEmitter")
-	e.Name = o.Name or "EnemyFX"
+	e.Name = "EnemyFX"
 	if o.Smoke then
 		e.Texture = SMOKE_TEXTURE
 	end
-	e.Color = ColorSequence.new(color, o.Color2 or color)
-	e.LightEmission = o.Light or (o.Smoke and 0.3 or 1)
+	e.Color = ColorSequence.new(color)
+	e.LightEmission = o.Smoke and 0.3 or 1
 	e.LightInfluence = o.Smoke and 0.4 or 0
 	e.Rate = o.Rate or 8
 	e.Lifetime = NumberRange.new(o.LifeMin or 0.6, o.LifeMax or 1.2)
 	e.Speed = NumberRange.new(o.SpeedMin or 0.3, o.SpeedMax or 1.2)
-	e.SpreadAngle = Vector2.new(o.Spread or 180, o.Spread or 180)
+	e.SpreadAngle = Vector2.new(180, 180)
 	e.Rotation = NumberRange.new(0, 360)
 	e.RotSpeed = NumberRange.new(-40, 40)
 	e.Size = NumberSequence.new({
@@ -208,9 +207,6 @@ local function emitter(part, color, o)
 	if o.Accel then
 		e.Acceleration = o.Accel
 	end
-	if o.Dir then
-		e.EmissionDirection = o.Dir
-	end
 	if o.Off then
 		e.Enabled = false
 	end
@@ -218,12 +214,10 @@ local function emitter(part, color, o)
 	return e
 end
 
--- Невидимая точка-излучатель, приваренная к limb
 local function emitPoint(r, limb, offset, size)
-	return r:Box(limb, size or V(0.6, 0.6, 0.6), offset, P.Black, M.Plastic, { Transparency = 1, Name = "Emit" })
+	return r:Box(limb, size or V(0.6, 0.6, 0.6), offset, C.Obsidian, M.Plastic, { Transparency = 1, Name = "Emit" })
 end
 
--- Тёмный шлейф (Trail). Создаётся в Finish, включается в afterFinish.
 local function darkTrail(r, limb, a, b, color)
 	if lite() then
 		return
@@ -259,652 +253,712 @@ local function finishBiped(r, scale, idle, height)
 	return r
 end
 
--- Свечение: возвращает {light, brightness} для таблицы фаз
-local function glow(r, part, color, range, brightness)
-	local l = r:Glow(part, color, range, brightness)
-	return l
-end
+
+
+
+
+
+
+
+
+
 
 ------------------------------------------------------------------------
--- 1. LOST SOUL — полупрозрачный дух, рваные края, фиолетовый дым
+-- 1. LOST SOUL — угловатый полупрозрачный дух в рваном капюшоне, фиолетовый дым
 ------------------------------------------------------------------------
 local function LostSoul(scale)
-	local r = newCreature("LostSoul", V(1.7, 1.8, 1.5), C.Ghost)
-	setup(r, { Style = "Float", Gait = { Bob = 0.35, Speed = 1 }, Death = "Dissipate", Spawn = "Fade" })
+	local r = newCreature("LostSoul", V(1.7, 1.8, 1.5))
+	setup(r, { Style = "Float", Gait = { Bob = 0.35 }, Death = "Dissipate", Spawn = "Fade" })
 	local B = r.Torso
-	B.Transparency = 0.32
-	table.insert(r.Pending, B)
-	r.Head = B
-	r.HeadSize = B.Size
-	-- светящееся ядро внутри тела
-	r:Sphere(B, V(0.75, 0.75, 0.65), CF(0, 0.05, 0.1), P.Neon, M.Neon, { Transparency = 0.45 })
-	-- капюшон-оболочка
-	r:Sphere(B, V(1.95, 1.25, 1.7), CF(0, 0.5, 0.1), C.Ghost, M.Plastic, { Transparency = 0.55 })
-	-- глазницы и глаза
+	local ghost = { Transparency = 0.3 }
+	-- голова-череп и тело, сужающееся книзу
+	r:Box(B, V(1.3, 1.25, 1.2), CF(0, 0.45, 0), C.Ghost, M.Plastic, { Transparency = 0.2 })
+	r:Box(B, V(1.15, 0.7, 1.0), CF(0, -0.45, 0.05), C.Ghost, M.Plastic, ghost)
+	r:Box(B, V(0.85, 0.6, 0.8), CF(0, -0.95, 0.12), C.GhostMid, M.Plastic, { Transparency = 0.4 })
+	spike(r, B, V(0, -1.2, 0.18), V(0.1, -1.9, 0.35), 0.75, C.GhostMid, M.Plastic, false)
+	-- капюшон из клиньев
+	r:Box(B, V(1.55, 0.3, 1.45), CF(0, 1.15, 0.12), A_.Cloth, M.Fabric, { Transparency = 0.15 })
+	r:Box(B, V(0.25, 1.4, 1.45), CF(0.75, 0.5, 0.12), A_.Cloth, M.Fabric, { Transparency = 0.15 })
+	r:Box(B, V(0.25, 1.4, 1.45), CF(-0.75, 0.5, 0.12), A_.Cloth, M.Fabric, { Transparency = 0.15 })
+	r:Box(B, V(1.55, 1.45, 0.25), CF(0, 0.5, 0.75), A_.Cloth, M.Fabric, { Transparency = 0.15 })
+	spike(r, B, V(0, 1.25, 0.45), V(0, 1.95, 1.1), 0.9, A_.Cloth, M.Fabric, true, 0.25)
+	-- плащ на плечах с рваным краем
+	r:Box(B, V(1.6, 1.0, 1.35), CF(0, -0.15, 0.1), A_.ClothDark, M.Fabric, { Transparency = 0.25 })
+	tatter(r, B, -0.65, -0.58, 1.6, 5, A_.ClothDark, M.Fabric, 1)
+	-- лицо: пустые глазницы с неоновыми зрачками, рот-щель
 	for _, s in ipairs({ -1, 1 }) do
-		r:Sphere(B, V(0.52, 0.62, 0.1), CF(0.33 * s, 0.18, -0.68) * ANG(0, 0, rad(-12 * s)), P.Black, M.Plastic, { Transparency = 0.15 })
-		r:Sphere(B, V(0.3, 0.42, 0.12), CF(0.33 * s, 0.17, -0.72) * ANG(0, 0, rad(-12 * s)), P.Neon, M.Neon)
+		r:Box(B, V(0.38, 0.42, 0.06), CF(0.3 * s, 0.5, -0.61) * ANG(0, 0, rad(-12 * s)), C.Obsidian)
+		r:Neon(B, V(0.18, 0.2, 0.08), CF(0.3 * s, 0.48, -0.63), C.Neon)
 	end
-	-- стонущий рот
-	r:Sphere(B, V(0.34, 0.5, 0.1), CF(0, -0.36, -0.68), P.Black, M.Plastic, { Transparency = 0.1 })
-	-- рваная юбка
-	if not lite() then
-		for i = 0, 7 do
-			local a = i / 8 * PI * 2
-			local h = 0.6 + ((i * 37) % 5) * 0.12
-			r:Wedge(B, V(0.48, h, 0.12), CF(math.cos(a) * 0.7, -0.75 - h / 2, math.sin(a) * 0.6) * ANG(0, -a + PI / 2, 0) * ANG(0, 0, PI), C.Ghost, M.Plastic, { Transparency = 0.45 })
-		end
-	end
-	-- хвосты-лоскуты на собственных моторах
-	for i, x in ipairs({ -0.38, 0.05, 0.42 }) do
-		local name = "SwayTail" .. i
-		local t = r:Joint(name, B, V(0.5, 0.9, 0.14), CF(x, -0.85, 0.1 + i * 0.08), CF(0, -0.45, 0), C.Ghost)
-		t.Transparency = 0.45
-		r:Wedge(t, V(0.42, 0.85, 0.12), CF(0, -0.87, 0) * ANG(0, 0, PI), C.GhostDeep, M.Plastic, { Transparency = 0.55 })
-		r.Sec[name] = { Amp = 0.35, Speed = 3 + i * 0.4 }
+	r:Box(B, V(0.22, 0.42, 0.06), CF(0, 0.02, -0.61), C.Obsidian)
+	-- ядро-ромб внутри
+	gem(r, B, 0.45, CF(0, -0.35, -0.48), C.Neon)
+	-- хвосты-лоскуты
+	for i, x in ipairs({ -0.35, 0.35 }) do
+		local t = hub(r, "SwayTail" .. i, B, CF(x, -1.0, 0.3), { Amp = 0.35, Speed = 3 + i * 0.5 })
+		spike(r, t, V(0, 0, 0), V(0.1 * i, -1.0, 0.2), 0.5, C.GhostMid, M.Plastic, true, 0.08)
 	end
 	-- тонкие руки с когтями
 	for _, s in ipairs({ 1, -1 }) do
-		local arm = r:Joint(s == 1 and "ArmR" or "ArmL", B, V(0.3, 1.0, 0.3), CF(0.8 * s, 0.05, 0), CF(0.22 * s, -0.4, 0) * ANG(0, 0, rad(28 * s)), C.Ghost)
-		arm.Transparency = 0.4
+		local arm = hub(r, s == 1 and "ArmR" or "ArmL", B, CF(0.85 * s, -0.1, 0))
+		r:Seg(arm, V(0, 0, 0), V(0.3 * s, -0.75, -0.15), 0.28, C.Ghost, M.Plastic, { Transparency = 0.3 })
 		for k = -1, 1 do
-			r:Wedge(arm, V(0.08, 0.32, 0.12), CF(k * 0.09, -0.62, -0.05) * ANG(0, 0, PI), C.GhostDeep, M.Plastic, { Transparency = 0.3 })
+			spike(r, arm, V(0.3 * s + k * 0.08, -0.85, -0.15), V(0.35 * s + k * 0.14, -1.3, -0.3), 0.14, C.GhostMid, M.Plastic, true, 0.05)
 		end
 	end
-	local e = emitPoint(r, B, CF(0, -1.3, 0.2), V(0.9, 0.3, 0.9))
-	emitter(e, Color3.fromRGB(120, 60, 200), { Smoke = true, Rate = 7, Size = 0.9, SizeEnd = 1.6, LifeMin = 0.8, LifeMax = 1.4, SpeedMin = 0.2, SpeedMax = 0.6, Accel = V(0, 0.6, 0), T0 = 0.55 })
-	glow(r, B, P.Neon, 7, 0.9)
+	local e = emitPoint(r, B, CF(0, -1.4, 0.2), V(0.9, 0.3, 0.9))
+	emitter(e, rgb(120, 60, 200), { Smoke = true, Rate = 7, Size = 0.9, SizeEnd = 1.6, LifeMin = 0.8, LifeMax = 1.4, SpeedMin = 0.2, SpeedMax = 0.6, Accel = V(0, 0.6, 0), T0 = 0.55 })
+	r:Glow(B, C.Neon, 7, 0.9)
 	return finishCreature(r, scale, 2.4, 3.2)
 end
 
 ------------------------------------------------------------------------
--- 2. VOID CRAWLER — низкий, 4 лапы-клешни, неровная спина, трещины, дёрганая голова
+-- 2. VOID CRAWLER — угловатый жук: гранёный панцирь, клешни, трещины, дёрганая голова
 ------------------------------------------------------------------------
 local function VoidCrawler(scale)
-	local r = newCreature("VoidCrawler", V(2.0, 0.9, 2.6), C.Shell, M.Slate)
+	local r = newCreature("VoidCrawler", V(2.0, 0.9, 2.6))
 	setup(r, { Style = "Crawl", Gait = { Speed = 1.7, Stride = 0.4, Bob = 0.08, Sway = 0.06 }, Death = "Collapse" })
 	local B = r.Torso
-	-- неровный панцирь
-	r:Sphere(B, V(2.2, 1.05, 2.5), CF(0, 0.45, 0.2) * ANG(rad(-5), 0, rad(3)), C.Shell, M.Slate)
-	r:Sphere(B, V(1.25, 0.85, 1.15), CF(0.4, 0.9, 0.55) * ANG(0, rad(20), rad(8)), P.Coal, M.Slate)
-	r:Sphere(B, V(0.95, 0.65, 0.95), CF(-0.45, 0.82, -0.3), P.Coal, M.Slate)
-	r:Sphere(B, V(1.15, 0.6, 0.8), CF(0.05, 0.7, 1.35), C.Shell, M.Slate)
-	-- костяные шипы
-	local spikes = { { -0.5, 1.05, -0.2, 0.7 }, { 0.15, 1.2, 0.25, 0.5 }, { 0.55, 1.25, 0.6, 0.9 }, { -0.25, 1.0, 0.9, 0.55 }, { 0.3, 0.95, 1.4, 0.45 } }
-	for _, s in ipairs(spikes) do
-		local base = V(s[1], s[2] - 0.15, s[3])
-		r:Rod(B, base, base + V(s[1] * 0.25, s[4], 0.35), 0.18, C.Bone, M.Plastic)
+	-- грудь и брюшко из гранёных пластин внахлёст (неровная спина)
+	bevel(r, B, V(1.5, 0.8, 1.3), CF(0, 0.15, -0.6), A_.Armor, A_.Edge, M.Slate)
+	bevel(r, B, V(1.9, 0.9, 1.0), CF(0, 0.35, 0.35) * ANG(rad(8), 0, rad(4)), C.Deep, A_.Edge, M.Slate)
+	bevel(r, B, V(1.75, 0.85, 0.9), CF(0.08, 0.55, 1.0) * ANG(rad(-6), rad(5), rad(-5)), A_.Armor, A_.Edge, M.Slate)
+	bevel(r, B, V(1.3, 0.7, 0.8), CF(-0.05, 0.4, 1.65) * ANG(rad(-18), 0, rad(3)), C.Deep, A_.Edge, M.Slate)
+	r:Wedge(B, V(1.6, 0.5, 0.9), CF(0, 0.85, 0.35), A_.ArmorMid, M.Slate)
+	-- кривые костяные шипы
+	spike(r, B, V(-0.45, 0.85, 0.3), V(-0.65, 1.6, 0.6), 0.32, C.Bone)
+	spike(r, B, V(0.35, 0.9, 0.55), V(0.5, 1.4, 0.85), 0.26, C.Bone)
+	spike(r, B, V(0.05, 0.95, 1.05), V(0.05, 1.85, 1.35), 0.36, C.Bone)
+	spike(r, B, V(-0.35, 0.75, 1.55), V(-0.5, 1.25, 1.9), 0.24, C.BoneDark)
+	-- трещины между пластинами
+	crack(r, B, { V(-0.95, 0.65, -0.12), V(-0.3, 0.82, -0.15), V(0.35, 0.8, -0.1), V(0.95, 0.6, -0.08) }, 0.09)
+	crack(r, B, { V(-0.9, 0.85, 0.66), V(-0.2, 1.0, 0.7), V(0.45, 0.98, 0.68), V(0.95, 0.8, 0.7) }, 0.08)
+	-- брюшко-хвост с жалом
+	local tail = hub(r, "SwayTail", B, CF(0, 0.35, 1.95), { Amp = 0.18, Speed = 5 })
+	bevel(r, tail, V(0.8, 0.5, 0.7), CF(0, 0.1, 0.3) * ANG(rad(-15), 0, 0), A_.Armor, A_.Edge, M.Slate)
+	spike(r, tail, V(0, 0.3, 0.6), V(0, 0.95, 1.2), 0.3, C.Bone)
+	-- голова на моторе "Twitch"
+	local head = hub(r, "TwitchHead", B, CF(0, 0.15, -1.25), { Amp = 0.45, Speed = 1 })
+	bevel(r, head, V(1.05, 0.7, 0.9), CF(0, 0.05, -0.4), A_.Armor, A_.Edge, M.Slate)
+	r:Wedge(head, V(1.0, 0.35, 0.7), CF(0, 0.55, -0.45) * ANG(0, PI, 0), A_.ArmorMid, M.Slate)
+	for _, e in ipairs({ { -0.25, 0.15, 0.2 }, { 0.25, 0.15, 0.2 }, { 0, 0.28, 0.15 }, { -0.4, -0.05, 0.13 }, { 0.4, -0.05, 0.13 } }) do
+		r:Neon(head, V(e[3], e[3], 0.08), CF(e[1], e[2], -0.87) * ANG(0, 0, rad(45)), C.Neon)
 	end
-	-- фиолетовые трещины
-	crack(r, B, { V(-0.75, 0.88, -0.75), V(-0.2, 0.98, -0.1), V(0.25, 0.98, 0.35), V(0.75, 0.82, 0.95) }, 0.09)
-	crack(r, B, { V(-0.2, 0.98, -0.1), V(-0.7, 0.85, 0.6) }, 0.07)
-	-- брюшко-хвост
-	local tail = r:Joint("SwayTail", B, V(0.9, 0.6, 1.0), CF(0, 0.1, 1.3), CF(0, 0, 0.5), C.Shell, M.Slate)
-	r:Sphere(tail, V(0.95, 0.65, 1.05), CF(), C.Shell, M.Slate)
-	r:Rod(tail, V(0, 0.1, 0.4), V(0, 0.55, 1.0), 0.16, C.Bone)
-	r:Neon(tail, V(0.08, 0.05, 0.7), CF(0, 0.33, 0), P.Neon)
-	r.Sec.SwayTail = { Amp = 0.18, Speed = 5 }
-	-- голова на моторе "Twitch": резкие короткие повороты
-	local head = r:Joint("TwitchHead", B, V(1.05, 0.7, 0.95), CF(0, 0.15, -1.3), CF(0, 0, -0.42), P.Coal, M.Slate)
-	r.Head = head
-	r.HeadSize = head.Size
-	r:Sphere(head, V(1.15, 0.8, 1.0), CF(0, 0.05, 0), P.Coal, M.Slate)
-	for _, e in ipairs({ { -0.28, 0.12, 0.2 }, { 0.3, 0.14, 0.2 }, { 0, 0.3, 0.15 }, { -0.12, -0.02, 0.12 }, { 0.15, -0.03, 0.12 } }) do
-		r:Ball(head, e[3], CF(e[1], e[2], -0.48), P.Neon, M.Neon)
-	end
-	-- жвалы
+	-- жвалы-серпы
 	for _, s in ipairs({ -1, 1 }) do
-		r:Chain(head, { V(0.3 * s, -0.2, -0.35), V(0.42 * s, -0.25, -0.75), V(0.22 * s, -0.25, -1.05) }, 0.14, C.Bone, M.Plastic, 0.7, true)
-		r:Rod(head, V(0.2 * s, 0.3, -0.3), V(0.5 * s, 0.85, -0.7), 0.06, P.Black)
+		bar(r, head, V(0.3 * s, -0.2, -0.8), V(0.45 * s, -0.25, -1.2), 0.16, C.BoneDark)
+		spike(r, head, V(0.45 * s, -0.25, -1.2), V(0.12 * s, -0.25, -1.55), 0.18, C.Bone, M.Plastic, true, 0.08)
 	end
-	r.Sec.TwitchHead = { Amp = 0.45, Speed = 1 }
-	-- лапы: узел на моторе + бедро + голень + коготь
-	local legs = { { "FR", 1, -0.75, 1.25 }, { "FL", -1, -0.75, 1.25 }, { "BR", 1, 0.85, 1 }, { "BL", -1, 0.85, 1 } }
+	-- 4 лапы: бедро вверх, голень вниз, коготь
+	local legs = { { "FR", 1, -0.7, 1.25 }, { "FL", -1, -0.7, 1.25 }, { "BR", 1, 0.75, 1 }, { "BL", -1, 0.75, 1 } }
 	for _, l in ipairs(legs) do
-		local s, big = l[2], l[4]
-		local h = hub(r, l[1], B, CF(0.95 * s, 0, l[3]))
-		local knee = V(0.95 * s, 0.6, l[3] < 0 and -0.2 or 0.15)
-		local foot = V(1.45 * s, -1.25, l[3] < 0 and -0.45 or 0.3)
-		r:Rod(h, V(0, 0, 0), knee, 0.34 * big, P.Coal, M.Slate)
-		r:Ball(h, 0.36 * big, CF(knee), C.Shell, M.Slate)
-		r:Rod(h, knee, foot, 0.24 * big, P.Black, M.Slate)
-		r:Neon(h, V(0.06, 0.06, 0.5), CFrame.lookAt((knee + foot) / 2, foot) * CF(0, 0.12, 0), P.Neon)
-		-- коготь
-		r:Chain(h, { foot, foot + V(0.05 * s, 0.1, -0.35 * big), foot + V(-0.05 * s, -0.05, -0.6 * big) }, 0.12 * big, C.Bone, M.Plastic, 0.6, true)
+		local s, z, big = l[2], l[3], l[4]
+		local h = hub(r, l[1], B, CF(0.75 * s, 0.1, z))
+		local knee = V(0.95 * s, 0.75, z < 0 and -0.2 or 0.2)
+		local foot = V(1.45 * s, -1.2, z < 0 and -0.5 or 0.35)
+		local toe = foot + (knee - foot).Unit * 0.45
+		bar(r, h, V(0, 0, 0), knee, 0.34 * big, A_.Armor)
+		r:Box(h, V(0.42, 0.42, 0.42) * big, CF(knee) * ANG(0, rad(45), rad(45)), A_.ArmorMid, M.Slate)
+		bar(r, h, knee, toe, 0.25 * big, C.Deep)
+		r:Neon(h, V(0.05, 0.05, 0.55), CFrame.lookAt((knee + toe) / 2, toe) * CF(0, 0.13 * big, 0), C.Neon)
+		spike(r, h, toe, foot, 0.24 * big, C.Bone)
 	end
 	return finishCreature(r, scale, 1.3, 2.4)
 end
 
 ------------------------------------------------------------------------
--- 3. SHADOW BEAST — массивные передние лапы, шипы на спине, тёмный шлейф
+-- 3. SHADOW BEAST — угловатый теневой волк: массивные передние лапы, шипы, тёмный шлейф
 ------------------------------------------------------------------------
 local function ShadowBeast(scale)
-	local r = newCreature("ShadowBeast", V(1.6, 1.4, 2.8), C.Obsidian)
+	local r = newCreature("ShadowBeast", V(1.6, 1.4, 2.8))
 	setup(r, { Style = "Gallop", Gait = { Speed = 1, Stride = 0.6, Bob = 0.18 }, Death = "Collapse" })
 	local B = r.Torso
-	-- мощная грудь и поджарый зад
-	r:Sphere(B, V(2.05, 1.85, 1.7), CF(0, 0.18, -0.8), C.Obsidian)
-	r:Sphere(B, V(1.5, 1.25, 1.45), CF(0, 0.05, 0.95), C.Obsidian)
-	r:Sphere(B, V(1.6, 0.5, 2.6), CF(0, -0.55, 0), P.Coal)
-	-- шипы вдоль хребта
-	for i = 0, 5 do
-		local z = -1.2 + i * 0.5
-		local h = 0.55 + ((i * 3) % 4) * 0.15
-		r:Rod(B, V(0, 0.7 + (i < 3 and 0.2 or 0), z), V(0, 0.7 + h + (i < 3 and 0.2 or 0), z + 0.45), 0.2, P.DeepViolet, M.Slate)
+	local fur, furHi = rgb(26, 20, 36), rgb(60, 44, 86)
+	-- грудь, талия, круп
+	bevel(r, B, V(1.8, 1.6, 1.4), CF(0, 0.25, -0.75), fur, furHi, M.Plastic)
+	bevel(r, B, V(1.25, 1.1, 1.2), CF(0, 0.2, 0.4), fur, furHi, M.Plastic)
+	bevel(r, B, V(1.5, 1.3, 1.1), CF(0, 0.25, 1.15), fur, furHi, M.Plastic)
+	r:Wedge(B, V(1.75, 0.5, 0.9), CF(0, -0.55, -0.85) * ANG(PI, 0, 0), fur, M.Plastic)
+	-- грива-шипы
+	for i = 0, 6 do
+		local z = -1.25 + i * 0.42
+		local h = 0.4 + ((i * 3) % 4) * 0.13 + (i < 3 and 0.3 or 0)
+		local y = 1.0 - i * 0.03
+		spike(r, B, V(0, y - 0.1, z), V(0, y + h, z + 0.45), 0.38, i % 2 == 0 and C.Mid or C.Deep, M.Plastic, i < 3, 0.16)
 	end
-	r:Neon(B, V(0.08, 0.06, 2.4), CF(0, 0.95, -0.1), P.Neon, { Transparency = 0.2 })
-	-- голова
-	local head = r:Joint("Neck", B, V(1.15, 1.0, 1.25), CF(0, 0.5, -1.55), CF(0, 0.15, -0.55), C.Obsidian)
-	r.Head = head
-	r.HeadSize = head.Size
-	r:Box(head, V(0.75, 0.5, 0.95), CF(0, -0.15, -0.95), P.Coal)
-	r:Box(head, V(0.7, 0.16, 0.85), CF(0, -0.48, -0.9), P.Maroon)
-	for i = -1, 1, 2 do
-		r:Wedge(head, V(0.08, 0.22, 0.12), CF(i * 0.25, -0.33, -1.3) * ANG(0, 0, PI), P.White)
-		r:Wedge(head, V(0.08, 0.18, 0.12), CF(i * 0.18, -0.55, -1.25), P.White)
-	end
-	r:Sphere(head, V(0.4, 0.3, 0.3), CF(0, -0.05, -1.45), P.Black)
+	crack(r, B, { V(0.91, 0.6, -1.1), V(0.91, 0.3, -0.6), V(0.91, 0.45, -0.25) }, 0.06)
+	crack(r, B, { V(-0.91, 0.55, -1.0), V(-0.91, 0.25, -0.55) }, 0.06)
+	-- голова: гранёный череп, клиновидная морда, челюсть, клыки, уши-клинья
+	local head = hub(r, "Neck", B, CF(0, 0.65, -1.5))
+	bevel(r, head, V(1.1, 0.9, 1.0), CF(0, 0.15, -0.45), fur, furHi, M.Plastic)
+	bevel(r, head, V(0.7, 0.5, 0.75), CF(0, -0.02, -1.25), fur, furHi, M.Plastic)
+	r:Wedge(head, V(0.7, 0.3, 0.75), CF(0, 0.37, -1.25) * ANG(0, 0, 0), fur, M.Plastic)
+	r:Box(head, V(0.3, 0.2, 0.12), CF(0, 0.08, -1.65), C.Obsidian)
+	r:Box(head, V(0.6, 0.2, 0.7), CF(0, -0.38, -1.15), C.Obsidian)
+	r:Neon(head, V(0.45, 0.06, 0.6), CF(0, -0.25, -1.15), C.Magenta)
 	for _, s in ipairs({ -1, 1 }) do
-		r:Wedge(head, V(0.28, 0.65, 0.42), CF(0.4 * s, 0.75, 0.2) * ANG(rad(-15), 0, rad(-10 * s)), C.Obsidian)
+		spike(r, head, V(0.25 * s, -0.2, -1.5), V(0.24 * s, -0.5, -1.5), 0.12, C.White, M.Plastic, true, 0.06)
+		spike(r, head, V(0.38 * s, 0.55, -0.25), V(0.5 * s, 1.2, 0.0), 0.4, fur, M.Plastic, true, 0.14)
+		r:Neon(head, V(0.3, 0.1, 0.06), CF(0.3 * s, 0.25, -0.96) * ANG(0, 0, rad(-18 * s)), C.Neon)
 	end
-	r:Eyes(P.Neon, { Y = 0.15, Spacing = 0.32, Size = V(0.3, 0.12, 0.06), Tilt = -18 })
-	glow(r, head, P.Neon, 6, 1)
+	r:Glow(head, C.Neon, 6, 1)
 	-- массивные передние лапы
 	for _, l in ipairs({ { "FR", 1 }, { "FL", -1 } }) do
 		local s = l[2]
-		r:Sphere(B, V(0.95, 1.35, 1.35), CF(0.8 * s, 0.05, -0.95), C.Obsidian)
-		local leg = r:Joint(l[1], B, V(0.75, 1.7, 0.8), CF(0.78 * s, -0.25, -1.0), CF(0, -0.8, 0), C.Obsidian)
-		r:Sphere(leg, V(0.95, 1.0, 1.0), CF(0, 0.2, 0), C.Obsidian)
-		r:Box(leg, V(0.9, 0.32, 1.1), CF(0, -0.82, -0.15), P.Coal)
+		bevel(r, B, V(0.6, 1.3, 1.2), CF(0.85 * s, 0.15, -0.9), fur, furHi, M.Plastic)
+		local leg = hub(r, l[1], B, CF(0.8 * s, -0.25, -1.0))
+		bevel(r, leg, V(0.8, 1.0, 0.85), CF(0, -0.25, 0), fur, furHi, M.Plastic)
+		bevel(r, leg, V(0.6, 0.7, 0.65), CF(0, -1.0, 0.05), fur, furHi, M.Plastic)
+		bevel(r, leg, V(0.85, 0.35, 1.0), CF(0, -1.55, -0.15), fur, furHi, M.Plastic)
 		for k = -1, 1 do
-			r:Wedge(leg, V(0.12, 0.2, 0.35), CF(k * 0.28, -0.88, -0.78), C.Bone)
+			spike(r, leg, V(k * 0.26, -1.6, -0.6), V(k * 0.3, -1.72, -0.9), 0.14, C.Bone, M.Plastic, true, 0.06)
 		end
 	end
 	-- задние лапы
 	for _, l in ipairs({ { "BR", 1 }, { "BL", -1 } }) do
 		local s = l[2]
-		local leg = r:Joint(l[1], B, V(0.5, 1.5, 0.65), CF(0.55 * s, -0.4, 1.1), CF(0, -0.72, 0.1) * ANG(rad(-10), 0, 0), C.Obsidian)
-		r:Box(leg, V(0.55, 0.25, 0.75), CF(0, -0.68, -0.12), P.Coal)
+		local leg = hub(r, l[1], B, CF(0.6 * s, -0.1, 1.15))
+		bar(r, leg, V(0, 0.1, 0), V(0, -0.6, 0.35), V2(0.6, 0.8), fur)
+		bar(r, leg, V(0, -0.6, 0.35), V(0, -1.55, 0.15), 0.42, fur)
+		bevel(r, leg, V(0.55, 0.32, 0.8), CF(0, -1.75, -0.05), fur, furHi, M.Plastic)
 	end
-	-- хвост
-	local tail = r:Joint("SwayTail", B, V(0.3, 0.3, 0.3), CF(0, 0.45, 1.55), CF(), C.Obsidian)
-	tail.Transparency = 1
-	r:Chain(tail, { V(0, 0, 0), V(0, 0.4, 0.6), V(0.15, 0.85, 1.05), V(0.1, 1.1, 1.5) }, 0.32, C.Obsidian, M.Plastic, 0.75, true)
-	r.Sec.SwayTail = { Amp = 0.3, Speed = 6 }
-	-- тёмный шлейф и дымка
-	darkTrail(r, B, V(0, 0.75, 1.4), V(0, -0.45, 1.4), P.DeepViolet)
+	-- хвост с шипом
+	local tail = hub(r, "SwayTail", B, CF(0, 0.6, 1.7), { Amp = 0.3, Speed = 6 })
+	bar(r, tail, V(0, 0, 0), V(0, 0.4, 0.6), 0.34, fur)
+	bar(r, tail, V(0, 0.4, 0.6), V(0.1, 0.85, 1.05), 0.26, fur)
+	spike(r, tail, V(0.1, 0.85, 1.05), V(0.1, 1.5, 1.4), 0.3, C.Mid)
+	darkTrail(r, B, V(0, 0.75, 1.4), V(0, -0.45, 1.4), C.Deep)
 	local e = emitPoint(r, B, CF(0, 0, 0.6), V(1.2, 1, 1.6))
-	emitter(e, Color3.fromRGB(40, 16, 66), { Smoke = true, Rate = 6, Size = 0.7, SizeEnd = 1.3, LifeMin = 0.4, LifeMax = 0.8, T0 = 0.5 })
+	emitter(e, rgb(40, 16, 66), { Smoke = true, Rate = 6, Size = 0.7, SizeEnd = 1.3, LifeMin = 0.4, LifeMax = 0.8, T0 = 0.5 })
 	return finishCreature(r, scale, 2.0, 3.2)
 end
 
 ------------------------------------------------------------------------
--- 4. ARMORED HORROR — нагрудник, тяжёлые наплечники, шипы, светящиеся швы
+-- 4. ARMORED HORROR — латный кошмар: огромный нагрудник, наплечники-ступени, шипы, светящиеся швы
 ------------------------------------------------------------------------
 local function ArmoredHorror(scale)
-	local r = Rig.new({ Name = "ArmoredHorror", Torso = C.Iron, Arm = C.IronDark, Leg = C.IronDark, Head = P.Coal, TorsoMat = M.Metal, HeadSize = V(1.2, 1.2, 1.2) })
+	local r = newBiped("ArmoredHorror", V(1.2, 1.2, 1.2))
 	setup(r, { Style = "Heavy", Gait = { Speed = 0.9, Stride = 0.45, Bob = 0.16, Sway = 0.07 }, Death = "Topple" })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- огромный нагрудник: верхняя плита, «киль», нижние пластины
-	r:Box(T, V(2.75, 1.25, 1.75), CF(0, 0.45, -0.05), P.Steel, M.Metal)
-	r:Wedge(T, V(2.6, 0.55, 0.45), CF(0, 0.85, -1.08) * ANG(0, PI, 0), P.Steel, M.Metal)
-	r:Box(T, V(2.45, 0.5, 1.55), CF(0, -0.45, 0), C.Iron, M.Metal)
-	r:Box(T, V(2.3, 0.35, 1.45), CF(0, -0.9, 0), C.IronDark, M.Metal)
-	-- светящиеся швы между плитами
-	r:Neon(T, V(2.55, 0.08, 1.6), CF(0, -0.17, 0), P.NeonPink)
-	r:Neon(T, V(2.35, 0.06, 1.5), CF(0, -0.7, 0), P.NeonPink)
-	crack(r, T, { V(-0.8, 0.95, -0.94), V(-0.35, 0.55, -0.94), V(-0.5, 0.15, -0.94) }, 0.07, P.NeonPink)
-	crack(r, T, { V(0.55, 0.9, -0.94), V(0.75, 0.4, -0.94) }, 0.06, P.NeonPink)
-	-- горжет
-	r:Cyl(T, 0.4, 1.5, CF(0, 1.05, 0), C.IronDark, M.Metal, "Y")
-	-- шлем
-	r:Box(H, V(1.42, 1.35, 1.45), CF(0, 0.05, 0.02), P.Gray, M.Metal)
-	r:Box(H, V(1.5, 0.3, 1.5), CF(0, -0.1, 0), C.Iron, M.Metal)
-	r:Box(H, V(1.0, 0.1, 0.06), CF(0, 0.12, -0.76), P.NeonPink, M.Neon)
-	for i = -1, 1 do
-		r:Rod(H, V(i * 0.45, 0.65, 0.1), V(i * 0.6, 1.25 - math.abs(i) * 0.2, 0.45), 0.16, P.Steel, M.Metal)
+	local glow = C.Magenta
+	-- корпус и огромный нагрудник
+	bevel(r, T, V(2.2, 2.0, 1.2), CF(0, 0.05, 0.05), A_.Armor, A_.Edge)
+	bevel(r, T, V(2.7, 1.25, 1.55), CF(0, 0.6, -0.1), A_.ArmorMid, A_.Edge)
+	r:Wedge(T, V(2.4, 0.6, 0.55), CF(0, 0.65, -1.1) * ANG(PI, PI, 0), A_.ArmorMid, M.Metal)
+	r:Wedge(T, V(2.4, 0.5, 0.55), CF(0, 1.1, -1.1), A_.Armor, M.Metal)
+	-- светящиеся швы и трещины между пластинами
+	r:Neon(T, V(2.75, 0.07, 1.6), CF(0, -0.05, -0.1), glow)
+	crack(r, T, { V(-0.9, 1.15, -0.9), V(-0.55, 0.7, -0.92), V(-0.75, 0.25, -0.88) }, 0.06, glow)
+	crack(r, T, { V(0.6, 1.1, -0.9), V(0.85, 0.5, -0.88) }, 0.05, glow)
+	gem(r, T, 0.4, CF(0, 0.55, -0.9), glow, A_.Edge)
+	-- пластины живота и пояс
+	bevel(r, T, V(2.0, 0.4, 1.35), CF(0, -0.35, -0.02), A_.ArmorMid, A_.Edge)
+	bevel(r, T, V(1.9, 0.4, 1.3), CF(0, -0.72, 0), A_.Armor, A_.Edge)
+	bevel(r, T, V(0.45, 0.4, 0.15), CF(0, -0.72, -0.72), A_.Edge, A_.ArmorMid)
+	for _, s in ipairs({ -1, 1 }) do
+		bevel(r, T, V(0.75, 0.85, 1.1), CF(0.85 * s, -1.25, -0.05) * ANG(0, 0, rad(12 * s)), A_.ArmorMid, A_.Edge)
 	end
-	-- тяжёлые наплечники с шипами
+	for i = -1, 1 do
+		spike(r, T, V(i * 0.6, 0.8, 0.6), V(i * 0.8, 1.5 - math.abs(i) * 0.25, 1.4), 0.45, A_.Armor, M.Metal)
+	end
+	-- шлем: гранёный, с гребнем, рогами и узким визором
+	bevel(r, H, V(1.3, 1.35, 1.35), CF(0, 0.05, 0), A_.Armor, A_.Edge)
+	bevel(r, H, V(1.1, 0.75, 0.25), CF(0, -0.1, -0.7), A_.ArmorMid, A_.Edge)
+	r:Neon(H, V(0.85, 0.09, 0.06), CF(0, 0.2, -0.84), glow)
+	r:Neon(H, V(0.09, 0.4, 0.06), CF(0, -0.05, -0.84), glow)
+	spike(r, H, V(0, 0.6, 0.1), V(0, 1.4, 0.55), 0.8, A_.Armor, M.Metal, true, 0.12)
+	for _, s in ipairs({ -1, 1 }) do
+		hornA(r, H, { V(0.6 * s, 0.3, 0), V(0.95 * s, 0.55, 0.05), V(1.1 * s, 1.0, 0.05), V(1.0 * s, 1.5, -0.1) }, 0.26, C.Bone)
+	end
+	-- наплечники-ступени, толстые руки, латные кулаки
 	for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
 		local A, s = a[1], a[2]
-		r:Pauldron(A, s, 1.4, P.Steel, C.IronDark, 0.08)
-		r:Pauldron(A, s, 1.05, C.Iron, nil, 0.45)
-		for k = 0, 1 do
-			r:Rod(A, V(0.3 * s, 1.1, -0.25 + k * 0.5), V(0.75 * s, 1.85, -0.35 + k * 0.6), 0.16, P.Gray, M.Metal)
-		end
-		-- толстые руки и латные перчатки
-		r:Box(A, V(1.3, 1.25, 1.3), CF(0, -0.15, 0), C.Iron, M.Metal)
-		r:Box(A, V(1.38, 0.75, 1.38), CF(0, -0.8, 0), P.Steel, M.Metal)
-		r:Neon(A, V(1.32, 0.06, 1.32), CF(0, -0.5, 0), P.NeonPink)
+		pauldron(r, A, s, 1.15, A_.Armor, A_.Edge, glow, 2)
+		bevel(r, A, V(1.05, 0.9, 1.05), CF(0, 0.15, 0), A_.Armor, A_.Edge)
+		bevel(r, A, V(1.25, 1.05, 1.25), CF(0, -0.75, 0), A_.ArmorMid, A_.Edge)
+		r:Neon(A, V(1.27, 0.06, 1.27), CF(0, -0.55, 0), glow)
+		bevel(r, A, V(1.15, 0.6, 1.15), CF(0, -1.45, -0.05), A_.Armor, A_.Edge)
 		for k = -1, 1 do
-			r:Rod(A, V(k * 0.35, -1.0, -0.62), V(k * 0.4, -1.1, -0.95), 0.1, P.Gray, M.Metal)
+			spike(r, A, V(k * 0.33, -1.4, -0.55), V(k * 0.38, -1.45, -0.95), 0.18, A_.Edge, M.Metal)
 		end
 	end
-	-- поножи и наколенники
+	-- ноги
 	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.2, 1.15, 1.25), CF(0, -0.45, -0.02), C.Iron, M.Metal)
-		r:Sphere(Lg, V(0.8, 0.6, 0.4), CF(0, 0.15, -0.6), P.Steel, M.Metal)
-		r:Box(Lg, V(1.25, 0.35, 1.45), CF(0, -0.85, -0.1), C.IronDark, M.Metal)
+		bevel(r, Lg, V(1.05, 1.0, 1.05), CF(0, 0.45, 0), A_.Armor, A_.Edge)
+		bevel(r, Lg, V(0.8, 0.5, 0.3), CF(0, -0.05, -0.6), A_.ArmorMid, A_.Edge)
+		bevel(r, Lg, V(1.1, 0.7, 1.12), CF(0, -0.38, 0), A_.ArmorMid, A_.Edge)
+		bootA(r, Lg, A_.Armor, A_.Edge, 1.15)
 	end
-	-- шипы на спине
-	for i = -1, 1 do
-		r:Rod(T, V(i * 0.6, 0.6, 0.85), V(i * 0.75, 1.1 - math.abs(i) * 0.2, 1.6), 0.18, P.Gray, M.Metal)
-	end
-	glow(r, T, P.NeonPink, 6, 0.8)
-	return finishBiped(r, scale, { Root = { 6, 0, 0 } })
+	r:Glow(T, glow, 7, 0.9)
+	return finishBiped(r, scale, { Root = { 6, 0, 0 }, RS = { 0, 0, 6 }, LS = { 0, 0, -6 } })
 end
 
 ------------------------------------------------------------------------
 -- 5. RIFT PHANTOM — разделённые парящие части тела, кольца энергии, шлейф частиц
 ------------------------------------------------------------------------
 local function RiftPhantom(scale)
-	local r = newCreature("RiftPhantom", V(1.4, 1.2, 0.9), P.DeepViolet)
+	local r = newCreature("RiftPhantom", V(1.4, 1.2, 0.9))
 	setup(r, { Style = "Float", Gait = { Bob = 0.3 }, Death = "Scatter", Spawn = "Fade" })
 	local B = r.Torso
-	B.Transparency = 0.3
-	-- ядро груди
-	r:Box(B, V(0.6, 0.6, 0.6), CF(0, 0.05, -0.2) * ANG(rad(45), rad(45), 0), P.Neon, M.Neon)
-	r:Sphere(B, V(1.5, 1.3, 1.0), CF(0, 0, 0.1), P.DeepViolet, M.Plastic, { Transparency = 0.45 })
-	glow(r, B, P.Neon, 9, 1.1)
-	-- парящие плечи
+	-- грудь: гранёный корпус с кристаллом
+	bevel(r, B, V(1.4, 1.1, 0.8), CF(0, 0.1, 0.1), C.Deep, C.Lilac, M.Plastic)
+	r:Wedge(B, V(1.4, 0.6, 0.8), CF(0, -0.75, 0.1) * ANG(PI, 0, 0), C.Deep, M.Plastic)
+	spike(r, B, V(0, 0.0, -0.4), V(0, 0.6, -0.4), 0.5, C.NeonSoft, M.Neon)
+	spike(r, B, V(0, 0.0, -0.4), V(0, -0.65, -0.4), 0.5, C.Neon, M.Neon)
+	r:Glow(B, C.Neon, 9, 1.2)
+	-- парящие плечи-пластины
 	for _, s in ipairs({ 1, -1 }) do
-		local name = s == 1 and "BobShoulderR" or "BobShoulderL"
-		local sh = hub(r, name, B, CF(1.05 * s, 0.7, 0), { Amp = 0.12, Speed = 2.6 })
-		r:Sphere(sh, V(0.9, 0.55, 0.9), CF(), P.DeepViolet, M.Plastic, { Transparency = 0.25 })
-		r:Neon(sh, V(0.7, 0.06, 0.7), CF(0, -0.2, 0), P.NeonSoft, { Transparency = 0.3 })
+		local sh = hub(r, s == 1 and "BobShoulderR" or "BobShoulderL", B, CF(1.05 * s, 0.75, 0), { Amp = 0.12, Speed = 2.6 })
+		bevel(r, sh, V(0.95, 0.35, 0.9), CF() * ANG(0, 0, rad(-18 * s)), C.Deep, C.Lilac, M.Plastic)
+		spike(r, sh, V(0.2 * s, 0.15, 0), V(0.6 * s, 0.75, 0), 0.35, C.Mid)
+		r:Neon(sh, V(0.9, 0.05, 0.85), CF(0, -0.2, 0) * ANG(0, 0, rad(-18 * s)), C.NeonSoft)
 	end
-	-- парящая светящаяся голова в капюшоне
-	local head = hub(r, "BobHead", B, CF(0, 1.55, 0), { Amp = 0.15, Speed = 2 })
-	r.Head = head
-	r:Sphere(head, V(0.95, 1.05, 0.95), CF(), P.NeonSoft, M.Neon, { Transparency = 0.1 })
-	r:Box(head, V(0.62, 0.12, 0.08), CF(0, 0.05, -0.47), P.Black)
-	r:Box(head, V(0.25, 0.32, 0.08), CF(0, -0.25, -0.46), P.Black)
-	r:Sphere(head, V(1.4, 1.35, 1.35), CF(0, 0.12, 0.12), P.DeepViolet, M.Fabric, { Transparency = 0.35 })
-	r:Wedge(head, V(0.6, 0.9, 0.8), CF(0, 0.65, 0.55) * ANG(rad(-35), 0, 0), P.DeepViolet, M.Fabric, { Transparency = 0.35 })
-	glow(r, head, P.NeonSoft, 7, 1)
+	-- парящая голова: светящееся лицо в остроконечном капюшоне
+	local head = hub(r, "BobHead", B, CF(0, 1.6, 0), { Amp = 0.15, Speed = 2 })
+	r:Box(head, V(0.75, 0.9, 0.7), CF(0, 0, -0.05), C.NeonSoft, M.Neon)
+	r:Box(head, V(0.55, 0.1, 0.1), CF(0, 0.1, -0.42), C.Obsidian)
+	r:Box(head, V(0.2, 0.3, 0.1), CF(0, -0.2, -0.42), C.Obsidian)
+	r:Box(head, V(1.2, 0.25, 1.15), CF(0, 0.58, 0.12), C.Deep, M.Fabric)
+	r:Box(head, V(0.22, 1.2, 1.15), CF(0.5, 0.05, 0.12), C.Deep, M.Fabric)
+	r:Box(head, V(0.22, 1.2, 1.15), CF(-0.5, 0.05, 0.12), C.Deep, M.Fabric)
+	r:Box(head, V(1.2, 1.2, 0.22), CF(0, 0.05, 0.6), C.Deep, M.Fabric)
+	spike(r, head, V(0, 0.65, 0.3), V(0, 1.35, 0.95), 0.75, C.Deep, M.Fabric, true, 0.2)
+	r:Glow(head, C.NeonSoft, 7, 1)
 	-- отделённые руки-когти
 	for _, s in ipairs({ 1, -1 }) do
-		local arm = r:Joint(s == 1 and "ArmR" or "ArmL", B, V(0.45, 1.5, 0.45), CF(1.25 * s, 0.25, 0), CF(0.1 * s, -0.95, 0), P.DeepViolet)
-		arm.Transparency = 0.3
-		r:Neon(arm, V(0.08, 1.2, 0.08), CF(0, 0, -0.24), P.Neon, { Transparency = 0.3 })
+		local arm = hub(r, s == 1 and "ArmR" or "ArmL", B, CF(1.25 * s, 0.2, 0))
+		bevel(r, arm, V(0.45, 0.9, 0.45), CF(0.03 * s, -0.55, -0.05), C.Deep, C.Lilac, M.Plastic)
+		r:Neon(arm, V(0.06, 0.8, 0.06), CF(0.03 * s, -0.55, -0.3), C.Neon)
 		for k = -1, 1 do
-			r:Wedge(arm, V(0.1, 0.55, 0.18), CF(k * 0.14, -1.05, -0.08) * ANG(0, 0, PI), P.NeonSoft, M.Neon)
+			spike(r, arm, V(0.05 * s + k * 0.13, -1.0, -0.1), V(0.08 * s + k * 0.2, -1.75, -0.35), 0.15, C.NeonSoft, M.Neon, true, 0.06)
 		end
 	end
-	-- нижняя часть: парящие осколки-лоскуты
+	-- нижняя часть: парящие осколки-ромбы
 	for i = 1, 3 do
-		local name = "BobShard" .. i
-		local sd = hub(r, name, B, CF(0.08 * ((i % 2) * 2 - 1), -0.75 - i * 0.62, 0.08 * i), { Amp = 0.1 + i * 0.04, Speed = 2.4 + i * 0.3 })
-		local w = 1.25 - i * 0.28
-		r:Box(sd, V(w, 0.42, w * 0.7), CF() * ANG(0, rad(i * 25), 0), P.DeepViolet, M.Plastic, { Transparency = 0.25 + i * 0.12 })
-		r:Neon(sd, V(w * 0.6, 0.05, w * 0.45), CF(0, 0.22, 0) * ANG(0, rad(i * 25), 0), P.Neon, { Transparency = 0.35 })
+		local sd = hub(r, "BobShard" .. i, B, CF(0.08 * ((i % 2) * 2 - 1), -0.9 - i * 0.6, 0.08 * i), { Amp = 0.1 + i * 0.04, Speed = 2.4 + i * 0.3 })
+		local w = 0.85 - i * 0.18
+		r:Box(sd, V(w, w, w), CF() * ANG(rad(45), rad(i * 20), rad(45)), i % 2 == 0 and C.Mid or C.Deep, M.Plastic)
+		r:Neon(sd, V(w * 0.45, w * 0.45, w * 1.05), CF() * ANG(rad(45), rad(i * 20), rad(45)), C.Neon)
 		if i == 3 then
-			emitter(sd, P.Neon, { Rate = 14, Size = 0.35, LifeMin = 0.6, LifeMax = 1.1, SpeedMin = 0.1, SpeedMax = 0.5 })
+			emitter(sd, C.Neon, { Rate = 14, Size = 0.35, LifeMin = 0.6, LifeMax = 1.1, SpeedMin = 0.1, SpeedMax = 0.5 })
 		end
 	end
 	-- энергетические кольца
 	local ring1 = hub(r, "OrbitRing1", B, CF(0, 0, 0), { Speed = 1.6 })
-	ring(r, ring1, ANG(rad(90), 0, 0), 1.55, 14, 0.08, 0.08, P.Neon, M.Neon, function(i) return i % 4 == 3 end)
+	ring(r, ring1, ANG(rad(90), 0, 0), 1.6, 12, 0.08, 0.08, C.Neon, M.Neon, function(i) return i % 4 == 3 end)
 	local ring2 = hub(r, "OrbitRing2", B, CF(0, 0.2, 0) * ANG(rad(65), 0, rad(20)), { Speed = -2.2 })
-	ring(r, ring2, ANG(rad(90), 0, 0), 1.9, 16, 0.06, 0.06, P.NeonSoft, M.Neon, function(i) return i % 5 == 4 end)
+	ring(r, ring2, ANG(rad(90), 0, 0), 1.95, 14, 0.06, 0.06, C.NeonSoft, M.Neon, function(i) return i % 5 == 4 end)
 	return finishCreature(r, scale, 3.3, 4.6)
 end
 
 ------------------------------------------------------------------------
--- 6. ABYSS BRUTE — гигантские руки, странная голова, кристаллы на спине, тряска шагов
+-- 6. ABYSS BRUTE — сгорбленный громила: гигантские руки-блоки, странная голова, кристаллы на спине
 ------------------------------------------------------------------------
 local function AbyssBrute(scale)
-	local r = Rig.new({ Name = "AbyssBrute", Torso = C.Flesh, Arm = C.Flesh, Leg = P.Coal, Head = C.Flesh, HeadSize = V(1.2, 1.0, 1.2) })
+	local r = newBiped("AbyssBrute", V(1.2, 1.0, 1.2))
 	setup(r, { Style = "Heavy", Gait = { Speed = 0.75, Stride = 0.35, Bob = 0.24, Sway = 0.12, Shake = 0.12 }, Death = "Topple" })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- горбатый торс
-	r:Sphere(T, V(2.95, 2.05, 1.95), CF(0, 0.45, 0.12), C.Flesh)
-	r:Sphere(T, V(2.25, 1.4, 1.55), CF(0, -0.45, -0.15), C.FleshDark)
-	r:Box(T, V(2.3, 0.4, 1.45), CF(0, -0.85, 0), P.Black, M.Metal)
-	r:Neon(T, V(0.5, 0.5, 0.08), CF(0, 0.35, -0.95) * ANG(0, 0, rad(45)), P.NeonPink)
-	crack(r, T, { V(-0.7, 0.9, -0.85), V(-0.25, 0.4, -0.95), V(-0.55, -0.2, -0.85) }, 0.07, P.NeonPink)
-	-- кристаллы на спине
-	local crystals = { { -0.65, 0.9, 0.9, -0.4, 1.1, 0.42 }, { 0, 1.15, 0.85, 0.05, 1.5, 0.5 }, { 0.6, 0.95, 0.95, 0.35, 1.2, 0.4 }, { -0.3, 0.4, 1.05, -0.2, 0.8, 0.3 }, { 0.35, 0.45, 1.05, 0.25, 0.75, 0.28 } }
-	for _, c in ipairs(crystals) do
+	local skin, skinHi, skinLo = rgb(56, 22, 42), rgb(104, 48, 76), rgb(36, 13, 28)
+	-- горб, грудь, брюхо
+	bevel(r, T, V(2.8, 1.6, 1.9), CF(0, 0.6, 0.25), skin, skinHi, M.Plastic)
+	bevel(r, T, V(2.1, 1.2, 1.4), CF(0, -0.35, -0.15), skinLo, skinHi, M.Plastic)
+	bevel(r, T, V(2.3, 0.5, 1.7), CF(0, -0.95, 0), A_.Armor, A_.Edge)
+	bevel(r, T, V(0.5, 0.45, 0.15), CF(0, -0.95, -0.88), A_.Edge, A_.ArmorMid)
+	-- светящееся сердце-ромб и трещины
+	gem(r, T, 0.5, CF(0, 0.5, -0.72), C.Magenta, skinLo)
+	crack(r, T, { V(-0.85, 1.05, -0.72), V(-0.35, 0.75, -0.73), V(-0.6, 0.15, -0.73) }, 0.06, C.Magenta)
+	crack(r, T, { V(0.75, 1.0, -0.72), V(0.35, 0.8, -0.73) }, 0.05, C.Magenta)
+	-- кристаллы на горбу
+	local cr = { { -0.6, 1.3, 0.95, -0.35, 1.3, 0.48 }, { 0.05, 1.4, 0.75, 0.05, 1.8, 0.58 }, { 0.65, 1.3, 0.95, 0.4, 1.25, 0.44 }, { -0.3, 0.9, 1.2, -0.25, 0.85, 0.32 }, { 0.35, 0.95, 1.2, 0.3, 0.75, 0.3 } }
+	for _, c in ipairs(cr) do
 		local base = V(c[1], c[2], c[3])
-		local tip = base + V(c[4] * 0.5, c[5], 0.55)
-		r:Ball(T, c[6] * 1.3, CF(base), C.Shell, M.Slate)
-		r:Seg(T, base, tip, c[6], C.Crystal, M.Neon)
+		r:Box(T, V(c[6] * 1.5, c[6] * 0.6, c[6] * 1.5), CF(base) * ANG(0, rad(30), 0), C.Night, M.Slate)
+		spike(r, T, base, base + V(c[4] * 0.5, c[5], 0.55), c[6], C.Neon, M.Neon)
 	end
-	glow(r, T, C.Crystal, 9, 1.1)
-	-- странная голова: низкая, широкая, три глаза, выпирающая челюсть с бивнями
-	r:Sphere(H, V(1.55, 1.05, 1.4), CF(0, 0.05, 0), C.Flesh)
-	r:Box(H, V(1.45, 0.45, 1.05), CF(0, -0.45, -0.25), C.FleshDark)
+	r:Glow(T, C.Neon, 9, 1.1)
+	-- странная голова: низкая и широкая, три глаза, выпирающая челюсть с бивнями
+	bevel(r, H, V(1.4, 0.95, 1.25), CF(0, 0.08, 0), skin, skinHi, M.Plastic)
+	bevel(r, H, V(1.5, 0.5, 1.15), CF(0, -0.4, -0.15), skinLo, skinHi, M.Plastic)
+	r:Wedge(H, V(1.3, 0.35, 0.5), CF(0, 0.45, -0.45) * ANG(0, PI, 0), skinLo, M.Plastic)
 	for _, s in ipairs({ -1, 1 }) do
-		r:Rod(H, V(0.5 * s, -0.4, -0.7), V(0.62 * s, 0.25, -0.95), 0.16, C.Bone)
-		r:Ball(H, 0.18, CF(0.42 * s, 0.22, -0.66), P.NeonPink, M.Neon)
-		r:Horn(H, s, V(0.65 * s, 0.25, 0.05), 0.65, C.Bone)
+		spike(r, H, V(0.45 * s, -0.35, -0.7), V(0.6 * s, 0.4, -0.85), 0.26, C.Bone)
+		r:Neon(H, V(0.22, 0.12, 0.06), CF(0.38 * s, 0.22, -0.64) * ANG(0, 0, rad(14 * s)), C.Magenta)
+		hornA(r, H, { V(0.5 * s, 0.35, 0.1), V(0.85 * s, 0.55, 0.35), V(0.95 * s, 0.75, 0.8), V(0.8 * s, 0.9, 1.3) }, 0.3, C.Bone)
 	end
-	r:Ball(H, 0.32, CF(0, 0.3, -0.68), P.NeonPink, M.Neon)
-	r:Box(H, V(0.55, 0.1, 0.06), CF(0, 0.55, -0.66) * ANG(0, 0, 0), P.Black)
-	-- наплечная броня
+	gem(r, H, 0.24, CF(0, 0.3, -0.64), C.Magenta)
+	-- костяные наплечники, гигантские руки до земли
 	for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
 		local A, s = a[1], a[2]
-		r:Pauldron(A, s, 1.35, P.Black, C.IronDark, 0.1)
-		r:Box(A, V(0.25, 0.5, 1.2), CF(0.75 * s, 1.15, 0), C.IronDark, M.Metal)
-		-- гигантские руки
-		r:Sphere(A, V(1.75, 1.8, 1.75), CF(0.1 * s, -0.15, 0), C.Flesh)
-		r:Sphere(A, V(1.95, 1.6, 1.95), CF(0.15 * s, -1.05, 0), C.Flesh)
-		r:Box(A, V(1.7, 1.0, 1.7), CF(0.15 * s, -1.9, 0), P.Black, M.Metal)
+		bevel(r, A, V(1.7, 0.55, 1.7), CF(0.25 * s, 1.15, 0) * ANG(0, 0, rad(-15 * s)), C.BoneDark, C.Bone, M.Plastic)
 		for k = -1, 1 do
-			r:Ball(A, 0.45, CF(0.15 * s + k * 0.5, -2.4, -0.55), C.FleshDark)
+			spike(r, A, V(0.45 * s, 1.35, k * 0.5), V(0.95 * s, 2.05 - math.abs(k) * 0.3, k * 0.65), 0.4, C.Bone, M.Plastic, true, 0.14)
 		end
-		r:Neon(A, V(1.72, 0.06, 1.72), CF(0.15 * s, -1.55, 0), P.NeonPink)
+		bevel(r, A, V(1.55, 1.55, 1.55), CF(0.1 * s, 0.15, 0), skin, skinHi, M.Plastic)
+		bevel(r, A, V(1.8, 1.4, 1.8), CF(0.15 * s, -1.0, 0), skinLo, skinHi, M.Plastic)
+		bevel(r, A, V(1.9, 0.4, 1.9), CF(0.15 * s, -1.5, 0), A_.Armor, A_.Edge)
+		bevel(r, A, V(1.65, 0.9, 1.65), CF(0.15 * s, -2.05, -0.05), skin, skinHi, M.Plastic)
+		for k = -1, 1 do
+			spike(r, A, V(0.15 * s + k * 0.5, -2.2, -0.75), V(0.15 * s + k * 0.55, -2.4, -1.15), 0.26, C.Bone)
+		end
 	end
 	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.3, 1.2, 1.3), CF(0, -0.2, 0), C.FleshDark)
-		r:Box(Lg, V(1.35, 0.4, 1.55), CF(0, -0.82, -0.12), P.Black, M.Metal)
+		bevel(r, Lg, V(1.3, 1.3, 1.3), CF(0, 0.3, 0), skinLo, skinHi, M.Plastic)
+		bevel(r, Lg, V(1.35, 0.55, 1.6), CF(0, -0.75, -0.15), skin, skinHi, M.Plastic)
+		for k = -1, 1 do
+			spike(r, Lg, V(k * 0.4, -0.85, -0.9), V(k * 0.45, -0.95, -1.2), 0.2, C.Bone, M.Plastic, true, 0.08)
+		end
 	end
 	return finishBiped(r, scale, { Root = { 14, 0, 0 }, Neck = { -14, 0, 0 }, RS = { 8, 0, 6 }, LS = { 8, 0, -6 } })
 end
 
 ------------------------------------------------------------------------
--- 7. CORRUPTED TITAN (мини-босс) — рога, нагрудник, кулаки, кристалл, разломы энергии
+-- 7. CORRUPTED TITAN (мини-босс) — каменный великан в обсидиановых латах: рога, кулаки, кристалл
 ------------------------------------------------------------------------
 local function CorruptedTitan(scale)
-	local r = Rig.new({ Name = "CorruptedTitan", Torso = P.Coal, Arm = P.Coal, Leg = P.Black, Head = P.Coal, HeadSize = V(1.4, 1.3, 1.4), TorsoMat = M.Slate })
+	local r = newBiped("CorruptedTitan", V(1.4, 1.3, 1.4))
 	setup(r, { Style = "Heavy", Gait = { Speed = 0.8, Stride = 0.4, Bob = 0.2, Sway = 0.08, Shake = 0.2 }, Death = "Topple", Spawn = "Titan" })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- нагрудник
-	r:Box(T, V(2.75, 2.25, 1.6), CF(0, 0.12, 0), P.Coal, M.Slate)
-	r:Box(T, V(2.55, 1.5, 0.35), CF(0, 0.4, -0.9), P.Black, M.Metal)
-	r:Wedge(T, V(2.55, 0.5, 0.35), CF(0, -0.6, -0.9) * ANG(PI, 0, 0), P.Black, M.Metal)
-	r:Box(T, V(2.6, 0.1, 0.38), CF(0, 1.12, -0.9), P.DarkGold, M.Metal)
-	-- кристалл в груди
-	local core = r:Box(T, V(0.7, 0.95, 0.5), CF(0, 0.4, -1.1) * ANG(0, 0, rad(45)), C.Crystal, M.Neon)
-	r:Box(T, V(0.42, 0.6, 0.55), CF(0, 0.4, -1.12) * ANG(0, 0, rad(45)), C.CrystalPale, M.Neon)
-	local coreLight = glow(r, core, C.Crystal, 14, 1.6)
-	-- разломы энергии
-	crack(r, T, { V(-1.2, 0.95, -0.82), V(-0.55, 0.45, -0.82), V(-0.75, -0.3, -0.82), V(-0.4, -1.0, -0.82) }, 0.11)
-	crack(r, T, { V(1.15, 0.8, -0.82), V(0.6, 0.0, -0.82), V(0.85, -0.85, -0.82) }, 0.1)
-	-- голова с рогами
-	r:Box(H, V(1.55, 1.1, 1.55), CF(0, 0.15, 0), P.Black, M.Slate)
-	r:Box(H, V(1.2, 0.14, 0.08), CF(0, -0.05, -0.79), P.Neon, M.Neon)
-	r:Box(H, V(1.0, 0.45, 0.4), CF(0, -0.45, -0.6), P.Coal, M.Slate)
-	for _, s in ipairs({ -1, 1 }) do
-		r:Horn(H, s, V(0.7 * s, 0.45, 0), 1.15, P.Black)
-		r:Horn(H, s, V(0.35 * s, 0.7, -0.2), 0.55, P.Coal)
+	local function rock(limb, size, cf, light)
+		return bevel(r, limb, size, cf, light and C.StoneLight or C.Stone, light and rgb(140, 132, 160) or C.StoneLight, M.Slate)
 	end
-	-- наплечники
-	r:Pauldron(RA, 1, 1.25, P.Black, P.Neon, 0, M.Neon)
-	r:Pauldron(LA, -1, 1.15, P.Black, P.DarkGold, 0)
-	-- гигантские кулаки
+	-- каменная плоть из глыб, между ними светятся разломы
+	r:Box(T, V(2.3, 2.1, 1.3), CF(0, 0.15, 0.05), C.Neon, M.Neon)
+	rock(T, V(1.25, 1.2, 1.5), CF(-0.62, 0.65, 0.05) * ANG(rad(4), rad(6), rad(5)), false)
+	rock(T, V(1.25, 1.15, 1.5), CF(0.64, 0.68, 0.05) * ANG(rad(-3), rad(-5), rad(-6)), true)
+	rock(T, V(1.15, 0.95, 1.4), CF(-0.5, -0.4, 0.0) * ANG(rad(-5), rad(3), rad(-4)), true)
+	rock(T, V(1.15, 0.95, 1.4), CF(0.52, -0.38, 0.0) * ANG(rad(6), rad(-4), rad(5)), false)
+	-- обсидиановый нагрудник с золотым кантом и кристаллом
+	bevel(r, T, V(2.5, 1.2, 0.5), CF(0, 0.65, -0.8), A_.Armor, C.Gold)
+	r:Wedge(T, V(2.3, 0.5, 0.5), CF(0, -0.15, -0.8) * ANG(PI, PI, 0), A_.Armor, M.Metal)
+	spike(r, T, V(0, 0.55, -1.1), V(0, 1.15, -1.1), 0.6, C.Neon, M.Neon)
+	spike(r, T, V(0, 0.55, -1.1), V(0, -0.05, -1.1), 0.6, C.NeonSoft, M.Neon)
+	local coreLight = r:Glow(T, C.Neon, 14, 1.6)
+	bevel(r, T, V(2.2, 0.4, 1.6), CF(0, -1.0, 0), A_.Armor, C.Gold)
+	-- голова: каменный череп в обсидиановом шлеме, щель глаз, огромные рога
+	rock(H, V(1.3, 1.25, 1.3), CF(0, -0.05, 0.05) * ANG(rad(3), rad(5), 0), false)
+	bevel(r, H, V(1.5, 0.75, 1.45), CF(0, 0.35, -0.05), A_.Armor, C.Gold)
+	r:Neon(H, V(1.0, 0.09, 0.06), CF(0, 0.0, -0.69), C.Neon)
+	r:Wedge(H, V(1.0, 0.5, 0.5), CF(0, -0.45, -0.5) * ANG(PI, PI, 0), C.StoneLight, M.Slate)
+	for _, s in ipairs({ -1, 1 }) do
+		hornA(r, H, { V(0.65 * s, 0.45, 0), V(1.2 * s, 0.8, 0.1), V(1.5 * s, 1.4, 0.0), V(1.4 * s, 2.05, -0.3), V(1.15 * s, 2.6, -0.55) }, 0.42, A_.Armor, M.Metal)
+	end
+	-- наплечники, каменные руки, гигантские кулаки
 	for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
 		local A, s = a[1], a[2]
-		r:Box(A, V(1.15, 1.1, 1.15), CF(0, 0, 0), P.Coal, M.Slate)
-		r:Box(A, V(1.75, 1.45, 1.75), CF(0, -1.25, 0), P.Black, M.Metal)
+		pauldron(r, A, s, 1.2, A_.Armor, C.Gold, C.Neon, 1)
+		rock(A, V(1.05, 1.0, 1.05), CF(0, 0.1, 0) * ANG(0, rad(10), rad(4 * s)), false)
+		rock(A, V(1.2, 0.9, 1.2), CF(0, -0.75, 0) * ANG(0, rad(-8), rad(-5 * s)), true)
+		r:Box(A, V(1.0, 0.25, 1.0), CF(0, -0.35, 0), C.Neon, M.Neon)
+		bevel(r, A, V(1.7, 0.35, 1.7), CF(0, -1.2, -0.05), A_.Armor, C.Gold)
+		rock(A, V(1.6, 1.2, 1.6), CF(0, -1.75, -0.1) * ANG(rad(5), rad(12), 0), false)
 		for k = -1, 1 do
-			r:Box(A, V(0.42, 0.4, 0.4), CF(k * 0.55, -1.7, -0.85), P.Steel, M.Metal)
+			spike(r, A, V(k * 0.5, -1.7, -0.85), V(k * 0.55, -1.75, -1.25), 0.28, A_.Armor, M.Metal)
 		end
-		crack(r, A, { V(-0.4 * s, -0.6, -0.89), V(0.1 * s, -1.1, -0.89), V(-0.2 * s, -1.6, -0.89) }, 0.08)
 	end
 	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.25, 1.3, 1.25), CF(0, -0.35, 0), P.Coal, M.Slate)
-		r:Box(Lg, V(1.3, 0.4, 1.5), CF(0, -0.85, -0.1), P.Black, M.Metal)
+		rock(Lg, V(1.15, 1.05, 1.15), CF(0, 0.45, 0) * ANG(0, rad(8), 0), true)
+		r:Box(Lg, V(0.95, 0.25, 0.95), CF(0, -0.1, 0), C.Neon, M.Neon)
+		rock(Lg, V(1.15, 0.7, 1.2), CF(0, -0.42, 0) * ANG(0, rad(-6), 0), false)
+		bootA(r, Lg, A_.Armor, C.Gold, 1.25)
 	end
-	-- парящие осколки разлома вокруг корпуса
-	r:Orbit("OrbitRift", T, CF(0, 0.3, 0), 2.6, 5, 0.4, C.Crystal, M.Neon, 0.1)
-	r.Sec.OrbitRift = { Speed = 1.1 }
-	local aura = emitter(T, C.Crystal, { Rate = 10, Size = 0.5, Accel = V(0, 2, 0) })
-	-- фаза повреждений (50% HP): новые трещины, сильнее свечение, больше частиц
+	-- парящие осколки разлома
+	local orb = hub(r, "OrbitRift", T, CF(0, 0.3, 0), { Speed = 1.1 })
+	for i = 0, 4 do
+		local a = i / 5 * PI * 2
+		local p = V(math.cos(a) * 2.7, math.sin(a * 2) * 0.4, math.sin(a) * 2.7)
+		spike(r, orb, p - V(0, 0.35, 0), p + V(0, 0.45, 0), 0.4, C.Neon, M.Neon)
+	end
+	local aura = emitter(T, C.Neon, { Rate = 10, Size = 0.5, Accel = V(0, 2, 0) })
+	-- фаза повреждений (50% HP): камень трескается, свечение сильнее
 	local dmg = hide(join(
-		crack(r, T, { V(0.2, 1.1, -0.82), V(-0.1, 0.6, -0.82), V(0.35, 0.2, -0.82) }, 0.09),
-		crack(r, H, { V(-0.5, 0.6, -0.79), V(-0.2, 0.2, -0.79), V(-0.4, -0.2, -0.79) }, 0.07),
-		crack(r, RL, { V(0.2, 0.3, -0.64), V(-0.1, -0.4, -0.64) }, 0.08),
-		crack(r, LL, { V(-0.2, 0.2, -0.64), V(0.15, -0.5, -0.64) }, 0.08)
+		crack(r, T, { V(-0.95, 1.15, -0.85), V(-0.55, 0.65, -0.85), V(-0.85, 0.2, -0.82) }, 0.08),
+		crack(r, T, { V(0.9, 0.1, -0.75), V(0.5, -0.4, -0.75), V(0.8, -0.8, -0.75) }, 0.08),
+		crack(r, H, { V(-0.4, -0.1, -0.62), V(-0.15, -0.35, -0.64), V(-0.35, -0.6, -0.62) }, 0.06),
+		crack(r, RL, { V(0.3, 0.7, -0.59), V(-0.1, 0.2, -0.59) }, 0.07),
+		crack(r, LL, { V(-0.3, 0.6, -0.59), V(0.15, 0.1, -0.59) }, 0.07)
 	))
-	local dmgFx = emitter(T, P.NeonSoft, { Rate = 16, Size = 0.35, Off = true, SpeedMin = 2, SpeedMax = 4 })
+	local dmgFx = emitter(T, C.NeonSoft, { Rate = 16, Size = 0.35, Off = true, SpeedMin = 2, SpeedMax = 4 })
 	r.Phases = { { At = 0.5, Reveal = dmg, Emit = { dmgFx, aura }, Lights = { { coreLight, 3 } }, Aggro = 1.15 } }
-	return finishBiped(r, scale)
+	return finishBiped(r, scale, { RS = { 0, 0, 8 }, LS = { 0, 0, -8 } }, 6.4)
 end
 
 ------------------------------------------------------------------------
--- 8. VOID DEVOURER (босс) — высокий, массивные рога, слоистая броня, светящаяся пасть
+-- 8. VOID DEVOURER (босс) — сгорбленный пожиратель: рога, слоистая броня, кристаллы, светящаяся пасть
 ------------------------------------------------------------------------
 local function VoidDevourer(scale)
-	local r = Rig.new({ Name = "VoidDevourer", Torso = C.Obsidian, Arm = C.Obsidian, Leg = C.Obsidian, Head = C.Obsidian, HeadSize = V(1.6, 1.35, 1.6), TorsoMat = M.Basalt })
+	local r = newBiped("VoidDevourer", V(1.6, 1.35, 1.6))
 	setup(r, { Style = "Heavy", Gait = { Speed = 0.7, Stride = 0.38, Bob = 0.22, Sway = 0.1, Lean = 4, Shake = 0.3 }, Death = "Topple" })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- слоистая чёрная броня
-	r:Box(T, V(2.6, 2.3, 1.5), CF(0, 0.1, 0), C.Obsidian, M.Basalt)
-	local plateA = r:Box(T, V(2.7, 0.9, 1.7), CF(0, 0.75, -0.05), P.Black, M.Metal)
-	local plateB = r:Box(T, V(2.5, 0.75, 1.65), CF(0, 0.05, -0.08), P.Coal, M.Metal)
-	r:Box(T, V(2.3, 0.7, 1.6), CF(0, -0.65, -0.05), P.Black, M.Metal)
-	r:Box(T, V(2.75, 0.08, 1.75), CF(0, 0.32, -0.05), C.Crystal, M.Neon)
-	-- кристаллы
-	local cr = {}
-	for _, c in ipairs({ { -0.8, 1.0, 0.8, -0.4 }, { 0, 1.1, 0.85, 0 }, { 0.75, 0.95, 0.8, 0.35 }, { -0.35, 0.3, 0.85, -0.2 } }) do
+	local maw = C.Magenta
+	-- корпус и слоистая броня на груди
+	bevel(r, T, V(2.5, 2.2, 1.6), CF(0, 0.2, 0.15), A_.Armor, A_.Edge)
+	local plateA = bevel(r, T, V(2.7, 0.75, 1.35), CF(0, 0.95, -0.35) * ANG(rad(-10), 0, 0), A_.ArmorMid, A_.Edge)
+	local plateB = bevel(r, T, V(2.4, 0.65, 1.25), CF(0, 0.3, -0.45) * ANG(rad(-6), 0, 0), A_.Armor, A_.Edge)
+	bevel(r, T, V(2.0, 0.55, 1.2), CF(0, -0.3, -0.42), A_.ArmorMid, A_.Edge)
+	r:Neon(T, V(2.5, 0.06, 1.3), CF(0, 0.62, -0.38) * ANG(rad(-8), 0, 0), C.Neon)
+	bevel(r, T, V(2.2, 0.4, 1.6), CF(0, -0.95, 0), A_.Armor, A_.Edge)
+	-- спинной гребень из пластин и кристаллов
+	for i = 0, 3 do
+		bevel(r, T, V(1.8 - i * 0.2, 0.32, 0.8), CF(0, 1.25 - i * 0.55, 1.0 + i * 0.05) * ANG(rad(28), 0, 0), i % 2 == 0 and A_.Armor or A_.ArmorMid, A_.Edge)
+	end
+	for _, c in ipairs({ { -0.55, 1.3, 1.1, -0.35, 1.4, 0.5 }, { 0.1, 1.45, 1.1, 0.05, 1.9, 0.6 }, { 0.6, 1.25, 1.05, 0.35, 1.25, 0.46 }, { -0.25, 0.65, 1.3, -0.2, 0.9, 0.36 }, { 0.35, 0.55, 1.3, 0.25, 0.8, 0.32 } }) do
 		local base = V(c[1], c[2], c[3])
-		cr[#cr + 1] = r:Seg(T, base, base + V(c[4], 1.1, 0.7), 0.42, C.Crystal, M.Neon)
+		spike(r, T, base, base + V(c[4], c[5], 0.75), c[6], C.Neon, M.Neon)
 	end
-	glow(r, T, C.Crystal, 12, 1.2)
-	-- голова: огромная светящаяся пасть
-	r:Sphere(H, V(1.95, 1.5, 1.85), CF(0, 0.05, 0), C.Obsidian, M.Basalt)
-	r:Box(H, V(1.7, 0.35, 1.0), CF(0, 0.55, -0.45), P.Black, M.Metal)
-	r:Box(H, V(1.4, 0.55, 0.3), CF(0, -0.2, -0.8), C.Maw, M.Neon)
+	r:Glow(T, C.Neon, 12, 1.2)
+	-- голова: гранёный череп, огромная пасть
+	bevel(r, H, V(1.7, 1.15, 1.8), CF(0, 0.3, -0.05), A_.Armor, A_.Edge)
+	r:Wedge(H, V(1.6, 0.45, 1.0), CF(0, 0.95, -0.4) * ANG(0, PI, 0), A_.ArmorMid, M.Metal)
+	r:Box(H, V(1.3, 0.6, 0.9), CF(0, -0.15, -0.5), maw, M.Neon)
 	for i = -3, 3 do
-		r:Wedge(H, V(0.18, 0.4, 0.2), CF(i * 0.22, -0.02, -0.88) * ANG(0, 0, PI), P.White)
+		spike(r, H, V(i * 0.2, 0.0, -0.98 + math.abs(i) * 0.05), V(i * 0.2, -0.4, -1.0 + math.abs(i) * 0.05), 0.17, C.White, M.Plastic, true, 0.07)
 	end
-	r:Eyes(C.Maw, { Y = 0.35, Spacing = 0.45, Size = V(0.32, 0.14, 0.06), Tilt = -20 })
-	local mawLight = glow(r, H, C.Maw, 10, 1.4)
-	local jaw = r:Joint("Jaw", H, V(1.55, 0.4, 1.35), CF(0, -0.55, 0.35), CF(0, -0.15, -0.65), C.Obsidian, M.Basalt)
-	for i = -3, 3 do
-		r:Wedge(jaw, V(0.17, 0.36, 0.2), CF(i * 0.21, 0.36, -0.55), P.White)
-	end
-	r:Neon(jaw, V(1.2, 0.08, 0.95), CF(0, 0.2, -0.05), C.Maw)
-	-- массивные рога
 	for _, s in ipairs({ -1, 1 }) do
-		r:Horn(H, s, V(0.8 * s, 0.4, 0.1), 1.7, P.Black)
-		r:Chain(H, { V(0.55 * s, 0.7, 0.4), V(0.85 * s, 1.2, 1.0), V(1.0 * s, 1.4, 1.7), V(0.95 * s, 1.2, 2.2) }, 0.28, P.Coal, M.Plastic, 0.75, true)
+		r:Neon(H, V(0.36, 0.1, 0.06), CF(0.45 * s, 0.55, -0.96) * ANG(0, 0, rad(-24 * s)), maw)
+		r:Neon(H, V(0.18, 0.07, 0.06), CF(0.62 * s, 0.32, -0.96) * ANG(0, 0, rad(-24 * s)), maw)
 	end
-	-- слоистые наплечники с кристаллами
+	local mawLight = r:Glow(H, maw, 10, 1.4)
+	local jaw = hub(r, "Jaw", H, CF(0, -0.4, 0.35))
+	bevel(r, jaw, V(1.45, 0.4, 1.6), CF(0, -0.15, -0.75), A_.Armor, A_.Edge)
+	r:Neon(jaw, V(1.1, 0.06, 1.2), CF(0, 0.07, -0.75), maw)
+	for i = -3, 3 do
+		spike(r, jaw, V(i * 0.19, 0.05, -1.4 + math.abs(i) * 0.09), V(i * 0.19, 0.45, -1.4 + math.abs(i) * 0.09), 0.15, C.White, M.Plastic, true, 0.07)
+	end
+	-- массивные угловатые рога
+	for _, s in ipairs({ -1, 1 }) do
+		hornA(r, H, { V(0.7 * s, 0.6, 0.15), V(1.3 * s, 0.95, 0.2), V(1.7 * s, 1.7, 0.0), V(1.6 * s, 2.6, -0.4), V(1.2 * s, 3.3, -0.8) }, 0.5, A_.Armor, M.Metal)
+		hornA(r, H, { V(0.45 * s, 0.8, 0.5), V(0.65 * s, 1.15, 1.0), V(0.7 * s, 1.35, 1.6), V(0.65 * s, 1.3, 2.2) }, 0.26, A_.ArmorMid, M.Metal)
+	end
+	-- наплечники с кристаллами, длинные руки с когтями-лезвиями
 	local pauldrons = {}
 	for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
 		local A, s = a[1], a[2]
-		r:Pauldron(A, s, 1.45, P.Black, C.IronDark, 0)
-		local top = r:Box(A, V(1.2, 0.35, 1.4), CF(0.2 * s, 1.35, 0) * ANG(0, 0, rad(-18 * s)), P.Coal, M.Metal)
-		pauldrons[#pauldrons + 1] = top
-		cr[#cr + 1] = r:Seg(A, V(0.3 * s, 1.3, 0.2), V(0.75 * s, 2.1, 0.45), 0.32, C.Crystal, M.Neon)
-		r:Box(A, V(1.3, 1.2, 1.3), CF(0, -0.15, 0), P.Black, M.Metal)
-		r:Box(A, V(1.5, 0.9, 1.5), CF(0, -0.95, 0), C.Obsidian, M.Basalt)
+		for _, p in ipairs(pauldron(r, A, s, 1.25, A_.Armor, A_.Edge, C.Neon, 1)) do
+			pauldrons[#pauldrons + 1] = p
+		end
+		spike(r, A, V(0.55 * s, 1.3, -0.4), V(1.0 * s, 2.0, -0.55), 0.32, C.Neon, M.Neon)
+		bevel(r, A, V(1.0, 0.95, 1.0), CF(0, 0.15, 0), A_.Armor, A_.Edge)
+		bevel(r, A, V(1.2, 1.05, 1.2), CF(0, -0.75, -0.03), A_.ArmorMid, A_.Edge)
+		r:Neon(A, V(1.22, 0.06, 1.22), CF(0, -0.45, -0.03), C.Neon)
+		bevel(r, A, V(1.1, 0.55, 1.1), CF(0, -1.5, -0.1), A_.Armor, A_.Edge)
 		for k = -1, 1 do
-			r:Rod(A, V(k * 0.4, -1.3, -0.6), V(k * 0.45, -1.6, -1.05), 0.14, C.Bone)
+			spike(r, A, V(k * 0.36, -1.7, -0.45), V(k * 0.45, -2.75, -1.0), 0.24, C.Bone)
 		end
 	end
 	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.25, 1.2, 1.3), CF(0, -0.35, 0), P.Black, M.Metal)
-		r:Box(Lg, V(1.35, 0.45, 1.6), CF(0, -0.82, -0.15), C.Obsidian, M.Basalt)
+		bevel(r, Lg, V(1.15, 1.0, 1.15), CF(0, 0.45, 0), A_.Armor, A_.Edge)
+		bevel(r, Lg, V(0.85, 0.5, 0.3), CF(0, -0.05, -0.62), A_.ArmorMid, A_.Edge)
+		bevel(r, Lg, V(1.15, 0.7, 1.15), CF(0, -0.38, 0), A_.ArmorMid, A_.Edge)
+		bootA(r, Lg, A_.Armor, A_.Edge, 1.25)
+		for k = -1, 1 do
+			spike(r, Lg, V(k * 0.35, -0.85, -1.15), V(k * 0.4, -0.95, -1.5), 0.2, C.Bone, M.Plastic, true, 0.08)
+		end
 	end
 	-- парящие осколки за спиной
-	r:Orbit("OrbitShards", T, CF(0, 0.9, 1.6), 1.5, 6, 0.45, C.Crystal, M.Neon, 0.05)
-	r.Sec.OrbitShards = { Speed = 0.9 }
-	local aura = emitter(T, C.Maw, { Rate = 12, Size = 0.55, Accel = V(0, 1.5, 0) })
+	local orb = hub(r, "OrbitShards", T, CF(0, 1.2, 1.7), { Speed = 0.9 })
+	for i = 0, 5 do
+		local a = i / 6 * PI * 2
+		local p = V(math.cos(a) * 1.7, math.sin(a * 3) * 0.3, math.sin(a) * 1.7)
+		spike(r, orb, p - V(0, 0.3, 0), p + V(0, 0.45, 0), 0.38, C.Neon, M.Neon)
+	end
+	local aura = emitter(T, maw, { Rate = 12, Size = 0.55, Accel = V(0, 1.5, 0) })
 	-- Фаза 2 (66%): светящиеся трещины по броне
 	local cracks2 = hide(join(
-		crack(r, T, { V(-1.0, 1.1, -0.91), V(-0.5, 0.6, -0.91), V(-0.7, 0.0, -0.91) }, 0.09, C.Maw),
-		crack(r, T, { V(0.9, 0.9, -0.91), V(0.4, 0.35, -0.91), V(0.7, -0.4, -0.91) }, 0.09, C.Maw),
-		crack(r, H, { V(-0.6, 0.6, -0.95), V(-0.25, 0.2, -0.95) }, 0.07, C.Maw)
+		crack(r, T, { V(-1.0, 1.15, -1.05), V(-0.5, 0.7, -1.1), V(-0.75, 0.15, -1.08) }, 0.08, maw),
+		crack(r, T, { V(0.95, 1.0, -1.05), V(0.45, 0.45, -1.1), V(0.75, -0.2, -1.05) }, 0.08, maw),
+		crack(r, H, { V(-0.6, 0.75, -0.96), V(-0.25, 0.45, -0.96) }, 0.06, maw)
 	))
-	-- Фаза 3 (33%): броня отваливается, под ней — кристаллическое ядро
+	-- Фаза 3 (33%): броня отваливается, под ней светится ядро
 	local inner = hide({
-		r:Box(T, V(1.6, 0.6, 0.2), CF(0, 0.75, -0.8), C.Crystal, M.Neon),
-		r:Box(T, V(1.2, 0.5, 0.2), CF(0, 0.05, -0.8), C.CrystalPale, M.Neon),
+		r:Box(T, V(1.6, 0.6, 0.3), CF(0, 0.95, -0.85), C.Neon, M.Neon),
+		r:Box(T, V(1.2, 0.5, 0.3), CF(0, 0.3, -0.9), C.NeonSoft, M.Neon),
 	})
-	local burst = emitter(T, C.Crystal, { Rate = 22, Size = 0.4, SpeedMin = 3, SpeedMax = 6, Off = true })
+	local burst = emitter(T, C.Neon, { Rate = 22, Size = 0.4, SpeedMin = 3, SpeedMax = 6, Off = true })
 	r.Phases = {
 		{ At = 0.66, Reveal = cracks2, Emit = { aura }, Lights = { { mawLight, 2.4 } }, Aggro = 1.1 },
-		{ At = 0.33, Reveal = inner, Break = join({ plateA, plateB }, pauldrons), Emit = { burst }, Aggro = 1.25 },
+		{ At = 0.33, Reveal = inner, Break = join(plateA, plateB, pauldrons), Emit = { burst }, Aggro = 1.25 },
 	}
-	return finishBiped(r, scale, { Root = { 5, 0, 0 }, Neck = { -6, 0, 0 } }, 6.3)
+	return finishBiped(r, scale, { Root = { 16, 0, 0 }, Neck = { -14, 0, 0 }, RS = { 10, 0, 8 }, LS = { 10, 0, -8 } }, 7.0)
 end
 
 ------------------------------------------------------------------------
 -- 9. THE ENTITY (финальный босс)
--- Сломанная корона, асимметричная броня, огромные руки, разбитое кольцо за спиной,
--- парящие камни, энергетическое ядро, цепи и руны. 3 визуальные фазы.
+-- Повелитель Пустоты в угловатых латах: сломанная корона, асимметричная броня, огромные руки,
+-- разбитое кольцо, парящие камни, ядро-кристалл, цепи, руны, рваный плащ. 3 визуальные фазы.
 ------------------------------------------------------------------------
 local function TheEntity(scale)
-	local r = Rig.new({ Name = "TheEntity", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = C.Obsidian, HeadSize = V(1.3, 1.5, 1.3), TorsoMat = M.Basalt })
+	local r = newBiped("TheEntity", V(1.3, 1.5, 1.3))
 	setup(r, { Style = "Heavy", Gait = { Speed = 0.75, Stride = 0.36, Bob = 0.2, Sway = 0.09, Lean = 3, Shake = 0.4 }, Death = "Implode" })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	local GOLD = C.Gold
 
-	-- ТОРС: асимметричная броня (правая сторона тяжёлая, левая — открытая с цепями)
-	r:Box(T, V(2.4, 2.2, 1.35), CF(0, 0.1, 0), C.Obsidian, M.Basalt)
-	r:Box(T, V(1.55, 1.7, 1.6), CF(0.5, 0.35, -0.05) * ANG(0, 0, rad(-6)), P.Black, M.Metal)
-	r:Wedge(T, V(1.2, 0.9, 1.55), CF(-0.55, 0.85, -0.05) * ANG(0, 0, rad(90)), P.Coal, M.Metal)
-	r:Box(T, V(2.3, 0.45, 1.5), CF(0, -0.85, 0), P.Black, M.Metal)
-	r:Box(T, V(2.4, 0.1, 1.55), CF(0, -0.6, 0), C.Rune, M.Neon)
-	-- энергетическое ядро в клетке рёбер
-	local core = r:Ball(T, 0.9, CF(-0.15, 0.25, -0.75), P.Neon, M.Neon)
-	r:Ball(T, 0.55, CF(-0.15, 0.25, -0.98), P.White, M.Neon)
-	for i = -2, 2 do
-		r:Rod(T, V(-0.15 + i * 0.22, 0.85, -0.8), V(-0.15 + i * 0.28, -0.35, -0.85), 0.1, C.Bone)
+	-- ТОРС: корпус, широкая грудная пластина, ядро-кристалл
+	bevel(r, T, V(2.2, 2.0, 1.2), CF(0, 0.05, 0.05), A_.Armor, A_.Edge)
+	bevel(r, T, V(2.75, 1.05, 1.5), CF(0, 0.6, -0.05), A_.ArmorMid, A_.Edge)
+	-- правая сторона — тяжёлая пластина с золотым кантом, левая — открытые рёбра
+	bevel(r, T, V(1.15, 0.95, 0.3), CF(0.62, 0.55, -0.85) * ANG(0, 0, rad(-6)), A_.Armor, GOLD)
+	for k = 0, 2 do
+		bar(r, T, V(-0.15, 1.0 - k * 0.32, -0.85), V(-1.1, 0.85 - k * 0.32, -0.75), V2(0.12, 0.1), C.Bone)
 	end
-	local coreLight = glow(r, core, P.Neon, 18, 2)
-	-- руны на броне
-	for i, p in ipairs({ V(0.75, 0.9, -0.86), V(0.9, 0.3, -0.86), V(0.6, -0.25, -0.86), V(-0.9, -0.3, -0.7) }) do
-		r:Neon(T, V(0.16, 0.34, 0.05), CF(p) * ANG(0, 0, rad(i * 30)), C.Rune)
-		r:Neon(T, V(0.3, 0.06, 0.05), CF(p + V(0, 0.08, 0)), C.Rune)
+	gem(r, T, 0.7, CF(-0.4, 0.45, -0.82), C.Neon, A_.Edge)
+	gem(r, T, 0.35, CF(-0.4, 0.45, -0.92), C.White)
+	local coreLight = r:Glow(T, C.Neon, 18, 2)
+	-- воротник-гребень за головой
+	for _, s in ipairs({ -1, 1 }) do
+		spike(r, T, V(0.7 * s, 1.0, 0.3), V(1.1 * s, 2.6, 0.75), 0.85, A_.Armor, M.Metal, true, 0.22)
+		spike(r, T, V(0.35 * s, 1.0, 0.45), V(0.5 * s, 2.1, 0.85), 0.6, A_.ArmorMid, M.Metal, true, 0.18)
 	end
-	-- плащ
-	r:Cape(2.3, 4.2, C.Obsidian, true)
+	-- пластины живота, пояс с пряжкой
+	bevel(r, T, V(1.95, 0.38, 1.3), CF(0, -0.35, -0.02), A_.Armor, A_.Edge)
+	bevel(r, T, V(2.2, 0.4, 1.45), CF(0, -0.85, 0), A_.ClothDark, A_.Edge, M.Fabric)
+	bevel(r, T, V(0.55, 0.5, 0.16), CF(0, -0.85, -0.78), A_.Edge, A_.ArmorMid)
+	gem(r, T, 0.22, CF(0, -0.85, -0.88), C.Neon)
+	-- набедренные пластины
+	for _, s in ipairs({ -1, 1 }) do
+		bevel(r, T, V(0.75, 0.9, 1.1), CF(0.92 * s, -1.3, -0.05) * ANG(0, 0, rad(12 * s)), A_.ArmorMid, A_.Edge)
+	end
+	-- рваный плащ
+	r:Cape(2.4, 4.6, A_.Cloth, true)
 	r.Sec.Cape = { Amp = 0.12, Speed = 1.4 }
 	r.Sec.Cape2 = { Amp = 0.18, Speed = 1.4 }
 
-	-- ГОЛОВА: маска, фиолетовые глаза, рот-трещина
-	r:Box(H, V(1.38, 1.55, 1.38), CF(0, 0, 0), C.Obsidian, M.Basalt)
-	r:Wedge(H, V(1.3, 0.6, 0.5), CF(0, -0.55, -0.6) * ANG(PI, 0, 0), P.Black, M.Metal)
-	r:Eyes(P.Neon, { Y = 0.2, Spacing = 0.32, Size = V(0.32, 0.16, 0.06), Tilt = -14 })
-	r:Neon(H, V(0.75, 0.07, 0.05), CF(0, -0.3, -0.71) * ANG(0, 0, rad(-6)), P.Neon)
-	glow(r, H, P.Neon, 8, 1.2)
+	-- ГОЛОВА: гранёный шлем, Т-образный визор, нащёчники, рога
+	bevel(r, H, V(1.35, 1.45, 1.4), CF(0, 0.05, 0), A_.Armor, A_.Edge)
+	bevel(r, H, V(1.15, 1.0, 0.25), CF(0, -0.1, -0.72), A_.ArmorMid, A_.Edge)
+	r:Neon(H, V(0.9, 0.12, 0.06), CF(0, 0.2, -0.86), C.Neon)
+	r:Neon(H, V(0.12, 0.55, 0.06), CF(0, -0.08, -0.86), C.Neon)
+	for _, s in ipairs({ -1, 1 }) do
+		r:Wedge(H, V(0.3, 0.6, 0.6), CF(0.6 * s, -0.55, -0.5) * ANG(PI, 0, 0), A_.Armor, M.Metal)
+		hornA(r, H, { V(0.6 * s, 0.35, 0.05), V(0.95 * s, 0.6, 0.1), V(1.1 * s, 1.1, 0.05), V(0.95 * s, 1.6, -0.15) }, 0.28, A_.Armor, M.Metal)
+	end
+	r:Glow(H, C.Neon, 8, 1.2)
 	-- высокая сломанная корона
-	r:Cyl(H, 0.35, 1.6, CF(0, 0.75, 0), P.DarkGold, M.Metal, "Y")
-	local crownTall = {}
-	local crownSpikes = { { 0, 2.0, 0 }, { 0.5, 1.5, 15 }, { -0.5, 1.6, -15 }, { 0.75, 0.6, 30, true }, { -0.75, 1.1, -30 }, { 0.3, 0.45, 8, true } }
-	for _, s in ipairs(crownSpikes) do
-		local base = V(s[1], 0.9, -0.55)
-		local tip = base + V(math.sin(rad(s[3])) * s[2], s[2], 0)
-		local p = r:Seg(H, base, tip, 0.2, P.DarkGold, M.Metal)
-		local gem = r:Ball(H, 0.18, CF(tip), C.Rune, M.Neon)
-		if s[4] then
-			-- уже обломанный зубец
-			r:Seg(H, tip, tip + V(0.2, 0.05, 0), 0.12, P.DarkGold, M.Metal)
-		elseif s[2] >= 1.1 then
-			crownTall[#crownTall + 1] = p
-			crownTall[#crownTall + 1] = gem
+	local crownTall, stubs = {}, {}
+	for i = 0, 3 do
+		r:Box(H, V(1.5, 0.28, 0.14), CF(0, 0.82, 0) * ANG(0, i * PI / 2, 0) * CF(0, 0, -0.7), GOLD, M.Metal)
+	end
+	local crown = { { 0, 2.6, true }, { 0.4, 1.7, true }, { -0.4, 2.0, true }, { 0.7, 0.5, false }, { -0.7, 1.3, true }, { 0.2, 0.35, false } }
+	for _, c in ipairs(crown) do
+		local x = c[1]
+		local base = V(x, 0.9, -0.7)
+		local tip = base + V(x * 0.3, c[2], 0.15)
+		local p = spike(r, H, base, tip, 0.3 + c[2] * 0.05, GOLD, M.Metal, false, 0.1)
+		r:Neon(H, V(0.18, 0.18, 0.08), CF(base + V(0, 0.0, -0.08)) * ANG(0, 0, rad(45)), C.Neon)
+		if c[3] then
+			for _, q in ipairs(p) do
+				crownTall[#crownTall + 1] = q
+			end
+			stubs[#stubs + 1] = r:Seg(H, base, base + V(0, 0.3, 0), 0.16, C.NeonSoft, M.Neon)
 		end
 	end
-	for i = -1, 1, 2 do
-		r:Seg(H, V(i * 0.6, 0.9, 0.45), V(i * 0.75, 1.9, 0.6), 0.18, P.DarkGold, M.Metal)
-	end
+	hide(stubs)
 
-	-- РУКИ: правая — тяжёлая броня, левая — открытая плоть, цепи
-	r:Pauldron(RA, 1, 1.55, P.Black, P.DarkGold, 0.1)
-	r:Pauldron(RA, 1, 1.15, P.Coal, nil, 0.55)
+	-- ПРАВАЯ РУКА: огромный наплечник-ступени, латная перчатка
+	pauldron(r, RA, 1, 1.3, A_.Armor, GOLD, C.Neon, 3)
+	bevel(r, RA, V(1.0, 0.9, 1.0), CF(0, 0.15, 0), A_.Armor, A_.Edge)
+	bevel(r, RA, V(1.3, 0.3, 1.3), CF(0, -0.35, 0), A_.Armor, GOLD)
+	bevel(r, RA, V(1.2, 0.85, 1.2), CF(0, -0.85, -0.02), A_.ArmorMid, A_.Edge)
+	spike(r, RA, V(0.5, -0.8, 0), V(1.0, -0.7, 0.15), 0.35, A_.Armor, M.Metal, true, 0.1)
+	-- ЛЕВАЯ РУКА: проклятая, в цепях и рунах, костяные шипы
+	bevel(r, LA, V(1.35, 0.6, 1.35), CF(-0.2, 1.05, 0) * ANG(0, 0, rad(14)), A_.ClothDark, A_.Edge, M.Fabric)
 	for k = 0, 2 do
-		r:Rod(RA, V(0.3, 1.2, -0.4 + k * 0.4), V(0.9, 2.1 - k * 0.15, -0.5 + k * 0.45), 0.18, P.Black, M.Metal)
+		spike(r, LA, V(-0.3 - k * 0.12, 1.25, -0.35 + k * 0.35), V(-0.65 - k * 0.15, 2.0 - k * 0.2, -0.4 + k * 0.45), 0.24, C.Bone)
 	end
-	r:Box(LA, V(1.2, 0.5, 1.2), CF(-0.15, 0.85, 0), P.Coal, M.Metal)
-	for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
-		local A, s = a[1], a[2]
-		r:Sphere(A, V(1.45, 1.5, 1.45), CF(0, -0.1, 0), C.Obsidian, M.Basalt)
-		r:Box(A, V(1.65, 1.35, 1.65), CF(0, -1.2, 0), s == 1 and P.Black or C.Obsidian, s == 1 and M.Metal or M.Basalt)
-		-- когти
+	bevel(r, LA, V(0.9, 0.9, 0.9), CF(0, 0.15, 0), C.Deep, C.Lilac, M.Plastic)
+	bevel(r, LA, V(1.0, 1.0, 1.0), CF(0, -0.8, 0), C.Night, C.Mid, M.Plastic)
+	for k = 0, 2 do
+		squareRing(r, LA, CF(0, -0.45 - k * 0.3, 0) * ANG(rad(10 - k * 8), rad(10), 0), 1.1, 0.1, C.Steel)
+	end
+	r:Neon(LA, V(0.06, 0.85, 0.06), CF(0.1, -0.85, -0.52), C.NeonSoft)
+	-- кисти с длинными когтями
+	for _, A in ipairs({ RA, LA }) do
+		bevel(r, A, V(1.05, 0.5, 1.05), CF(0, -1.5, -0.1), A_.Armor, A_.Edge)
 		for k = -1, 1 do
-			r:Chain(A, { V(k * 0.45, -1.8, -0.55), V(k * 0.5, -2.2, -0.9), V(k * 0.4, -2.45, -1.15) }, 0.16, C.Bone, M.Plastic, 0.65, true)
-		end
-		r:Neon(A, V(0.1, 1.0, 0.05), CF(0.2 * s, -0.2, -0.75), C.Rune)
-	end
-	-- цепи, свисающие с левого запястья и пояса
-	local function chainLinks(limb, n, size)
-		for i = 0, n - 1 do
-			r:Box(limb, V(size, size * 1.6, size * 0.35), CF(0, -i * size * 1.3, 0) * ANG(0, i % 2 == 0 and 0 or PI / 2, 0), P.Steel, M.Metal)
+			local base = V(k * 0.35, -1.7, -0.5)
+			spike(r, A, base, base + V(k * 0.1, -0.85, -0.5), 0.26, C.Bone)
 		end
 	end
-	local ch1 = r:Joint("SwayChainL", LA, V(0.2, 0.2, 0.2), CF(-0.2, -1.6, 0.3), CF(), P.Steel)
-	ch1.Transparency = 1
-	chainLinks(ch1, 6, 0.3)
-	r.Sec.SwayChainL = { Amp = 0.25, Speed = 2.2 }
-	for _, x in ipairs({ -0.85, 0.85 }) do
-		local name = x < 0 and "SwayChainW1" or "SwayChainW2"
-		local ch = r:Joint(name, T, V(0.2, 0.2, 0.2), CF(x, -1.05, -0.6), CF(), P.Steel)
-		ch.Transparency = 1
-		chainLinks(ch, 5, 0.26)
-		r.Sec[name] = { Amp = 0.2, Speed = 2 + x }
+	-- свисающие цепи
+	chain(r, hub(r, "SwayChainL", LA, CF(-0.15, -1.75, 0.3), { Amp = 0.25, Speed = 2.2 }), 6, 0.36)
+	for _, x in ipairs({ -0.8, 0.8 }) do
+		chain(r, hub(r, x < 0 and "SwayChainW1" or "SwayChainW2", T, CF(x, -1.05, -0.65), { Amp = 0.2, Speed = 2 + x }), 4, 0.3)
 	end
-	-- набедренник
-	local cloth = r:Joint("SwayCloth", T, V(1.4, 1.6, 0.12), CF(0, -1.0, -0.72), CF(0, -0.8, 0), C.Obsidian, M.Fabric)
-	r:Neon(cloth, V(0.18, 1.2, 0.05), CF(0, -0.1, -0.08), C.Rune)
+	-- набедренник с руной и рваным краем
+	local cloth = r:Joint("SwayCloth", T, V(1.2, 1.7, 0.1), CF(0, -1.05, -0.75), CF(0, -0.85, 0), A_.Cloth, M.Fabric)
+	gem(r, cloth, 0.3, CF(0, 0.2, -0.07), C.NeonSoft)
+	tatter(r, cloth, -0.85, 0, 1.2, 4, A_.Cloth, M.Fabric, 2)
 	r.Sec.SwayCloth = { Amp = 0.15, Speed = 1.8 }
-	-- ноги в броне
+	-- ноги: бедро, наколенник-шип, поножи, сапоги
 	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.25, 1.2, 1.3), CF(0, -0.35, 0), P.Black, M.Metal)
-		r:Sphere(Lg, V(0.85, 0.6, 0.4), CF(0, 0.2, -0.62), P.Coal, M.Metal)
-		r:Box(Lg, V(1.35, 0.45, 1.6), CF(0, -0.82, -0.15), C.Obsidian, M.Basalt)
+		bevel(r, Lg, V(1.05, 1.0, 1.05), CF(0, 0.45, 0), A_.Armor, A_.Edge)
+		bevel(r, Lg, V(0.8, 0.5, 0.3), CF(0, -0.05, -0.62), A_.ArmorMid, GOLD)
+		spike(r, Lg, V(0, 0.1, -0.7), V(0, 0.55, -1.1), 0.36, A_.Armor, M.Metal)
+		bevel(r, Lg, V(1.1, 0.7, 1.12), CF(0, -0.38, 0), A_.ArmorMid, A_.Edge)
+		bootA(r, Lg, A_.Armor, A_.Edge, 1.2)
 	end
 
-	-- РАЗБИТОЕ КОЛЬЦО за спиной (медленно вращается)
-	local halo = hub(r, "SpinHalo", T, CF(0, 1.4, 1.35), { Speed = 0.35 })
-	local ringParts = ring(r, halo, CF(), 2.6, 18, 0.28, 0.22, P.DarkGold, M.Metal, function(i) return i == 4 or i == 11 end)
-	ring(r, halo, CF(0, 0, -0.05), 2.35, 18, 0.07, 0.1, C.Rune, M.Neon, function(i) return i == 4 or i == 11 or i == 12 end)
+	-- РАЗБИТОЕ КОЛЬЦО за спиной
+	local halo = hub(r, "SpinHalo", T, CF(0, 1.7, 1.35), { Speed = 0.35 })
+	local ringParts = ring(r, halo, CF(), 2.6, 16, 0.3, 0.25, GOLD, M.Metal, function(i) return i == 3 or i == 10 or i == 11 end)
+	ring(r, halo, CF(0, 0, -0.06), 2.32, 16, 0.08, 0.08, C.Neon, M.Neon, function(i) return i == 3 or i == 10 or i == 11 or i == 12 end)
 	for i = 0, 5 do
 		local a = i / 6 * PI * 2 + 0.3
-		r:Neon(halo, V(0.25, 0.4, 0.1), CF(math.cos(a) * 2.6, math.sin(a) * 2.6, -0.15) * ANG(0, 0, a), C.Rune)
+		gem(r, halo, 0.3, CF(math.cos(a) * 2.6, math.sin(a) * 2.6, -0.16), C.NeonSoft)
 	end
-	-- в фазе 3 кольцо разламывается: отпадает треть сегментов
 	local ringBreak = {}
 	for i, p in ipairs(ringParts) do
 		if i % 3 == 0 then
 			ringBreak[#ringBreak + 1] = p
 		end
 	end
-	-- ПАРЯЩИЕ КАМНИ
-	r:Orbit("OrbitStones", T, CF(0, -0.4, 0), 3.6, 6, 0.75, P.Coal, M.Slate)
-	r.Sec.OrbitStones = { Speed = 0.6 }
-	r:Orbit("OrbitShards", T, CF(0, 1.6, 0), 2.8, 5, 0.35, P.Neon, M.Neon, 0.1)
-	r.Sec.OrbitShards = { Speed = -1.2 }
+	local ringStub = hide(ring(r, halo, CF(0, 0, -0.1), 2.6, 16, 0.1, 0.28, C.Neon, M.Neon, function(i) return i % 3 ~= 2 end))
 
-	emitter(T, P.Neon, { Rate = 10, Size = 0.6, Accel = V(0, 2, 0) })
-	local smoke = emitter(emitPoint(r, T, CF(0, -3.2, 0), V(2.5, 0.4, 2.5)), Color3.fromRGB(50, 20, 80), { Smoke = true, Rate = 5, Size = 2, SizeEnd = 3.5, LifeMin = 1, LifeMax = 1.8, T0 = 0.6 })
-
-	-- ФАЗА 2 (65% HP): дополнительные трещины и усиленное свечение
-	local cracks2 = hide(join(
-		crack(r, T, { V(-1.0, 1.0, -0.69), V(-0.6, 0.5, -0.69), V(-0.85, -0.1, -0.69), V(-0.5, -0.5, -0.69) }, 0.09),
-		crack(r, T, { V(1.15, 1.0, -0.86), V(0.7, 0.55, -0.86), V(1.0, 0.0, -0.86) }, 0.09),
-		crack(r, H, { V(0.45, 0.65, -0.7), V(0.2, 0.2, -0.7), V(0.4, -0.15, -0.7) }, 0.07),
-		crack(r, RL, { V(0.3, 0.2, -0.66), V(-0.1, -0.5, -0.66) }, 0.08),
-		crack(r, LL, { V(-0.3, 0.1, -0.66), V(0.15, -0.6, -0.66) }, 0.08)
-	))
-	local aura2 = emitter(T, C.CrystalPale, { Rate = 14, Size = 0.45, SpeedMin = 2, SpeedMax = 4, Off = true })
-	-- ФАЗА 3 (30% HP): корона и кольцо ломаются, больше осколков, светятся обломки
-	local stubs = {}
-	for _, s in ipairs(crownSpikes) do
-		if not s[4] and s[2] >= 1.1 then
-			local base = V(s[1], 0.9, -0.55)
-			stubs[#stubs + 1] = r:Seg(H, base, base + V(math.sin(rad(s[3])) * 0.45, 0.45, 0), 0.22, C.Rune, M.Neon)
-		end
+	-- ПАРЯЩИЕ КАМНИ с кристаллами
+	local stones = hub(r, "OrbitStones", T, CF(0, -0.5, 0), { Speed = 0.6 })
+	for i = 0, 5 do
+		local a = i / 6 * PI * 2
+		local s = 0.42 + (i % 3) * 0.12
+		local p = V(math.cos(a) * 4.0, math.sin(a * 2) * 0.5, math.sin(a) * 4.0)
+		local cf = CF(p) * ANG(i * 0.7, i * 1.3, i * 0.4)
+		bevel(r, stones, V(s * 1.3, s, s * 1.1), cf, C.Night, C.Mid, M.Slate)
+		spike(r, stones, p + V(0, s * 0.3, 0), p + V(s * 0.2, s * 1.2, 0), s * 0.5, C.Neon, M.Neon, true)
 	end
-	hide(stubs)
+	local shards = hub(r, "OrbitShards", T, CF(0, 1.7, 0), { Speed = -1.2 })
+	for i = 0, 4 do
+		local a = i / 5 * PI * 2
+		local p = V(math.cos(a) * 2.9, 0, math.sin(a) * 2.9)
+		spike(r, shards, p - V(0, 0.3, 0), p + V(0, 0.4, 0), 0.3, C.Neon, M.Neon)
+	end
+
+	emitter(T, C.Neon, { Rate = 10, Size = 0.6, Accel = V(0, 2, 0) })
+	local smoke = emitter(emitPoint(r, T, CF(0, -3.2, 0), V(2.5, 0.4, 2.5)), rgb(50, 20, 80), { Smoke = true, Rate = 5, Size = 2, SizeEnd = 3.5, LifeMin = 1, LifeMax = 1.8, T0 = 0.6 })
+
+	-- ФАЗА 2 (65% HP): трещины по броне и шлему, ядро ярче
+	local cracks2 = hide(join(
+		crack(r, T, { V(0.3, 1.1, -0.82), V(0.6, 0.75, -1.02), V(0.45, 0.3, -1.02), V(0.8, 0.05, -1.0) }, 0.08),
+		crack(r, T, { V(1.2, 1.0, -0.8), V(1.0, 0.45, -0.8) }, 0.07),
+		crack(r, H, { V(0.45, 0.6, -0.71), V(0.25, 0.35, -0.71), V(0.4, 0.05, -0.71) }, 0.06),
+		crack(r, RL, { V(0.3, -0.1, -0.57), V(-0.1, -0.6, -0.57) }, 0.07),
+		crack(r, LL, { V(-0.3, -0.15, -0.57), V(0.15, -0.65, -0.57) }, 0.07)
+	))
+	local aura2 = emitter(T, C.NeonSoft, { Rate = 14, Size = 0.45, SpeedMin = 2, SpeedMax = 4, Off = true })
+	-- ФАЗА 3 (30% HP): корона и кольцо ломаются, вокруг кружится больше осколков
 	local extraHub = hub(r, "OrbitShards3", T, CF(0, 0.4, 0), { Speed = 1.8 })
 	local extra = {}
 	for i = 0, 7 do
 		local a = i / 8 * PI * 2
-		extra[#extra + 1] = r:Box(extraHub, V(0.35, 0.7, 0.35), CF(math.cos(a) * 4.4, math.sin(a * 3) * 0.6, math.sin(a) * 4.4) * ANG(rad(30), a, rad(20)), C.Crystal, M.Neon)
+		local p = V(math.cos(a) * 4.4, math.sin(a * 3) * 0.6, math.sin(a) * 4.4)
+		for _, q in ipairs(spike(r, extraHub, p - V(0, 0.35, 0), p + V(0, 0.45, 0), 0.32, C.NeonSoft, M.Neon, true)) do
+			extra[#extra + 1] = q
+		end
 	end
 	hide(extra)
-	local ringStub = hide(ring(r, halo, CF(0, 0, -0.1), 2.6, 18, 0.12, 0.3, P.Neon, M.Neon, function(i) return i % 3 ~= 0 end))
-	local rage = emitter(T, P.NeonPink, { Rate = 20, Size = 0.5, SpeedMin = 3, SpeedMax = 7, Off = true })
+	local rage = emitter(T, C.Magenta, { Rate = 20, Size = 0.5, SpeedMin = 3, SpeedMax = 7, Off = true })
 	r.Phases = {
 		{ At = 0.65, Reveal = cracks2, Emit = { aura2 }, Lights = { { coreLight, 3.5 } }, Aggro = 1.1 },
 		{ At = 0.30, Reveal = join(stubs, extra, ringStub), Break = join(crownTall, ringBreak), Emit = { rage, smoke }, Lights = { { coreLight, 5 } }, Aggro = 1.4 },
 	}
-	local rig = finishBiped(r, scale, { Root = { 4, 0, 0 }, RS = { 6, 0, 10 }, LS = { 6, 0, -10 } }, 6.6)
-	return rig
+	return finishBiped(r, scale, { Root = { 4, 0, 0 }, RS = { 6, 0, 12 }, LS = { 6, 0, -12 } }, 7.4)
 end
 
 local Builders = {
@@ -925,13 +979,19 @@ function EnemyModels.Build(enemyId)
 	if not def or not builder then
 		error("Unknown enemy " .. tostring(enemyId))
 	end
-	local rig = builder(def.Scale or 1)
+	-- обычные враги идут толпами: для них фаска дешевле (2 детали вместо 4), шипы плоские
+	Kit.Cheap = not def.IsBoss
+	local ok, rig = pcall(builder, def.Scale or 1)
+	Kit.Cheap = false
+	if not ok then
+		error(rig)
+	end
 	rig.Model.Name = enemyId
 	for _, d in ipairs(rig.Model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.CanQuery = false
 			d.CanTouch = false
-			d.CastShadow = def.IsBoss == true or d.Name == "Torso"
+			d.CastShadow = def.IsBoss == true
 		end
 	end
 	return rig

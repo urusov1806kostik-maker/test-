@@ -14,6 +14,7 @@ OUT = ROOT / "build" / "VoidTD_Installer.lua"
 ENTRIES = [
     ("ReplicatedStorage/VoidTD/Config.lua", "ReplicatedStorage", ["VoidTD", "Config"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/PathUtil.lua", "ReplicatedStorage", ["VoidTD", "PathUtil"], "ModuleScript"),
+    ("ReplicatedStorage/VoidTD/ModelKit.lua", "ReplicatedStorage", ["VoidTD", "ModelKit"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/UnitModels.lua", "ReplicatedStorage", ["VoidTD", "UnitModels"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/EnemyModels.lua", "ReplicatedStorage", ["VoidTD", "EnemyModels"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/CaseModels.lua", "ReplicatedStorage", ["VoidTD", "CaseModels"], "ModuleScript"),
