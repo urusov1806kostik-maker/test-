@@ -125,7 +125,7 @@ function Placement.Start(id)
 		return
 	end
 	local phase = ctx.State:GetAttribute("Phase")
-	if phase == "Victory" or phase == "Defeat" then
+	if phase == "Victory" or phase == "Defeat" or not player:GetAttribute("InMatch") then
 		return
 	end
 	unitId = id

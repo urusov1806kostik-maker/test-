@@ -221,11 +221,13 @@ end
 local function buildHUD()
 	-- деньги и гемы
 	local cur = panel({ Parent = gui, Size = UDim2.fromOffset(230, 92), Position = UDim2.fromOffset(16, 16) })
+	refs.Currency = cur
 	refs.Money = label({ Parent = cur, Size = UDim2.new(1, -20, 0, 38), Position = UDim2.fromOffset(12, 6), Text = "💰 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Good })
 	refs.Gems = label({ Parent = cur, Size = UDim2.new(1, -20, 0, 34), Position = UDim2.fromOffset(12, 50), Text = "💎 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(120, 200, 255) })
 
 	-- волна и ядро
 	local top = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 104), Position = UDim2.new(0.5, 0, 0, 12) })
+	refs.Top = top
 	refs.Wave = label({ Parent = top, Size = UDim2.new(1, -20, 0, 40), Position = UDim2.fromOffset(10, 4), Text = "WAVE 0 / 30" })
 	refs.Status = label({ Parent = top, Size = UDim2.new(1, -20, 0, 22), Position = UDim2.fromOffset(10, 44), Text = "", TextColor3 = THEME.Dim, Font = Enum.Font.GothamBold })
 	local coreBg = new("Frame", { Parent = top, Size = UDim2.new(1, -24, 0, 24), Position = UDim2.fromOffset(12, 72), BackgroundColor3 = Color3.fromRGB(25, 12, 32), BorderSizePixel = 0 }, { corner(6) })
@@ -260,16 +262,20 @@ local function buildHUD()
 		ctx.Request("StartWave")
 	end)
 
-	-- боковые кнопки
-	local side = new("Frame", { Parent = gui, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(120, 200), Position = UDim2.new(0, 16, 0.5, 0) }, {
-		new("UIListLayout", { Padding = UDim.new(0, 10) }),
-	})
-	button({ Parent = side, Size = UDim2.fromOffset(120, 54), Text = "✦ SUMMON", BackgroundColor3 = THEME.AccentDark }, function()
-		UI.Toggle("Summon")
+	-- выход из матча в лобби
+	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
+		ctx.Placement.Stop()
+		local ok = ctx.Request("LeaveMatch")
+		if ok then
+			UI.CloseUnit()
+		end
 	end)
-	button({ Parent = side, Size = UDim2.fromOffset(120, 54), Text = "☰ UNITS", BackgroundColor3 = THEME.BG3 }, function()
-		UI.Toggle("Inventory")
-	end)
+
+	-- подсказка в лобби
+	local hint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(640, 86), Position = UDim2.new(0.5, 0, 1, -18), StrokeColor = THEME.Accent })
+	refs.LobbyHint = hint
+	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 36), Position = UDim2.fromOffset(10, 6), Text = "ЛОББИ", TextColor3 = THEME.Accent })
+	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Встань в круг:  ✦ SUMMON — призыв   •   ☰ ЮНИТЫ — экипировка   •   ▶ ИГРАТЬ — в бой" })
 
 	-- подсказка размещения
 	refs.PlaceHint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(520, 34), Position = UDim2.new(0.5, 0, 1, -150), Visible = false })
@@ -311,7 +317,7 @@ local function buildHotbar()
 			if id then
 				ctx.Placement.Start(id)
 			else
-				UI.Toggle("Inventory")
+				UI.Toast("Пустой слот: экипируй юнитов в круге ЮНИТЫ в лобби", "error")
 			end
 		end)
 		slotRefs[i] = { Button = slot }
@@ -550,11 +556,25 @@ function UI.Toggle(name)
 				tween(sc, 0.2, { Scale = 1 }, Enum.EasingStyle.Back)
 				if name == "Inventory" then
 					UI.RefreshInventory()
+				elseif name == "Mode" then
+					UI.RefreshMode()
 				end
 			end
 		else
 			m.Visible = false
 		end
+	end
+end
+
+function UI.Show(name, on)
+	local m = modals[name]
+	if not m then
+		return
+	end
+	if on and not m.Visible then
+		UI.Toggle(name)
+	elseif not on then
+		m.Visible = false
 	end
 end
 
@@ -600,6 +620,7 @@ local function showSummonResults(results)
 				tag.Rotation = -12
 			end
 			tween(sc, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
+			FX.Sound("Ping", 0.3, 0.8 + Config.Rarities[def.Rarity].Order * 0.15)
 		end)
 	end
 	task.delay(0.15 * #results + 0.4, function()
@@ -779,6 +800,63 @@ function UI.RefreshInventory()
 end
 
 ------------------------------------------------------------------------
+-- ВЫБОР СЛОЖНОСТИ (круг ИГРАТЬ)
+------------------------------------------------------------------------
+local function joinMatch(diffKey)
+	local ok = ctx.Request("JoinMatch", { Difficulty = diffKey })
+	if ok then
+		UI.Show("Mode", false)
+		FX.Sound("Ping", 0.5, 0.8)
+	end
+end
+
+local function buildMode()
+	local m = modal("Mode", "▶ ВЫБОР СЛОЖНОСТИ", UDim2.fromOffset(880, 430))
+	local cards = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 340), Position = UDim2.fromOffset(18, 70), ZIndex = 6 }, {
+		new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+	})
+	refs.ModeCards = cards
+	for i, key in ipairs(Config.DifficultyOrder) do
+		local d = Config.Difficulties[key]
+		local card = panel({ Parent = cards, Size = UDim2.fromOffset(200, 336), BackgroundColor3 = THEME.BG2, StrokeColor = d.Color, LayoutOrder = i, ZIndex = 6 })
+		new("UIGradient", { Parent = card, Rotation = 90, Color = ColorSequence.new(d.Color:Lerp(THEME.BG, 0.6), THEME.BG) })
+		label({ Parent = card, Size = UDim2.new(1, -16, 0, 40), Position = UDim2.fromOffset(8, 10), Text = d.Name, TextColor3 = d.Color, ZIndex = 7 })
+		local lines = {
+			string.format("HP врагов   x%.2g", d.HP),
+			string.format("Скорость    x%.2g", d.Speed),
+			string.format("Деньги      x%.2g", d.Money),
+			string.format("Гемы        x%.2g", d.Gems),
+			string.format("Ядро        %d HP", d.CoreHP),
+		}
+		label({ Parent = card, Size = UDim2.new(1, -20, 0, 110), Position = UDim2.fromOffset(10, 58), Text = table.concat(lines, "\n"), TextScaled = false, TextSize = 16, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 7 })
+		label({ Parent = card, Size = UDim2.new(1, -20, 0, 70), Position = UDim2.fromOffset(10, 176), Text = d.Description, TextScaled = false, TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, TextColor3 = THEME.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 7 })
+		button({ Parent = card, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1, -24, 0, 50), Position = UDim2.new(0.5, 0, 1, -12), Text = "ИГРАТЬ", BackgroundColor3 = d.Color:Lerp(Color3.new(0, 0, 0), 0.45), StrokeColor = d.Color, ZIndex = 7 }, function()
+			joinMatch(key)
+		end)
+	end
+	-- если матч уже идёт — присоединиться
+	local running = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 300), Position = UDim2.fromOffset(18, 80), Visible = false, ZIndex = 6 })
+	refs.ModeRunning = running
+	refs.ModeRunningText = label({ Parent = running, Size = UDim2.new(1, 0, 0, 90), Position = UDim2.fromOffset(0, 40), Text = "", ZIndex = 7 })
+	button({ Parent = running, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(320, 64), Position = UDim2.new(0.5, 0, 0, 170), Text = "ПРИСОЕДИНИТЬСЯ", BackgroundColor3 = THEME.AccentDark, ZIndex = 7 }, function()
+		joinMatch(nil)
+	end)
+end
+
+function UI.RefreshMode()
+	local phase = ctx.State:GetAttribute("Phase") or "Idle"
+	local idle = phase == "Idle"
+	refs.ModeCards.Visible = idle
+	refs.ModeRunning.Visible = not idle
+	if not idle then
+		local d = Config.Difficulties[ctx.State:GetAttribute("Difficulty") or "Medium"] or Config.Difficulties.Medium
+		local w = ctx.State:GetAttribute("Wave") or 0
+		refs.ModeRunningText.Text = "Уже идёт бой: " .. d.Name .. ", волна " .. w .. "\nПрисоединяйся к команде!"
+		refs.ModeRunningText.TextColor3 = d.Color
+	end
+end
+
+------------------------------------------------------------------------
 -- ПОБЕДА / ПОРАЖЕНИЕ
 ------------------------------------------------------------------------
 local function showEnd(victory, payload)
@@ -811,14 +889,21 @@ function UI.OnNotify(p)
 	if t == "Toast" then
 		UI.Toast(p.Text, p.Kind)
 	elseif t == "WaveStart" then
+		FX.Sound("Ping", 0.35, p.Boss and 0.6 or 1)
 		if p.Boss then
+			FX.Shake(0.4, 0.8)
 			UI.Announce("WAVE " .. p.Wave, "⚠ BOSS: " .. p.Boss, THEME.Pink)
 		else
 			UI.Announce("WAVE " .. p.Wave, nil, THEME.Text)
 		end
 	elseif t == "WaveClear" then
 		UI.Toast(string.format("Волна %d пройдена! +$%s  +💎%d", p.Wave, Config.FormatNumber(p.Reward), p.Gems), "good")
+	elseif t == "BossDown" then
+		FX.Shake(0.6, 0.6)
 	elseif t == "CoreHit" then
+		if player:GetAttribute("InMatch") then
+			FX.Shake(0.35, 0.3)
+		end
 		local f = refs.CoreFill
 		f.BackgroundColor3 = THEME.Bad
 		tween(f, 0.4, { BackgroundColor3 = THEME.Accent })
@@ -832,7 +917,7 @@ function UI.OnNotify(p)
 			refs.EndOverlay = nil
 		end
 		UI.CloseUnit()
-		UI.Toast("Новая игра! Расставь юнитов и нажми START WAVE", "good")
+		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
 	end
 end
 
@@ -857,13 +942,29 @@ function UI.Update(dt)
 
 	local wave = State:GetAttribute("Wave") or 0
 	local maxWave = State:GetAttribute("MaxWave") or 30
-	local phase = State:GetAttribute("Phase") or "Lobby"
-	refs.Wave.Text = "WAVE " .. wave .. " / " .. maxWave
+	local phase = State:GetAttribute("Phase") or "Idle"
+	local inMatch = player:GetAttribute("InMatch") == true
+	refs.Top.Visible = inMatch
+	refs.Hotbar.Visible = inMatch
+	refs.Leave.Visible = inMatch
+	refs.Money.Visible = inMatch
+	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
+	refs.Gems.Position = UDim2.fromOffset(12, inMatch and 50 or 8)
+	refs.LobbyHint.Visible = not inMatch and not (modals.Mode.Visible or modals.Summon.Visible or modals.Inventory.Visible)
+	if not inMatch and UI.SelectedUid then
+		UI.CloseUnit()
+	end
+	if modals.Mode.Visible then
+		UI.RefreshMode()
+	end
+	local diff = Config.Difficulties[State:GetAttribute("Difficulty") or ""]
+	refs.Wave.Text = "WAVE " .. wave .. " / " .. maxWave .. (diff and ("  •  " .. diff.Name) or "")
+	refs.Wave.TextColor3 = diff and diff.Color or THEME.Text
 	local count = 0
 	for _ in pairs(Renderer.EnemyViews) do
 		count = count + 1
 	end
-	if phase == "Lobby" then
+	if phase == "Prep" then
 		refs.Status.Text = "Расставь юнитов и начни волну"
 	elseif phase == "Intermission" then
 		local left = math.max(0, math.ceil((State:GetAttribute("NextWaveAt") or 0) - workspace:GetServerTimeNow()))
@@ -876,10 +977,10 @@ function UI.Update(dt)
 	elseif phase == "Defeat" then
 		refs.Status.Text = "Ядро разрушено"
 	end
-	if phase == "Lobby" then
+	if phase == "Prep" then
 		refs.Start.Text = "▶ START WAVE"
 	end
-	refs.Start.Visible = (phase == "Lobby" or phase == "Intermission")
+	refs.Start.Visible = inMatch and (phase == "Prep" or phase == "Intermission")
 
 	local hp = State:GetAttribute("CoreHP") or 100
 	local maxHp = State:GetAttribute("CoreMaxHP") or 100
@@ -889,7 +990,7 @@ function UI.Update(dt)
 	-- босс
 	local bossId = State:GetAttribute("BossId") or 0
 	local bv = bossId ~= 0 and Renderer.EnemyViews[bossId]
-	if bv then
+	if bv and inMatch then
 		refs.Boss.Visible = true
 		refs.BossName.Text = "☠ " .. (State:GetAttribute("BossName") or "BOSS"):upper()
 		refs.BossFill.Size = UDim2.fromScale(math.clamp(bv.HP / bv.MaxHP, 0, 1), 1)
@@ -932,6 +1033,7 @@ function UI.Init(c)
 	buildUnitPanel()
 	buildSummon()
 	buildInventory()
+	buildMode()
 	-- адаптация под маленькие экраны
 	local cam = workspace.CurrentCamera
 	local function fit()

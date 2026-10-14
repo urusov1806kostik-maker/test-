@@ -163,6 +163,18 @@ handlers.SetTarget = function(player, data)
 	return GameService.SetTargetMode(player, data.Uid, data.Mode)
 end
 
+handlers.JoinMatch = function(player, data)
+	return GameService.JoinMatch(player, type(data) == "table" and data.Difficulty or nil)
+end
+
+handlers.LeaveMatch = function(player)
+	return GameService.LeaveMatch(player)
+end
+
+handlers.GetMatchInfo = function()
+	return true, GameService.GetMatchInfo()
+end
+
 handlers.StartWave = function(player)
 	return GameService.RequestStartWave(player)
 end
@@ -928,9 +940,281 @@ local function buildDecor(map, rng)
 end
 
 ------------------------------------------------------------------------
+-- ЛОББИ
+------------------------------------------------------------------------
+local function cylinderY(parent, name, radius, height, center, color, material, props)
+	local p = part(parent, {
+		Name = name,
+		Shape = Enum.PartType.Cylinder,
+		Size = V(height, radius * 2, radius * 2),
+		CFrame = CF(center) * ANG(0, 0, rad(90)),
+		Color = color,
+		Material = material or Enum.Material.Slate,
+		CanCollide = props and props.CanCollide,
+		Transparency = props and props.Transparency,
+	})
+	return p
+end
+
+local function billboard(parent, pos, title, subtitle, color, size)
+	local anchor = part(parent, { Name = "Label", Size = V(1, 1, 1), CFrame = CF(pos), Transparency = 1, CanCollide = false })
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.new(size or 14, 0, (size or 14) * 0.4, 0)
+	gui.LightInfluence = 0
+	gui.MaxDistance = 250
+	gui.Parent = anchor
+	local t = Instance.new("TextLabel")
+	t.BackgroundTransparency = 1
+	t.Size = UDim2.fromScale(1, subtitle and 0.65 or 1)
+	t.Font = Enum.Font.FredokaOne
+	t.TextScaled = true
+	t.Text = title
+	t.TextColor3 = color
+	t.TextStrokeTransparency = 0
+	t.TextStrokeColor3 = Color3.fromRGB(15, 0, 25)
+	t.Parent = gui
+	if subtitle then
+		local st = t:Clone()
+		st.Position = UDim2.fromScale(0, 0.65)
+		st.Size = UDim2.fromScale(1, 0.35)
+		st.Font = Enum.Font.GothamBold
+		st.Text = subtitle
+		st.TextColor3 = Color3.fromRGB(235, 225, 255)
+		st.Parent = gui
+	end
+	return anchor
+end
+
+local function statue(parent, unitId, pos, lookAt, pedestalH)
+	local ok, UnitModels = pcall(require, Shared:WaitForChild("UnitModels"))
+	if not ok then
+		return
+	end
+	pedestalH = pedestalH or 3
+	part(parent, { Name = "Pedestal", Size = V(5, pedestalH, 5), CFrame = CF(pos + V(0, pedestalH / 2, 0)), Color = C.Stone2, Material = Enum.Material.Slate })
+	part(parent, { Name = "PedestalTop", Size = V(5.6, 0.5, 5.6), CFrame = CF(pos + V(0, pedestalH + 0.25, 0)), Color = C.Stone, Material = Enum.Material.Slate })
+	part(parent, { Name = "PedestalRune", Size = V(5.7, 0.25, 5.7), CFrame = CF(pos + V(0, pedestalH - 0.6, 0)), Color = C.Neon, Material = Enum.Material.Neon, CanCollide = false })
+	local rig = UnitModels.Build(unitId, 5)
+	local model = rig.Model
+	model.Name = "Statue_" .. unitId
+	local base = pos + V(0, pedestalH + 0.5 + rig.HipHeight, 0)
+	model:PivotTo(CFrame.lookAt(base, V(lookAt.X, base.Y, lookAt.Z)))
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+		end
+	end
+	model.Parent = parent
+	return model
+end
+
+local function lobbyPortal(parent, center, facing)
+	local R = 9
+	local base = CFrame.lookAt(center, center + facing)
+	local rng = Random.new(7)
+	for i = 0, 15 do
+		local a = i / 16 * math.pi * 2
+		local off = V(math.cos(a) * R, math.sin(a) * R, 0)
+		part(parent, {
+			Name = "PortalStone",
+			Size = V(3.4, 3, 2.6),
+			CFrame = base * CF(off) * ANG(0, 0, a + rad(rng:NextNumber(-3, 3))),
+			Color = (i % 2 == 0) and C.Stone or C.Stone2,
+			Material = Enum.Material.Slate,
+		})
+		if i % 4 == 0 then
+			part(parent, { Name = "Rune", Size = V(0.6, 1.3, 0.3), CFrame = base * CF(off) * ANG(0, 0, a) * CF(0, 0, -1.35), Color = C.Neon, Material = Enum.Material.Neon, CanCollide = false })
+		end
+	end
+	local disc = part(parent, {
+		Name = "PortalDisc",
+		Shape = Enum.PartType.Cylinder,
+		Size = V(0.4, R * 2 - 2.4, R * 2 - 2.4),
+		CFrame = base * ANG(0, rad(90), 0),
+		Color = Color3.fromRGB(120, 40, 210),
+		Material = Enum.Material.Neon,
+		Transparency = 0.2,
+		CanCollide = false,
+	})
+	for i = 0, 2 do
+		local sw = part(parent, { Name = "Swirl", Size = V(0.6, R * 1.6, 0.7), CFrame = base * ANG(0, 0, rad(i * 60)) * CF(0, 0, -0.4), Color = C.NeonSoft, Material = Enum.Material.Neon, Transparency = 0.35, CanCollide = false })
+		sw:SetAttribute("Spin", -1.4 - i * 0.3)
+		sw:SetAttribute("SpinAxis", "Z")
+	end
+	light(disc, C.Neon, 40, 4)
+	emitter(disc, C.Neon, { Rate = 30, Size = 0.7, SpeedMin = 2, SpeedMax = 5 })
+end
+
+function MapBuilder.BuildLobby()
+	local existing = workspace:FindFirstChild("VoidTDLobby")
+	if existing then
+		return existing
+	end
+	local L = Config.Lobby
+	local c = L.Center
+	local R = L.Radius
+	local rng = Random.new(4242)
+	local m = Instance.new("Model")
+	m.Name = "VoidTDLobby"
+
+	-- платформа
+	local top = cylinderY(m, "Floor", R, 4, c - V(0, 2, 0), C.Ground, Enum.Material.Slate)
+	top:SetAttribute("Placeable", false)
+	cylinderY(m, "FloorInlay", 22, 0.2, c + V(0, 0.02, 0), C.Ground2, Enum.Material.Slate, { CanCollide = false })
+	cylinderY(m, "InnerRing", 22.6, 0.12, c + V(0, 0.01, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.3 })
+	cylinderY(m, "OuterRing", R - 4, 0.1, c + V(0, 0.005, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.6 })
+	cylinderY(m, "OuterFloor", R - 4.4, 0.12, c + V(0, 0.01, 0), C.Ground, Enum.Material.Slate, { CanCollide = false })
+	-- низ острова
+	for i, l in ipairs({ { 0.9, 10, -8 }, { 0.68, 14, -19 }, { 0.45, 16, -33 }, { 0.22, 16, -48 } }) do
+		cylinderY(m, "Under" .. i, R * l[1], l[2], c + V(rng:NextNumber(-3, 3), l[3], rng:NextNumber(-3, 3)), (i % 2 == 0) and C.Rock or C.Rock2)
+	end
+	local root = part(m, { Name = "CrystalRoot", Size = V(7, 16, 7), CFrame = CF(c + V(0, -62, 0)) * ANG(rad(6), rad(45), 0), Color = C.Neon, Material = Enum.Material.Neon })
+	light(root, C.Neon, 40, 3)
+	-- край: камни и колонны с неоном
+	for i = 0, 23 do
+		local a = i / 24 * math.pi * 2
+		local p = c + V(math.cos(a) * (R - 1), 0, math.sin(a) * (R - 1))
+		local s = rng:NextNumber(4, 7)
+		part(m, { Name = "EdgeRock", Size = V(s, rng:NextNumber(1, 2.5), s), CFrame = CF(p) * ANG(0, rad(rng:NextNumber(0, 90)), 0), Color = C.Rock2, Material = Enum.Material.Slate })
+		if i % 3 == 0 then
+			local h = rng:NextNumber(6, 10)
+			local pil = c + V(math.cos(a) * (R - 3), 0, math.sin(a) * (R - 3))
+			part(m, { Name = "Pillar", Size = V(2.2, h, 2.2), CFrame = CF(pil + V(0, h / 2, 0)) * ANG(0, a, 0), Color = C.Stone2, Material = Enum.Material.Slate })
+			local gem = part(m, { Name = "PillarGem", Size = V(1, 1.6, 1), CFrame = CF(pil + V(0, h + 1.4, 0)) * ANG(0, rad(45), rad(45)), Color = C.Neon, Material = Enum.Material.Neon, CanCollide = false })
+			gem:SetAttribute("Spin", 1.5)
+			gem:SetAttribute("SpinAxis", "Y")
+			light(gem, C.Neon, 14, 1.2)
+		end
+	end
+
+	-- зоны-круги
+	local zonesFolder = Instance.new("Folder")
+	zonesFolder.Name = "Zones"
+	zonesFolder.Parent = m
+	for key, z in pairs(L.Zones) do
+		local zc = c + z.Offset
+		local zm = Instance.new("Model")
+		zm.Name = key
+		zm.Parent = zonesFolder
+		cylinderY(zm, "PadBase", z.Radius + 1.2, 0.6, zc + V(0, 0.3, 0), C.Stone2)
+		cylinderY(zm, "PadEdge", z.Radius + 0.5, 0.65, zc + V(0, 0.33, 0), z.Color, Enum.Material.Neon)
+		local pad = cylinderY(zm, "Pad", z.Radius, 0.7, zc + V(0, 0.36, 0), Color3.fromRGB(25, 15, 40), Enum.Material.Glass, { Transparency = 0.15 })
+		local beam = cylinderY(zm, "LightBeam", z.Radius * 0.9, 26, zc + V(0, 13, 0), z.Color, Enum.Material.Neon, { CanCollide = false, Transparency = 0.88 })
+		beam.CastShadow = false
+		emitter(pad, z.Color, { Rate = 14, Size = 0.5, SpeedMin = 2, SpeedMax = 4, Spread = 10, Dir = Enum.NormalId.Right, LifeMin = 1.5, LifeMax = 2.5 })
+		light(pad, z.Color, 18, 2)
+		billboard(zm, zc + V(0, 8.5, 0), z.Title, "встань в круг", z.Color, 12)
+		zm:SetAttribute("Zone", key)
+	end
+
+	-- SUMMON: алтарь с парящим кристаллом
+	local sz = c + L.Zones.Summon.Offset + V(-13, 0, 0)
+	part(m, { Name = "Altar", Size = V(7, 2, 7), CFrame = CF(sz + V(0, 1, 0)), Color = C.Stone2, Material = Enum.Material.Slate })
+	part(m, { Name = "Altar2", Size = V(5, 1.5, 5), CFrame = CF(sz + V(0, 2.75, 0)) * ANG(0, rad(45), 0), Color = C.Stone, Material = Enum.Material.Slate })
+	local crystal = part(m, { Name = "SummonCrystal", Size = V(3, 5, 3), CFrame = CF(sz + V(0, 8, 0)) * ANG(0, 0, rad(10)), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
+	crystal:SetAttribute("Spin", 1)
+	crystal:SetAttribute("SpinAxis", "Y")
+	crystal:SetAttribute("BobAmp", 0.8)
+	light(crystal, C.NeonPink, 30, 3)
+	emitter(crystal, C.NeonPink, { Rate = 20, Size = 0.6 })
+	for i = 0, 3 do
+		local a = i / 4 * math.pi * 2 + math.pi / 4
+		local op = sz + V(math.cos(a) * 6, 0, math.sin(a) * 6)
+		part(m, { Name = "Obelisk", Size = V(1.4, 7 + (i % 2) * 2, 1.4), CFrame = CF(op + V(0, 3.5 + (i % 2), 0)), Color = C.Stone2, Material = Enum.Material.Slate })
+		part(m, { Name = "ObeliskRune", Size = V(0.4, 3, 0.2), CFrame = CF(op + V(0, 4, 0)) * CFrame.lookAt(Vector3.zero, sz - op).Rotation * CF(0, 0, -0.75), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
+	end
+
+	-- ЮНИТЫ: статуи Common-героев
+	local uz = c + L.Zones.Units.Offset
+	statue(m, "VoidSoldier", uz + V(12, 0, -7), uz, 2.5)
+	statue(m, "ShadowArcher", uz + V(14, 0, 1), uz, 2.5)
+	statue(m, "LostMage", uz + V(12, 0, 9), uz, 2.5)
+
+	-- ИГРАТЬ: портал в бой и мифические стражи
+	local pz = c + L.Zones.Play.Offset
+	lobbyPortal(m, pz + V(0, 10.5, -11), V(0, 0, 1))
+	part(m, { Name = "PortalBase", Size = V(24, 1, 8), CFrame = CF(pz + V(0, 0.5, -11)), Color = C.Stone2, Material = Enum.Material.Slate })
+	statue(m, "VoidEmperor", pz + V(-17, 0, -6), c, 4)
+	statue(m, "AbyssOverlord", pz + V(17, 0, -6), c, 4)
+	statue(m, "FallenAngel", c + V(-20, 0, 26), c, 3)
+	statue(m, "EclipseGuardian", c + V(20, 0, 26), c, 3)
+
+	-- вывеска
+	local sign = part(m, { Name = "Sign", Size = V(30, 8, 1), CFrame = CF(pz + V(0, 27, -12)) * ANG(0, math.pi, 0), Color = C.Black, Material = Enum.Material.Slate })
+	part(m, { Name = "SignFrame", Size = V(31, 9, 0.6), CFrame = CF(pz + V(0, 27, -12.4)), Color = C.Neon, Material = Enum.Material.Neon, CanCollide = false })
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Front
+	sg.LightInfluence = 0
+	sg.PixelsPerStud = 30
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.Parent = sign
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Size = UDim2.fromScale(1, 0.7)
+	title.Font = Enum.Font.FredokaOne
+	title.TextScaled = true
+	title.Text = "VOID TD"
+	title.TextColor3 = Color3.fromRGB(200, 120, 255)
+	title.TextStrokeTransparency = 0
+	title.Parent = sg
+	local sub = title:Clone()
+	sub.Position = UDim2.fromScale(0, 0.68)
+	sub.Size = UDim2.fromScale(1, 0.28)
+	sub.Font = Enum.Font.GothamBold
+	sub.Text = "THE FORGOTTEN REALM"
+	sub.TextColor3 = Color3.fromRGB(235, 225, 255)
+	sub.Parent = sg
+
+	-- декор
+	local taken = {}
+	for key, z in pairs(L.Zones) do
+		taken[#taken + 1] = c + z.Offset
+	end
+	for i = 1, 10 do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local d = rng:NextNumber(38, R - 7)
+		local p = c + V(math.cos(a) * d, 0, math.sin(a) * d)
+		local free = true
+		for _, t in ipairs(taken) do
+			if (V(p.X, 0, p.Z) - V(t.X, 0, t.Z)).Magnitude < 16 then
+				free = false
+			end
+		end
+		if free and (p - L.Spawn).Magnitude > 12 then
+			taken[#taken + 1] = p
+			if i % 2 == 0 then
+				darkTree(m, rng, p)
+			else
+				crystalCluster(m, rng, p, rng:NextNumber(0.9, 1.4))
+			end
+		end
+	end
+
+	-- точка появления
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "LobbySpawn"
+	spawn.Anchored = true
+	spawn.Size = V(10, 1, 10)
+	spawn.CFrame = CF(L.Spawn + V(0, 0.5, 0))
+	spawn.Color = Color3.fromRGB(70, 40, 110)
+	spawn.Material = Enum.Material.Slate
+	spawn.Neutral = true
+	spawn.Duration = 0
+	spawn.TopSurface = Enum.SurfaceType.Smooth
+	spawn.Parent = m
+	cylinderY(m, "SpawnGlow", 4.6, 0.08, L.Spawn + V(0, 1.03, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.5 })
+
+	m.WorldPivot = CF(c)
+	m.Parent = workspace
+	return m
+end
+
+------------------------------------------------------------------------
 function MapBuilder.Build()
 	local existing = workspace:FindFirstChild("VoidTDMap")
 	if existing then
+		MapBuilder.BuildLobby()
 		setupLighting()
 		return existing
 	end
@@ -944,29 +1228,13 @@ function MapBuilder.Build()
 	buildCore(map, rng)
 	buildDecor(map, rng)
 
-	local spawn = Instance.new("SpawnLocation")
-	spawn.Name = "VoidSpawn"
-	spawn.Anchored = true
-	spawn.Size = V(8, 1, 8)
-	spawn.CFrame = CF(10, GY + 0.5, 10)
-	spawn.Color = Color3.fromRGB(70, 40, 110)
-	spawn.Material = Enum.Material.Slate
-	spawn.Neutral = true
-	spawn.Duration = 0
-	spawn.TopSurface = Enum.SurfaceType.Smooth
-	spawn.Parent = map
-	local decal = Instance.new("Part")
-	decal.Name = "SpawnGlow"
-	decal.Anchored = true
-	decal.CanCollide = false
-	decal.Size = V(7, 0.05, 7)
-	decal.CFrame = CF(10, GY + 1.03, 10)
-	decal.Color = C.Neon
-	decal.Material = Enum.Material.Neon
-	decal.Transparency = 0.6
-	decal.Parent = map
+	-- площадка, куда телепортирует из лобби (не SpawnLocation: появляются все в лобби)
+	local bs = Config.BattleSpawn
+	part(map, { Name = "BattlePad", Size = V(8, 1, 8), CFrame = CF(bs.X, GY + 0.5, bs.Z), Color = Color3.fromRGB(70, 40, 110), Material = Enum.Material.Slate })
+	part(map, { Name = "BattlePadGlow", Size = V(7, 0.05, 7), CFrame = CF(bs.X, GY + 1.03, bs.Z), Color = C.Neon, Material = Enum.Material.Neon, Transparency = 0.6, CanCollide = false })
 
 	map.Parent = workspace
+	MapBuilder.BuildLobby()
 	setupLighting()
 	return map
 end
@@ -1269,7 +1537,10 @@ local damageBuffer = {}
 local removedBuffer = {}
 local pendingSpawns = {}
 
-local phase = "Lobby"
+-- Фазы: Idle (никто не играет) -> Prep (расстановка до 1-й волны) -> Wave <-> Intermission -> Victory/Defeat
+local phase = "Idle"
+local difficultyKey = "Medium"
+local D = Config.Difficulties.Medium
 local wave = 0
 local coreHP = S.CoreMaxHP
 local matchId = 0
@@ -1311,10 +1582,52 @@ local function setMoney(player, amount)
 	end
 end
 
-local function addMoneyAll(amount)
+local function inMatch(player)
+	return player:GetAttribute("InMatch") == true
+end
+
+local function matchPlayers()
+	local list = {}
 	for _, pl in ipairs(Players:GetPlayers()) do
+		if inMatch(pl) then
+			list[#list + 1] = pl
+		end
+	end
+	return list
+end
+
+local function addMoneyAll(amount)
+	for _, pl in ipairs(matchPlayers()) do
 		setMoney(pl, getMoney(pl) + amount)
 	end
+end
+
+local function addGemsAll(amount)
+	amount = math.floor(amount * D.Gems + 0.5)
+	for _, pl in ipairs(matchPlayers()) do
+		DataService.AddGems(pl, amount)
+	end
+	return amount
+end
+
+------------------------------------------------------------------------
+-- ТЕЛЕПОРТ ЛОББИ <-> КАРТА
+------------------------------------------------------------------------
+local function teleport(player, pos)
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if root then
+		local jitter = Vector3.new(rng:NextNumber(-3, 3), 3.5, rng:NextNumber(-3, 3))
+		char:PivotTo(CFrame.new(pos + jitter))
+	end
+end
+
+local function toBattle(player)
+	teleport(player, Config.BattleSpawn)
+end
+
+local function toLobby(player)
+	teleport(player, Config.Lobby.Spawn)
 end
 
 ------------------------------------------------------------------------
@@ -1347,14 +1660,14 @@ local function spawnEnemy(typeId, startDist, lateral)
 		return
 	end
 	nextEnemyId = nextEnemyId + 1
-	local hp = math.floor(def.Health * Config.WaveHPMult(math.max(wave, 1)))
+	local hp = math.floor(def.Health * Config.WaveHPMult(math.max(wave, 1)) * D.HP)
 	local e = {
 		Id = nextEnemyId,
 		Type = typeId,
 		Def = def,
 		MaxHealth = hp,
 		Health = hp,
-		Speed = def.Speed,
+		Speed = def.Speed * D.Speed,
 		Dist = startDist or 0,
 		Lateral = lateral or (def.IsBoss and 0 or rng:NextNumber(-2.2, 2.2)),
 		Armor = def.Armor or 0,
@@ -1390,13 +1703,12 @@ local function removeEnemy(e, reason)
 end
 
 local function killEnemy(e)
-	local reward = math.floor(e.Def.Reward * (1 + S.KillRewardScalePerWave * (math.max(e.Wave, 1) - 1)) + 0.5)
+	local reward = math.floor(e.Def.Reward * (1 + S.KillRewardScalePerWave * (math.max(e.Wave, 1) - 1)) * D.Money + 0.5)
 	addMoneyAll(reward)
 	if e.Def.BossGems then
-		for _, pl in ipairs(Players:GetPlayers()) do
-			DataService.AddGems(pl, e.Def.BossGems)
-		end
-		notifyAll({ Type = "Toast", Text = e.Def.Name .. " повержен! +" .. e.Def.BossGems .. " гемов", Kind = "boss" })
+		local g = addGemsAll(e.Def.BossGems)
+		notifyAll({ Type = "Toast", Text = e.Def.Name .. " повержен! +" .. g .. " гемов", Kind = "boss" })
+		notifyAll({ Type = "BossDown" })
 	end
 	removeEnemy(e, "kill")
 end
@@ -1447,8 +1759,8 @@ local function endMatch(victory)
 	waveSpawning = false
 	local myMatch = matchId
 	if victory then
-		for _, pl in ipairs(Players:GetPlayers()) do
-			DataService.AddGems(pl, S.VictoryGems)
+		local g = addGemsAll(S.VictoryGems)
+		for _, pl in ipairs(matchPlayers()) do
 			local prof = DataService.Get(pl)
 			if prof then
 				prof.Stats.Wins = (prof.Stats.Wins or 0) + 1
@@ -1456,16 +1768,16 @@ local function endMatch(victory)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Victory", Wave = wave, Gems = S.VictoryGems, Reset = S.ResetDelay })
+		notifyAll({ Type = "Victory", Wave = wave, Gems = g, Reset = S.ResetDelay, Difficulty = difficultyKey })
 	else
-		for _, pl in ipairs(Players:GetPlayers()) do
+		for _, pl in ipairs(matchPlayers()) do
 			local prof = DataService.Get(pl)
 			if prof then
 				prof.Stats.BestWave = math.max(prof.Stats.BestWave or 0, wave - 1)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay })
+		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay, Difficulty = difficultyKey })
 		clearEnemies()
 	end
 	task.delay(S.ResetDelay, function()
@@ -1488,25 +1800,22 @@ local function damageCore(amount)
 end
 
 local function waveCleared()
-	local reward = S.WaveRewardBase + S.WaveRewardPerWave * wave
-	local gems = S.WaveGemsBase + S.WaveGemsPerWave * wave
+	local reward = math.floor((S.WaveRewardBase + S.WaveRewardPerWave * wave) * D.Money + 0.5)
 	addMoneyAll(reward)
-	for _, pl in ipairs(Players:GetPlayers()) do
-		DataService.AddGems(pl, gems)
-	end
+	local gems = addGemsAll(S.WaveGemsBase + S.WaveGemsPerWave * wave)
 	if wave >= S.MaxWave then
 		endMatch(true)
 		return
 	end
 	phase = "Intermission"
-	nextWaveAt = now() + S.Intermission
+	nextWaveAt = now() + (D.Intermission or S.Intermission)
 	setState("Phase", phase)
 	setState("NextWaveAt", nextWaveAt)
 	notifyAll({ Type = "WaveClear", Wave = wave, Reward = reward, Gems = gems })
 end
 
 local function startWave()
-	if phase ~= "Lobby" and phase ~= "Intermission" then
+	if phase ~= "Prep" and phase ~= "Intermission" then
 		return false
 	end
 	wave = wave + 1
@@ -1548,7 +1857,10 @@ local function startWave()
 end
 
 function GameService.RequestStartWave(player)
-	if phase == "Lobby" or phase == "Intermission" then
+	if not inMatch(player) then
+		return false, "Сначала зайди в матч через портал ИГРАТЬ"
+	end
+	if phase == "Prep" or phase == "Intermission" then
 		startWave()
 		return true
 	end
@@ -1583,8 +1895,11 @@ local raycastParams = RaycastParams.new()
 raycastParams.FilterType = Enum.RaycastFilterType.Include
 
 function GameService.PlaceUnit(player, unitId, pos, rotation)
-	if phase == "Victory" or phase == "Defeat" then
-		return false, "Матч завершён"
+	if phase == "Victory" or phase == "Defeat" or phase == "Idle" then
+		return false, "Матч не идёт"
+	end
+	if not inMatch(player) then
+		return false, "Ты не в матче"
 	end
 	local def = Config.Units[unitId]
 	if not def or typeof(pos) ~= "Vector3" then
@@ -1985,7 +2300,7 @@ end
 
 local function step(dt)
 	local t = now()
-	if phase == "Wave" or phase == "Intermission" or phase == "Lobby" then
+	if phase == "Wave" or phase == "Intermission" or phase == "Prep" then
 		updateEnemies(t, dt)
 		updateZones(t)
 		updateUnits(t)
@@ -2007,7 +2322,7 @@ local function step(dt)
 	end
 end
 
-resetMatch = function()
+local function clearMatch()
 	matchId = matchId + 1
 	clearEnemies()
 	for _, u in pairs(units) do
@@ -2015,19 +2330,82 @@ resetMatch = function()
 	end
 	units = {}
 	wave = 0
-	coreHP = S.CoreMaxHP
-	phase = "Lobby"
 	waveSpawning = false
 	nextWaveAt = 0
-	setState("Phase", phase)
 	setState("Wave", 0)
-	setState("CoreHP", coreHP)
 	setState("NextWaveAt", 0)
 	setState("MatchId", matchId)
+end
+
+-- Матч закончен (или все ушли): все возвращаются в лобби
+resetMatch = function()
+	clearMatch()
+	phase = "Idle"
+	setState("Phase", phase)
+	setState("Difficulty", "")
 	for _, pl in ipairs(Players:GetPlayers()) do
-		setMoney(pl, S.StartMoney)
+		if inMatch(pl) then
+			pl:SetAttribute("InMatch", false)
+			setMoney(pl, 0)
+			toLobby(pl)
+		end
 	end
 	notifyAll({ Type = "Reset" })
+end
+
+local function startNewMatch(diffKey)
+	clearMatch()
+	difficultyKey = diffKey
+	D = Config.Difficulties[diffKey]
+	coreHP = D.CoreHP
+	phase = "Prep"
+	setState("Difficulty", diffKey)
+	setState("CoreMaxHP", coreHP)
+	setState("CoreHP", coreHP)
+	setState("Phase", phase)
+end
+
+function GameService.JoinMatch(player, diffKey)
+	if inMatch(player) then
+		return false, "Ты уже в матче"
+	end
+	if phase == "Victory" or phase == "Defeat" then
+		return false, "Матч завершается, подожди пару секунд"
+	end
+	if phase == "Idle" then
+		if not Config.Difficulties[diffKey] then
+			return false, "Выбери сложность"
+		end
+		startNewMatch(diffKey)
+	end
+	player:SetAttribute("InMatch", true)
+	-- поздно зашедшим даём компенсацию за пропущенные волны
+	setMoney(player, (S.StartMoney + math.max(0, wave - 1) * 150) * D.Money)
+	toBattle(player)
+	notifyAll({ Type = "Toast", Text = player.DisplayName .. " вступил в бой (" .. D.Name .. ")", Kind = "good" })
+	return true, difficultyKey
+end
+
+function GameService.LeaveMatch(player)
+	if not inMatch(player) then
+		return false, "Ты не в матче"
+	end
+	for _, u in pairs(units) do
+		if u.Owner == player then
+			removeUnit(u)
+		end
+	end
+	player:SetAttribute("InMatch", false)
+	setMoney(player, 0)
+	toLobby(player)
+	if #matchPlayers() == 0 and phase ~= "Idle" then
+		resetMatch()
+	end
+	return true
+end
+
+function GameService.GetMatchInfo()
+	return { Phase = phase, Difficulty = difficultyKey, Wave = wave, Players = #matchPlayers() }
 end
 
 ------------------------------------------------------------------------
@@ -2040,8 +2418,18 @@ function GameService.PlayerAdded(player)
 	money.Name = "Money"
 	money.Parent = ls
 	ls.Parent = player
-	-- поздно зашедшим даём компенсацию за пропущенные волны
-	setMoney(player, S.StartMoney + math.max(0, wave - 1) * 150)
+	player:SetAttribute("InMatch", false)
+	setMoney(player, 0)
+	-- после смерти игрок в матче возвращается на карту, остальные — в лобби
+	player.CharacterAdded:Connect(function(char)
+		char:WaitForChild("HumanoidRootPart", 5)
+		task.wait(0.2)
+		if inMatch(player) then
+			toBattle(player)
+		else
+			toLobby(player)
+		end
+	end)
 end
 
 function GameService.PlayerRemoving(player)
@@ -2050,6 +2438,12 @@ function GameService.PlayerRemoving(player)
 			removeUnit(u)
 		end
 	end
+	player:SetAttribute("InMatch", false)
+	task.defer(function()
+		if #matchPlayers() == 0 and phase ~= "Idle" then
+			resetMatch()
+		end
+	end)
 end
 
 function GameService.GetEnemySnapshot()
@@ -2064,6 +2458,7 @@ function GameService.Init(remotes, state, unitsFolder, map)
 	Remotes, State, UnitsFolder, Map = remotes, state, unitsFolder, map
 	setState("MaxWave", S.MaxWave)
 	setState("CoreMaxHP", S.CoreMaxHP)
+	setState("CoreHP", S.CoreMaxHP)
 	setState("BossId", 0)
 	setState("BossName", "")
 	resetMatch()
@@ -2076,8 +2471,10 @@ return GameService
 for _, f in ipairs(FILES) do
 	install(f[1], f[2], f[3], f[4])
 end
-local oldMap = workspace:FindFirstChild("VoidTDMap")
-if oldMap then oldMap:Destroy() end
+for _, n in ipairs({ "VoidTDMap", "VoidTDLobby" }) do
+	local oldMap = workspace:FindFirstChild(n)
+	if oldMap then oldMap:Destroy() end
+end
 local ok, err = pcall(function() require(SSS.VoidTDServer.MapBuilder).Build() end)
 if not ok then warn("[VOID TD] Карта построится при запуске: " .. tostring(err)) end
 print("[VOID TD] Часть 2/3 установлена" .. (1 == 2 and ". Готово! Сохрани место и нажми Play." or ". Вставь следующую часть."))

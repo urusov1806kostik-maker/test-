@@ -54,26 +54,63 @@ local function findButton(prefix)
 	end
 end
 
--- экипировка через инвентарь
-local ui = player.PlayerGui.VoidTD_UI
-findButton("☰").Activated:Fire()
-tick(0.2)
+-- персонаж в лобби
+local char = env.Instance.new("Model")
+char.Name = "Character"
+local hrp = env.Instance.new("Part")
+hrp.Name = "HumanoidRootPart"
+hrp.Parent = char
+char.PrimaryPart = hrp
+char.Parent = M.workspace
+player.Character = char
+local L = Config.Lobby
+local function standIn(zone)
+	local c = zone and (L.Center + L.Zones[zone].Offset) or L.Spawn
+	char:PivotTo(env.CFrame.new(c + M.Vector3.new(0, 3, 0)))
+	tick(0.2)
+end
+local function visible(name)
+	for _, d in ipairs(player.PlayerGui:GetDescendants()) do
+		if d.ClassName == "Frame" then
+			for _, c in ipairs(d:GetChildren()) do
+				if c.ClassName == "TextLabel" and c.Text == name then return d.Visible end
+			end
+		end
+	end
+end
+assert(M.workspace:FindFirstChild("VoidTDLobby"), "no lobby")
+standIn(nil)
+assert(not visible("☰ ЮНИТЫ"), "inventory must be closed at spawn")
+standIn("Units")
+assert(visible("☰ ЮНИТЫ"), "inventory must open in Units circle")
 for i, id in ipairs({ "EclipseGuardian", "FallenAngel", "VoidEmperor", "AbyssOverlord", "CorruptedSamurai", "AbyssReaper" }) do
 	local r = { rawget(RS.VoidTD.Remotes.Request, "_props").OnServerInvoke(player, "Equip", { Unit = id, Slot = i }) }
 	assert(r[1], tostring(r[2]))
 end
 RS.VoidTD.Remotes.Profile.OnClientEvent:Fire(DS.Snapshot(player))
 tick(0.2)
-print("hotbar refreshed")
+standIn(nil)
+assert(not visible("☰ ЮНИТЫ"), "inventory must close when leaving circle")
+print("units circle ok")
 
--- summon x10 через кнопку
-findButton("✦").Activated:Fire()
+-- summon в круге
+standIn("Summon")
+assert(visible("✦ VOID SUMMON"), "summon must open in circle")
 findButton("x10").Activated:Fire()
 tick(3)
 local okBtn = findButton("OK")
 assert(okBtn, "no OK button after summon")
 okBtn.Activated:Fire()
-print("summon UI ok")
+standIn(nil)
+print("summon circle ok")
+
+-- портал ИГРАТЬ -> выбор сложности
+standIn("Play")
+assert(visible("▶ ВЫБОР СЛОЖНОСТИ"), "mode menu must open")
+findButton("ИГРАТЬ").Activated:Fire()
+tick(0.5)
+assert(player:GetAttribute("InMatch"), "join via menu failed")
+print("joined:", RS.VoidTD.State:GetAttribute("Difficulty"), "char at", char:GetPivot().Position)
 
 do
 	local UIm = env.require(clientScript.UI)
@@ -133,12 +170,30 @@ for _ = 1, 60 * 30 do
 	end
 	if w >= 12 or ph == "Defeat" or ph == "Victory" then break end
 end
+findButton("⟵").Activated:Fire()
+tick(0.5)
+print("left match:", not player:GetAttribute("InMatch"), "phase", RS.VoidTD.State:GetAttribute("Phase"))
+assert(RS.VoidTD.State:GetAttribute("Phase") == "Idle")
+-- снова в бой для проверки продажи
+standIn(nil); standIn("Play"); findButton("ИГРАТЬ").Activated:Fire(); tick(0.3)
+player:SetAttribute("Money", 50000)
+M.raycast = function(origin, dir, params)
+	local filt = params and params.FilterDescendantsInstances
+	if filt and filt[1] and filt[1].Name == "VoidTD_Units" then return nil end
+	return { Instance = M.workspace.VoidTDMap.Ground.IslandTop, Position = M.Vector3.new(-40, 60, -30) }
+end
+key("One"); tick(0.1)
+UIS.InputBegan:Fire({ UserInputType = env.Enum.UserInputType.MouseButton1 }, false)
+tick(0.3)
+assert(#RS.VoidTD.Units:GetChildren() == 1, "re-place failed")
 -- продажа
 UI.OpenUnit(tonumber(RS.VoidTD.Units:GetChildren()[1].Name))
 key("X")
 tick(1)
 print("after sell units:", #RS.VoidTD.Units:GetChildren())
+assert(#RS.VoidTD.Units:GetChildren() == 0, "sell failed")
 local N = RS.VoidTD.Remotes.Notify
+N.OnClientEvent:Fire({ Type = "BossDown" })
 N.OnClientEvent:Fire({ Type = "CoreHit", Amount = 5 })
 N.OnClientEvent:Fire({ Type = "Victory", Wave = 30, Gems = 1000, Reset = 3 })
 tick(4)

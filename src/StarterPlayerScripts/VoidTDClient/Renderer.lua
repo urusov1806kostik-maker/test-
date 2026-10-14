@@ -631,6 +631,7 @@ function Renderer.OnAttack(p)
 				return
 			end
 			local from = muzzlePos(view)
+			FX.Sound("Lunge", def.Projectile == "Bolt" and 0.12 or 0.25, def.Projectile == "Bolt" and 1.8 or 1.3, from)
 			FX.Projectile(def.Projectile, from, function()
 				return Renderer.EnemyCenter(firstId)
 			end, p.TR or 0.2, function(pos)
@@ -647,6 +648,7 @@ function Renderer.OnAttack(p)
 		at(h, function()
 			local target = Renderer.EnemyCenter(firstId) or tpos
 			if target and view.Rig.Model.Parent then
+				FX.Sound("Lunge", 0.5, 0.7, target)
 				FX.Beam(muzzlePos(view), target, (lv >= 5) and 2.6 or (1.2 + lv * 0.2), (lv >= 5) and FX.Colors.Soft or FX.Colors.Neon, 0.45, lv >= 5)
 			end
 		end)
@@ -661,6 +663,7 @@ function Renderer.OnAttack(p)
 			local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
 			local big = view.UnitId == "AbyssOverlord"
 			FX.Arc(cf, reach, rad(15), rad(150), big and FX.Colors.Neon or FX.Colors.Soft, big and 1 or (0.4 + lv * 0.05), 0.3)
+			FX.Sound("Slash", 0.35, big and 0.7 or 1.1, target)
 			FX.Burst(target, FX.Colors.Neon, big and 12 or 5, big and 0.6 or 0.3, big and 10 or 5)
 			if big then
 				FX.Ring(V(target.X, view.Pos.Y + 0.2, target.Z), 4, FX.Colors.Neon, 0.35, 0.3)
@@ -700,6 +703,7 @@ function Renderer.OnAttack(p)
 					local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z)) * ANG(0, 0, rad(i % 2 == 0 and 50 or -50))
 					local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
 					FX.Arc(cf, reach, rad(10), rad(140), lv >= 5 and FX.Colors.Pink or FX.Colors.Neon, 0.35 + lv * 0.05, 0.25)
+					FX.Sound("Slash", 0.35, 1.25, target)
 					if lv >= 3 then
 						FX.SlashMark(target, rad(i % 2 == 0 and 40 or -40), 5 + lv * 0.5, 0.35, FX.Colors.Neon, 0.3)
 					end

@@ -191,6 +191,9 @@ end)
 ------------------------------------------------------------------------
 local spinners = {}
 local function collectSpinners(map)
+	if not map then
+		return
+	end
 	for _, d in ipairs(map:GetDescendants()) do
 		if (d:IsA("BasePart") or d:IsA("Model")) and (d:GetAttribute("Spin") or d:GetAttribute("BobAmp")) then
 			local base = d:IsA("Model") and d:GetPivot() or d.CFrame
@@ -208,10 +211,10 @@ local function collectSpinners(map)
 end
 task.spawn(function()
 	local map = workspace:WaitForChild("VoidTDMap", 30)
-	if map then
-		task.wait(1)
-		collectSpinners(map)
-	end
+	local lobby = workspace:WaitForChild("VoidTDLobby", 30)
+	task.wait(1)
+	collectSpinners(map)
+	collectSpinners(lobby)
 end)
 
 local function updateSpinners(t)
@@ -236,6 +239,43 @@ local function updateSpinners(t)
 end
 
 ------------------------------------------------------------------------
+-- КРУГИ В ЛОББИ: встал в круг — открылось меню, вышел — закрылось
+------------------------------------------------------------------------
+local ZONE_MODAL = { Summon = "Summon", Units = "Inventory", Play = "Mode" }
+local zoneState = {}
+
+local function updateZones()
+	if player:GetAttribute("InMatch") then
+		if next(zoneState) then
+			for key in pairs(zoneState) do
+				UI.Show(ZONE_MODAL[key], false)
+			end
+			zoneState = {}
+		end
+		return
+	end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+	local L = ctx.Config.Lobby
+	local pos = root.Position
+	for key, z in pairs(L.Zones) do
+		local c = L.Center + z.Offset
+		local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
+		local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
+		if inside ~= (zoneState[key] == true) then
+			zoneState[key] = inside or nil
+			UI.Show(ZONE_MODAL[key], inside)
+			if inside then
+				FX.Sound("Ping", 0.3, 1.1)
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------
 -- ГЛАВНЫЙ ЦИКЛ
 ------------------------------------------------------------------------
 local hoverTimer = 0
@@ -244,6 +284,7 @@ RunService.RenderStepped:Connect(function(dt)
 	Renderer.Update(dt)
 	UI.Update(dt)
 	updateSpinners(t)
+	updateZones()
 	hoverTimer = hoverTimer + dt
 	if hoverTimer > 0.05 then
 		hoverTimer = 0
@@ -261,4 +302,4 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
-UI.Toast("Добро пожаловать в VOID TD! Выбери юнита внизу (1-6)", "good")
+UI.Toast("Добро пожаловать в VOID TD! Встань в круг ИГРАТЬ, чтобы начать бой", "good")

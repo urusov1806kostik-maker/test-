@@ -1,5 +1,7 @@
 --!nocheck
-local PRESET = ... or "strong"
+local PRESET, DIFF = ...
+PRESET = PRESET or "strong"
+DIFF = DIFF or "Medium"
 local M = require("./mock")
 local E = require("./env")
 local env = E.make()
@@ -156,6 +158,11 @@ local function spend()
 	end
 end
 
+assert(State:GetAttribute("Phase") == "Idle", "server must start Idle")
+assert(not req("Place", { Unit = "VoidSoldier", Position = M.Vector3.new(0, 60, 0), Rotation = 0 }), "placing outside match must fail")
+assert(req("JoinMatch", { Difficulty = DIFF }))
+assert(player:GetAttribute("InMatch") and State:GetAttribute("Phase") == "Prep", "join failed")
+print("difficulty", State:GetAttribute("Difficulty"), "core", State:GetAttribute("CoreHP"), "money", money())
 spend()
 assert(req("StartWave"))
 local RunService = M.services.RunService
@@ -204,5 +211,11 @@ end
 local f = units:GetChildren()[1]
 if f then print("sell:", req("Sell", { Uid = tonumber(f.Name) })) end
 for i = 1, 20 * 20 do M.now = M.now + dt; M.runDue(); RunService.Heartbeat:Fire(dt) end
-print("after reset phase:", State:GetAttribute("Phase"), "units:", #units:GetChildren(), "money:", money())
+print("after reset phase:", State:GetAttribute("Phase"), "units:", #units:GetChildren(), "money:", money(), "inMatch:", player:GetAttribute("InMatch"))
+assert(State:GetAttribute("Phase") == "Idle" and not player:GetAttribute("InMatch"), "must return to lobby")
+-- повторный вход + выход
+assert(req("JoinMatch", { Difficulty = "Hardcore" }))
+assert(State:GetAttribute("CoreHP") == 50)
+assert(req("LeaveMatch"))
+assert(State:GetAttribute("Phase") == "Idle", "leave of last player must reset")
 for k, v in pairs(counts) do print("remote", k, v) end

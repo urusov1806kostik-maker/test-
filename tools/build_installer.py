@@ -44,7 +44,7 @@ local SPS = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts"
 local SERVICES = { ReplicatedStorage = RS, ServerScriptService = SSS, StarterPlayerScripts = SPS }
 
 -- удалить предыдущую установку
-for _, pair in ipairs({ { RS, "VoidTD" }, { SSS, "VoidTDServer" }, { SPS, "VoidTDClient" }, { workspace, "VoidTDMap" } }) do
+for _, pair in ipairs({ { RS, "VoidTD" }, { SSS, "VoidTDServer" }, { SPS, "VoidTDClient" }, { workspace, "VoidTDMap" }, { workspace, "VoidTDLobby" } }) do
 	local obj = pair[1]:FindFirstChild(pair[2])
 	if obj then obj:Destroy() end
 end
@@ -159,8 +159,10 @@ def main():
         foot = "\nfor _, f in ipairs(FILES) do\n\tinstall(f[1], f[2], f[3], f[4])\nend\n"
         if i == 1:
             foot += (
-                "local oldMap = workspace:FindFirstChild(\"VoidTDMap\")\n"
-                "if oldMap then oldMap:Destroy() end\n"
+                "for _, n in ipairs({ \"VoidTDMap\", \"VoidTDLobby\" }) do\n"
+                "\tlocal oldMap = workspace:FindFirstChild(n)\n"
+                "\tif oldMap then oldMap:Destroy() end\n"
+                "end\n"
                 "local ok, err = pcall(function() require(SSS.VoidTDServer.MapBuilder).Build() end)\n"
                 "if not ok then warn(\"[VOID TD] Карта построится при запуске: \" .. tostring(err)) end\n"
             )

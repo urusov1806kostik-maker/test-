@@ -234,6 +234,9 @@ end)
 ------------------------------------------------------------------------
 local spinners = {}
 local function collectSpinners(map)
+	if not map then
+		return
+	end
 	for _, d in ipairs(map:GetDescendants()) do
 		if (d:IsA("BasePart") or d:IsA("Model")) and (d:GetAttribute("Spin") or d:GetAttribute("BobAmp")) then
 			local base = d:IsA("Model") and d:GetPivot() or d.CFrame
@@ -251,10 +254,10 @@ local function collectSpinners(map)
 end
 task.spawn(function()
 	local map = workspace:WaitForChild("VoidTDMap", 30)
-	if map then
-		task.wait(1)
-		collectSpinners(map)
-	end
+	local lobby = workspace:WaitForChild("VoidTDLobby", 30)
+	task.wait(1)
+	collectSpinners(map)
+	collectSpinners(lobby)
 end)
 
 local function updateSpinners(t)
@@ -279,6 +282,43 @@ local function updateSpinners(t)
 end
 
 ------------------------------------------------------------------------
+-- КРУГИ В ЛОББИ: встал в круг — открылось меню, вышел — закрылось
+------------------------------------------------------------------------
+local ZONE_MODAL = { Summon = "Summon", Units = "Inventory", Play = "Mode" }
+local zoneState = {}
+
+local function updateZones()
+	if player:GetAttribute("InMatch") then
+		if next(zoneState) then
+			for key in pairs(zoneState) do
+				UI.Show(ZONE_MODAL[key], false)
+			end
+			zoneState = {}
+		end
+		return
+	end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+	local L = ctx.Config.Lobby
+	local pos = root.Position
+	for key, z in pairs(L.Zones) do
+		local c = L.Center + z.Offset
+		local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
+		local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
+		if inside ~= (zoneState[key] == true) then
+			zoneState[key] = inside or nil
+			UI.Show(ZONE_MODAL[key], inside)
+			if inside then
+				FX.Sound("Ping", 0.3, 1.1)
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------
 -- ГЛАВНЫЙ ЦИКЛ
 ------------------------------------------------------------------------
 local hoverTimer = 0
@@ -287,6 +327,7 @@ RunService.RenderStepped:Connect(function(dt)
 	Renderer.Update(dt)
 	UI.Update(dt)
 	updateSpinners(t)
+	updateZones()
 	hoverTimer = hoverTimer + dt
 	if hoverTimer > 0.05 then
 		hoverTimer = 0
@@ -304,7 +345,7 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
-UI.Toast("Добро пожаловать в VOID TD! Выбери юнита внизу (1-6)", "good")
+UI.Toast("Добро пожаловать в VOID TD! Встань в круг ИГРАТЬ, чтобы начать бой", "good")
 ]======] }
 FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "FX" }, "ModuleScript", [======[
 --!nocheck
@@ -331,10 +372,74 @@ local folder
 local rng = Random.new()
 local numberCount = 0
 
+------------------------------------------------------------------------
+-- ЗВУКИ (встроенные звуки клиента Roblox, без загрузки ассетов)
+------------------------------------------------------------------------
+local SoundService = game:GetService("SoundService")
+local SOUNDS = {
+	Slash = "rbxasset://sounds/swordslash.wav",
+	Lunge = "rbxasset://sounds/swordlunge.wav",
+	Place = "rbxasset://sounds/unsheath.wav",
+	Ping = "rbxasset://sounds/electronicpingshort.wav",
+}
+local lastSound = {}
+
+function FX.Sound(name, volume, pitch, pos)
+	local id = SOUNDS[name]
+	if not id then
+		return
+	end
+	local t = os.clock()
+	if lastSound[name] and t - lastSound[name] < 0.07 then
+		return
+	end
+	-- приглушаем далёкие звуки
+	if pos then
+		local cam = workspace.CurrentCamera
+		local d = cam and (cam.CFrame.Position - pos).Magnitude or 0
+		if d > 120 then
+			return
+		end
+		volume = (volume or 0.4) * math.clamp(1 - d / 120, 0.15, 1)
+	end
+	lastSound[name] = t
+	local s = Instance.new("Sound")
+	s.SoundId = id
+	s.Volume = volume or 0.4
+	s.PlaybackSpeed = pitch or 1
+	s.Parent = SoundService
+	s:Play()
+	task.delay(3, function()
+		s:Destroy()
+	end)
+end
+
+------------------------------------------------------------------------
+-- ТРЯСКА КАМЕРЫ
+------------------------------------------------------------------------
+local shakeUntil, shakeDur, shakeMag = 0, 1, 0
+
+function FX.Shake(magnitude, duration)
+	local t = os.clock()
+	if t + duration > shakeUntil or magnitude > shakeMag then
+		shakeUntil = t + duration
+		shakeDur = duration
+		shakeMag = magnitude
+	end
+end
+
 function FX.Init()
 	folder = workspace:FindFirstChild("VoidTD_FX") or Instance.new("Folder")
 	folder.Name = "VoidTD_FX"
 	folder.Parent = workspace
+	RunService:BindToRenderStep("VoidTD_Shake", Enum.RenderPriority.Camera.Value + 1, function()
+		local t = os.clock()
+		if t < shakeUntil then
+			local k = (shakeUntil - t) / shakeDur * shakeMag
+			local cam = workspace.CurrentCamera
+			cam.CFrame = cam.CFrame * CFrame.new(rng:NextNumber(-k, k), rng:NextNumber(-k, k), 0) * CFrame.Angles(0, 0, rng:NextNumber(-k, k) * 0.03)
+		end
+	end)
 end
 
 local function tween(obj, time, goal, style, dir)
@@ -624,6 +729,11 @@ end
 -- ECLIPSE SHOCKWAVE
 function FX.Shockwave(pos, radius, lv)
 	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	FX.Sound("Lunge", 0.6, 0.55, pos)
+	local cam = workspace.CurrentCamera
+	if cam and (cam.CFrame.Position - pos).Magnitude < 70 then
+		FX.Shake(lv >= 5 and 0.5 or 0.25, 0.35)
+	end
 	FX.Ring(g, radius, NEON, 0.55, 0.5, 1, 0.05)
 	FX.Ring(g + V(0, 0.15, 0), radius * 0.75, WHITE, 0.4, 0.3, 0.5, 0.2)
 	task.delay(0.08, function()
@@ -674,6 +784,7 @@ end
 
 -- VOID JUDGEMENT: энергетический разрез по врагу
 function FX.Judgement(pos, lv, hitIndex)
+	FX.Sound("Slash", 0.5, 0.8 + (hitIndex or 1) * 0.08, pos)
 	local color = (hitIndex or 1) % 2 == 0 and NEON or NEON_PINK
 	local p = pos + V(0, 2, 0)
 	FX.SlashMark(p, rad(35 + rng:NextNumber(-10, 10)), 9 + lv, 0.7 + lv * 0.08, color, 0.45)
@@ -691,6 +802,7 @@ end
 -- BLACK HOLE
 function FX.BlackHole(pos, radius, duration, lv, delay)
 	task.delay(delay or 0, function()
+		FX.Sound("Lunge", 0.7, 0.4, pos)
 		local center = pos + V(0, 2.2, 0)
 		local m = Instance.new("Model")
 		m.Name = "BlackHole"
@@ -763,6 +875,7 @@ function FX.Poof(pos, color, size)
 end
 
 function FX.LevelUp(pos, color)
+	FX.Sound("Ping", 0.4, 1.3, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 4, color or NEON, 0.6, 0.3)
 	local col = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 3, 3), CFrame = CF(pos + V(0, 0.3, 0)) * ANG(0, 0, rad(90)), Color = color or NEON, Transparency = 0.2 })
 	tween(col, 0.7, { CFrame = CF(pos + V(0, 7, 0)) * ANG(0, 0, rad(90)), Transparency = 1, Size = V(0.1, 4.5, 4.5) })
@@ -771,6 +884,7 @@ function FX.LevelUp(pos, color)
 end
 
 function FX.Place(pos)
+	FX.Sound("Place", 0.5, 1, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 3.5, NEON_SOFT, 0.45, 0.25)
 	FX.Burst(pos + V(0, 0.5, 0), Color3.fromRGB(70, 60, 80), 8, 0.4, 5)
 end
@@ -1458,6 +1572,7 @@ function Renderer.OnAttack(p)
 				return
 			end
 			local from = muzzlePos(view)
+			FX.Sound("Lunge", def.Projectile == "Bolt" and 0.12 or 0.25, def.Projectile == "Bolt" and 1.8 or 1.3, from)
 			FX.Projectile(def.Projectile, from, function()
 				return Renderer.EnemyCenter(firstId)
 			end, p.TR or 0.2, function(pos)
@@ -1474,6 +1589,7 @@ function Renderer.OnAttack(p)
 		at(h, function()
 			local target = Renderer.EnemyCenter(firstId) or tpos
 			if target and view.Rig.Model.Parent then
+				FX.Sound("Lunge", 0.5, 0.7, target)
 				FX.Beam(muzzlePos(view), target, (lv >= 5) and 2.6 or (1.2 + lv * 0.2), (lv >= 5) and FX.Colors.Soft or FX.Colors.Neon, 0.45, lv >= 5)
 			end
 		end)
@@ -1488,6 +1604,7 @@ function Renderer.OnAttack(p)
 			local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
 			local big = view.UnitId == "AbyssOverlord"
 			FX.Arc(cf, reach, rad(15), rad(150), big and FX.Colors.Neon or FX.Colors.Soft, big and 1 or (0.4 + lv * 0.05), 0.3)
+			FX.Sound("Slash", 0.35, big and 0.7 or 1.1, target)
 			FX.Burst(target, FX.Colors.Neon, big and 12 or 5, big and 0.6 or 0.3, big and 10 or 5)
 			if big then
 				FX.Ring(V(target.X, view.Pos.Y + 0.2, target.Z), 4, FX.Colors.Neon, 0.35, 0.3)
@@ -1527,6 +1644,7 @@ function Renderer.OnAttack(p)
 					local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z)) * ANG(0, 0, rad(i % 2 == 0 and 50 or -50))
 					local reach = math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3)
 					FX.Arc(cf, reach, rad(10), rad(140), lv >= 5 and FX.Colors.Pink or FX.Colors.Neon, 0.35 + lv * 0.05, 0.25)
+					FX.Sound("Slash", 0.35, 1.25, target)
 					if lv >= 3 then
 						FX.SlashMark(target, rad(i % 2 == 0 and 40 or -40), 5 + lv * 0.5, 0.35, FX.Colors.Neon, 0.3)
 					end
@@ -1826,11 +1944,13 @@ end
 local function buildHUD()
 	-- деньги и гемы
 	local cur = panel({ Parent = gui, Size = UDim2.fromOffset(230, 92), Position = UDim2.fromOffset(16, 16) })
+	refs.Currency = cur
 	refs.Money = label({ Parent = cur, Size = UDim2.new(1, -20, 0, 38), Position = UDim2.fromOffset(12, 6), Text = "💰 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Good })
 	refs.Gems = label({ Parent = cur, Size = UDim2.new(1, -20, 0, 34), Position = UDim2.fromOffset(12, 50), Text = "💎 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(120, 200, 255) })
 
 	-- волна и ядро
 	local top = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 104), Position = UDim2.new(0.5, 0, 0, 12) })
+	refs.Top = top
 	refs.Wave = label({ Parent = top, Size = UDim2.new(1, -20, 0, 40), Position = UDim2.fromOffset(10, 4), Text = "WAVE 0 / 30" })
 	refs.Status = label({ Parent = top, Size = UDim2.new(1, -20, 0, 22), Position = UDim2.fromOffset(10, 44), Text = "", TextColor3 = THEME.Dim, Font = Enum.Font.GothamBold })
 	local coreBg = new("Frame", { Parent = top, Size = UDim2.new(1, -24, 0, 24), Position = UDim2.fromOffset(12, 72), BackgroundColor3 = Color3.fromRGB(25, 12, 32), BorderSizePixel = 0 }, { corner(6) })
@@ -1865,16 +1985,20 @@ local function buildHUD()
 		ctx.Request("StartWave")
 	end)
 
-	-- боковые кнопки
-	local side = new("Frame", { Parent = gui, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(120, 200), Position = UDim2.new(0, 16, 0.5, 0) }, {
-		new("UIListLayout", { Padding = UDim.new(0, 10) }),
-	})
-	button({ Parent = side, Size = UDim2.fromOffset(120, 54), Text = "✦ SUMMON", BackgroundColor3 = THEME.AccentDark }, function()
-		UI.Toggle("Summon")
+	-- выход из матча в лобби
+	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
+		ctx.Placement.Stop()
+		local ok = ctx.Request("LeaveMatch")
+		if ok then
+			UI.CloseUnit()
+		end
 	end)
-	button({ Parent = side, Size = UDim2.fromOffset(120, 54), Text = "☰ UNITS", BackgroundColor3 = THEME.BG3 }, function()
-		UI.Toggle("Inventory")
-	end)
+
+	-- подсказка в лобби
+	local hint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(640, 86), Position = UDim2.new(0.5, 0, 1, -18), StrokeColor = THEME.Accent })
+	refs.LobbyHint = hint
+	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 36), Position = UDim2.fromOffset(10, 6), Text = "ЛОББИ", TextColor3 = THEME.Accent })
+	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Встань в круг:  ✦ SUMMON — призыв   •   ☰ ЮНИТЫ — экипировка   •   ▶ ИГРАТЬ — в бой" })
 
 	-- подсказка размещения
 	refs.PlaceHint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(520, 34), Position = UDim2.new(0.5, 0, 1, -150), Visible = false })
@@ -1916,7 +2040,7 @@ local function buildHotbar()
 			if id then
 				ctx.Placement.Start(id)
 			else
-				UI.Toggle("Inventory")
+				UI.Toast("Пустой слот: экипируй юнитов в круге ЮНИТЫ в лобби", "error")
 			end
 		end)
 		slotRefs[i] = { Button = slot }
@@ -2155,11 +2279,25 @@ function UI.Toggle(name)
 				tween(sc, 0.2, { Scale = 1 }, Enum.EasingStyle.Back)
 				if name == "Inventory" then
 					UI.RefreshInventory()
+				elseif name == "Mode" then
+					UI.RefreshMode()
 				end
 			end
 		else
 			m.Visible = false
 		end
+	end
+end
+
+function UI.Show(name, on)
+	local m = modals[name]
+	if not m then
+		return
+	end
+	if on and not m.Visible then
+		UI.Toggle(name)
+	elseif not on then
+		m.Visible = false
 	end
 end
 
@@ -2205,6 +2343,7 @@ local function showSummonResults(results)
 				tag.Rotation = -12
 			end
 			tween(sc, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
+			FX.Sound("Ping", 0.3, 0.8 + Config.Rarities[def.Rarity].Order * 0.15)
 		end)
 	end
 	task.delay(0.15 * #results + 0.4, function()
@@ -2384,6 +2523,63 @@ function UI.RefreshInventory()
 end
 
 ------------------------------------------------------------------------
+-- ВЫБОР СЛОЖНОСТИ (круг ИГРАТЬ)
+------------------------------------------------------------------------
+local function joinMatch(diffKey)
+	local ok = ctx.Request("JoinMatch", { Difficulty = diffKey })
+	if ok then
+		UI.Show("Mode", false)
+		FX.Sound("Ping", 0.5, 0.8)
+	end
+end
+
+local function buildMode()
+	local m = modal("Mode", "▶ ВЫБОР СЛОЖНОСТИ", UDim2.fromOffset(880, 430))
+	local cards = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 340), Position = UDim2.fromOffset(18, 70), ZIndex = 6 }, {
+		new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+	})
+	refs.ModeCards = cards
+	for i, key in ipairs(Config.DifficultyOrder) do
+		local d = Config.Difficulties[key]
+		local card = panel({ Parent = cards, Size = UDim2.fromOffset(200, 336), BackgroundColor3 = THEME.BG2, StrokeColor = d.Color, LayoutOrder = i, ZIndex = 6 })
+		new("UIGradient", { Parent = card, Rotation = 90, Color = ColorSequence.new(d.Color:Lerp(THEME.BG, 0.6), THEME.BG) })
+		label({ Parent = card, Size = UDim2.new(1, -16, 0, 40), Position = UDim2.fromOffset(8, 10), Text = d.Name, TextColor3 = d.Color, ZIndex = 7 })
+		local lines = {
+			string.format("HP врагов   x%.2g", d.HP),
+			string.format("Скорость    x%.2g", d.Speed),
+			string.format("Деньги      x%.2g", d.Money),
+			string.format("Гемы        x%.2g", d.Gems),
+			string.format("Ядро        %d HP", d.CoreHP),
+		}
+		label({ Parent = card, Size = UDim2.new(1, -20, 0, 110), Position = UDim2.fromOffset(10, 58), Text = table.concat(lines, "\n"), TextScaled = false, TextSize = 16, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 7 })
+		label({ Parent = card, Size = UDim2.new(1, -20, 0, 70), Position = UDim2.fromOffset(10, 176), Text = d.Description, TextScaled = false, TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, TextColor3 = THEME.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 7 })
+		button({ Parent = card, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1, -24, 0, 50), Position = UDim2.new(0.5, 0, 1, -12), Text = "ИГРАТЬ", BackgroundColor3 = d.Color:Lerp(Color3.new(0, 0, 0), 0.45), StrokeColor = d.Color, ZIndex = 7 }, function()
+			joinMatch(key)
+		end)
+	end
+	-- если матч уже идёт — присоединиться
+	local running = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 300), Position = UDim2.fromOffset(18, 80), Visible = false, ZIndex = 6 })
+	refs.ModeRunning = running
+	refs.ModeRunningText = label({ Parent = running, Size = UDim2.new(1, 0, 0, 90), Position = UDim2.fromOffset(0, 40), Text = "", ZIndex = 7 })
+	button({ Parent = running, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(320, 64), Position = UDim2.new(0.5, 0, 0, 170), Text = "ПРИСОЕДИНИТЬСЯ", BackgroundColor3 = THEME.AccentDark, ZIndex = 7 }, function()
+		joinMatch(nil)
+	end)
+end
+
+function UI.RefreshMode()
+	local phase = ctx.State:GetAttribute("Phase") or "Idle"
+	local idle = phase == "Idle"
+	refs.ModeCards.Visible = idle
+	refs.ModeRunning.Visible = not idle
+	if not idle then
+		local d = Config.Difficulties[ctx.State:GetAttribute("Difficulty") or "Medium"] or Config.Difficulties.Medium
+		local w = ctx.State:GetAttribute("Wave") or 0
+		refs.ModeRunningText.Text = "Уже идёт бой: " .. d.Name .. ", волна " .. w .. "\nПрисоединяйся к команде!"
+		refs.ModeRunningText.TextColor3 = d.Color
+	end
+end
+
+------------------------------------------------------------------------
 -- ПОБЕДА / ПОРАЖЕНИЕ
 ------------------------------------------------------------------------
 local function showEnd(victory, payload)
@@ -2416,14 +2612,21 @@ function UI.OnNotify(p)
 	if t == "Toast" then
 		UI.Toast(p.Text, p.Kind)
 	elseif t == "WaveStart" then
+		FX.Sound("Ping", 0.35, p.Boss and 0.6 or 1)
 		if p.Boss then
+			FX.Shake(0.4, 0.8)
 			UI.Announce("WAVE " .. p.Wave, "⚠ BOSS: " .. p.Boss, THEME.Pink)
 		else
 			UI.Announce("WAVE " .. p.Wave, nil, THEME.Text)
 		end
 	elseif t == "WaveClear" then
 		UI.Toast(string.format("Волна %d пройдена! +$%s  +💎%d", p.Wave, Config.FormatNumber(p.Reward), p.Gems), "good")
+	elseif t == "BossDown" then
+		FX.Shake(0.6, 0.6)
 	elseif t == "CoreHit" then
+		if player:GetAttribute("InMatch") then
+			FX.Shake(0.35, 0.3)
+		end
 		local f = refs.CoreFill
 		f.BackgroundColor3 = THEME.Bad
 		tween(f, 0.4, { BackgroundColor3 = THEME.Accent })
@@ -2437,7 +2640,7 @@ function UI.OnNotify(p)
 			refs.EndOverlay = nil
 		end
 		UI.CloseUnit()
-		UI.Toast("Новая игра! Расставь юнитов и нажми START WAVE", "good")
+		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
 	end
 end
 
@@ -2462,13 +2665,29 @@ function UI.Update(dt)
 
 	local wave = State:GetAttribute("Wave") or 0
 	local maxWave = State:GetAttribute("MaxWave") or 30
-	local phase = State:GetAttribute("Phase") or "Lobby"
-	refs.Wave.Text = "WAVE " .. wave .. " / " .. maxWave
+	local phase = State:GetAttribute("Phase") or "Idle"
+	local inMatch = player:GetAttribute("InMatch") == true
+	refs.Top.Visible = inMatch
+	refs.Hotbar.Visible = inMatch
+	refs.Leave.Visible = inMatch
+	refs.Money.Visible = inMatch
+	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
+	refs.Gems.Position = UDim2.fromOffset(12, inMatch and 50 or 8)
+	refs.LobbyHint.Visible = not inMatch and not (modals.Mode.Visible or modals.Summon.Visible or modals.Inventory.Visible)
+	if not inMatch and UI.SelectedUid then
+		UI.CloseUnit()
+	end
+	if modals.Mode.Visible then
+		UI.RefreshMode()
+	end
+	local diff = Config.Difficulties[State:GetAttribute("Difficulty") or ""]
+	refs.Wave.Text = "WAVE " .. wave .. " / " .. maxWave .. (diff and ("  •  " .. diff.Name) or "")
+	refs.Wave.TextColor3 = diff and diff.Color or THEME.Text
 	local count = 0
 	for _ in pairs(Renderer.EnemyViews) do
 		count = count + 1
 	end
-	if phase == "Lobby" then
+	if phase == "Prep" then
 		refs.Status.Text = "Расставь юнитов и начни волну"
 	elseif phase == "Intermission" then
 		local left = math.max(0, math.ceil((State:GetAttribute("NextWaveAt") or 0) - workspace:GetServerTimeNow()))
@@ -2481,10 +2700,10 @@ function UI.Update(dt)
 	elseif phase == "Defeat" then
 		refs.Status.Text = "Ядро разрушено"
 	end
-	if phase == "Lobby" then
+	if phase == "Prep" then
 		refs.Start.Text = "▶ START WAVE"
 	end
-	refs.Start.Visible = (phase == "Lobby" or phase == "Intermission")
+	refs.Start.Visible = inMatch and (phase == "Prep" or phase == "Intermission")
 
 	local hp = State:GetAttribute("CoreHP") or 100
 	local maxHp = State:GetAttribute("CoreMaxHP") or 100
@@ -2494,7 +2713,7 @@ function UI.Update(dt)
 	-- босс
 	local bossId = State:GetAttribute("BossId") or 0
 	local bv = bossId ~= 0 and Renderer.EnemyViews[bossId]
-	if bv then
+	if bv and inMatch then
 		refs.Boss.Visible = true
 		refs.BossName.Text = "☠ " .. (State:GetAttribute("BossName") or "BOSS"):upper()
 		refs.BossFill.Size = UDim2.fromScale(math.clamp(bv.HP / bv.MaxHP, 0, 1), 1)
@@ -2537,6 +2756,7 @@ function UI.Init(c)
 	buildUnitPanel()
 	buildSummon()
 	buildInventory()
+	buildMode()
 	-- адаптация под маленькие экраны
 	local cam = workspace.CurrentCamera
 	local function fit()
@@ -2685,7 +2905,7 @@ function Placement.Start(id)
 		return
 	end
 	local phase = ctx.State:GetAttribute("Phase")
-	if phase == "Victory" or phase == "Defeat" then
+	if phase == "Victory" or phase == "Defeat" or not player:GetAttribute("InMatch") then
 		return
 	end
 	unitId = id

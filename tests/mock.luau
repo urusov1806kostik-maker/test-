@@ -156,7 +156,7 @@ M.Random = {
 
 -- Enum: Enum.Material.Neon -> token
 local enumMT = {}
-local function enumItem(cat, name) return { __type = "EnumItem", Name = name, EnumType = cat } end
+local function enumItem(cat, name) return { __type = "EnumItem", Name = name, EnumType = cat, Value = 0 } end
 M.Enum = setmetatable({}, { __index = function(root, cat)
 	local c = setmetatable({}, { __index = function(t, name) local it = enumItem(cat, name); rawset(t, name, it); return it end })
 	rawset(root, cat, c)
@@ -189,7 +189,7 @@ local EVENTS = {
 	MouseEnter = true, MouseLeave = true, MouseButton1Down = true, MouseButton1Up = true, MouseButton1Click = true,
 	Activated = true, AttributeChanged = true, ChildAdded = true, ChildRemoved = true, OnClientEvent = true,
 	OnServerEvent = true, Changed = true, Heartbeat = true, RenderStepped = true, Stepped = true, PlayerAdded = true,
-	PlayerRemoving = true, InputBegan = true, InputEnded = true, Touched = true, DescendantAdded = true,
+	PlayerRemoving = true, CharacterAdded = true, InputBegan = true, InputEnded = true, Touched = true, DescendantAdded = true,
 }
 M.instanceCount = 0
 M.partCount = 0
@@ -382,6 +382,7 @@ function Inst.ScreenPointToRay(_, x, y) return { Origin = V3.new(0, 200, 0), Dir
 function Inst.GetDataStore() return { GetAsync = function() return nil end, SetAsync = function() end } end
 function Inst.GetGuiInset() return V2.new(0, 36) end
 function Inst.Play() end
+function Inst.BindToRenderStep() end
 
 M.log = function() end
 

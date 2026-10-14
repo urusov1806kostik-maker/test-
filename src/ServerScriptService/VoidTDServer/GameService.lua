@@ -27,7 +27,10 @@ local damageBuffer = {}
 local removedBuffer = {}
 local pendingSpawns = {}
 
-local phase = "Lobby"
+-- Фазы: Idle (никто не играет) -> Prep (расстановка до 1-й волны) -> Wave <-> Intermission -> Victory/Defeat
+local phase = "Idle"
+local difficultyKey = "Medium"
+local D = Config.Difficulties.Medium
 local wave = 0
 local coreHP = S.CoreMaxHP
 local matchId = 0
@@ -69,10 +72,52 @@ local function setMoney(player, amount)
 	end
 end
 
-local function addMoneyAll(amount)
+local function inMatch(player)
+	return player:GetAttribute("InMatch") == true
+end
+
+local function matchPlayers()
+	local list = {}
 	for _, pl in ipairs(Players:GetPlayers()) do
+		if inMatch(pl) then
+			list[#list + 1] = pl
+		end
+	end
+	return list
+end
+
+local function addMoneyAll(amount)
+	for _, pl in ipairs(matchPlayers()) do
 		setMoney(pl, getMoney(pl) + amount)
 	end
+end
+
+local function addGemsAll(amount)
+	amount = math.floor(amount * D.Gems + 0.5)
+	for _, pl in ipairs(matchPlayers()) do
+		DataService.AddGems(pl, amount)
+	end
+	return amount
+end
+
+------------------------------------------------------------------------
+-- ТЕЛЕПОРТ ЛОББИ <-> КАРТА
+------------------------------------------------------------------------
+local function teleport(player, pos)
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if root then
+		local jitter = Vector3.new(rng:NextNumber(-3, 3), 3.5, rng:NextNumber(-3, 3))
+		char:PivotTo(CFrame.new(pos + jitter))
+	end
+end
+
+local function toBattle(player)
+	teleport(player, Config.BattleSpawn)
+end
+
+local function toLobby(player)
+	teleport(player, Config.Lobby.Spawn)
 end
 
 ------------------------------------------------------------------------
@@ -105,14 +150,14 @@ local function spawnEnemy(typeId, startDist, lateral)
 		return
 	end
 	nextEnemyId = nextEnemyId + 1
-	local hp = math.floor(def.Health * Config.WaveHPMult(math.max(wave, 1)))
+	local hp = math.floor(def.Health * Config.WaveHPMult(math.max(wave, 1)) * D.HP)
 	local e = {
 		Id = nextEnemyId,
 		Type = typeId,
 		Def = def,
 		MaxHealth = hp,
 		Health = hp,
-		Speed = def.Speed,
+		Speed = def.Speed * D.Speed,
 		Dist = startDist or 0,
 		Lateral = lateral or (def.IsBoss and 0 or rng:NextNumber(-2.2, 2.2)),
 		Armor = def.Armor or 0,
@@ -148,13 +193,12 @@ local function removeEnemy(e, reason)
 end
 
 local function killEnemy(e)
-	local reward = math.floor(e.Def.Reward * (1 + S.KillRewardScalePerWave * (math.max(e.Wave, 1) - 1)) + 0.5)
+	local reward = math.floor(e.Def.Reward * (1 + S.KillRewardScalePerWave * (math.max(e.Wave, 1) - 1)) * D.Money + 0.5)
 	addMoneyAll(reward)
 	if e.Def.BossGems then
-		for _, pl in ipairs(Players:GetPlayers()) do
-			DataService.AddGems(pl, e.Def.BossGems)
-		end
-		notifyAll({ Type = "Toast", Text = e.Def.Name .. " повержен! +" .. e.Def.BossGems .. " гемов", Kind = "boss" })
+		local g = addGemsAll(e.Def.BossGems)
+		notifyAll({ Type = "Toast", Text = e.Def.Name .. " повержен! +" .. g .. " гемов", Kind = "boss" })
+		notifyAll({ Type = "BossDown" })
 	end
 	removeEnemy(e, "kill")
 end
@@ -205,8 +249,8 @@ local function endMatch(victory)
 	waveSpawning = false
 	local myMatch = matchId
 	if victory then
-		for _, pl in ipairs(Players:GetPlayers()) do
-			DataService.AddGems(pl, S.VictoryGems)
+		local g = addGemsAll(S.VictoryGems)
+		for _, pl in ipairs(matchPlayers()) do
 			local prof = DataService.Get(pl)
 			if prof then
 				prof.Stats.Wins = (prof.Stats.Wins or 0) + 1
@@ -214,16 +258,16 @@ local function endMatch(victory)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Victory", Wave = wave, Gems = S.VictoryGems, Reset = S.ResetDelay })
+		notifyAll({ Type = "Victory", Wave = wave, Gems = g, Reset = S.ResetDelay, Difficulty = difficultyKey })
 	else
-		for _, pl in ipairs(Players:GetPlayers()) do
+		for _, pl in ipairs(matchPlayers()) do
 			local prof = DataService.Get(pl)
 			if prof then
 				prof.Stats.BestWave = math.max(prof.Stats.BestWave or 0, wave - 1)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay })
+		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay, Difficulty = difficultyKey })
 		clearEnemies()
 	end
 	task.delay(S.ResetDelay, function()
@@ -246,25 +290,22 @@ local function damageCore(amount)
 end
 
 local function waveCleared()
-	local reward = S.WaveRewardBase + S.WaveRewardPerWave * wave
-	local gems = S.WaveGemsBase + S.WaveGemsPerWave * wave
+	local reward = math.floor((S.WaveRewardBase + S.WaveRewardPerWave * wave) * D.Money + 0.5)
 	addMoneyAll(reward)
-	for _, pl in ipairs(Players:GetPlayers()) do
-		DataService.AddGems(pl, gems)
-	end
+	local gems = addGemsAll(S.WaveGemsBase + S.WaveGemsPerWave * wave)
 	if wave >= S.MaxWave then
 		endMatch(true)
 		return
 	end
 	phase = "Intermission"
-	nextWaveAt = now() + S.Intermission
+	nextWaveAt = now() + (D.Intermission or S.Intermission)
 	setState("Phase", phase)
 	setState("NextWaveAt", nextWaveAt)
 	notifyAll({ Type = "WaveClear", Wave = wave, Reward = reward, Gems = gems })
 end
 
 local function startWave()
-	if phase ~= "Lobby" and phase ~= "Intermission" then
+	if phase ~= "Prep" and phase ~= "Intermission" then
 		return false
 	end
 	wave = wave + 1
@@ -306,7 +347,10 @@ local function startWave()
 end
 
 function GameService.RequestStartWave(player)
-	if phase == "Lobby" or phase == "Intermission" then
+	if not inMatch(player) then
+		return false, "Сначала зайди в матч через портал ИГРАТЬ"
+	end
+	if phase == "Prep" or phase == "Intermission" then
 		startWave()
 		return true
 	end
@@ -341,8 +385,11 @@ local raycastParams = RaycastParams.new()
 raycastParams.FilterType = Enum.RaycastFilterType.Include
 
 function GameService.PlaceUnit(player, unitId, pos, rotation)
-	if phase == "Victory" or phase == "Defeat" then
-		return false, "Матч завершён"
+	if phase == "Victory" or phase == "Defeat" or phase == "Idle" then
+		return false, "Матч не идёт"
+	end
+	if not inMatch(player) then
+		return false, "Ты не в матче"
 	end
 	local def = Config.Units[unitId]
 	if not def or typeof(pos) ~= "Vector3" then
@@ -743,7 +790,7 @@ end
 
 local function step(dt)
 	local t = now()
-	if phase == "Wave" or phase == "Intermission" or phase == "Lobby" then
+	if phase == "Wave" or phase == "Intermission" or phase == "Prep" then
 		updateEnemies(t, dt)
 		updateZones(t)
 		updateUnits(t)
@@ -765,7 +812,7 @@ local function step(dt)
 	end
 end
 
-resetMatch = function()
+local function clearMatch()
 	matchId = matchId + 1
 	clearEnemies()
 	for _, u in pairs(units) do
@@ -773,19 +820,82 @@ resetMatch = function()
 	end
 	units = {}
 	wave = 0
-	coreHP = S.CoreMaxHP
-	phase = "Lobby"
 	waveSpawning = false
 	nextWaveAt = 0
-	setState("Phase", phase)
 	setState("Wave", 0)
-	setState("CoreHP", coreHP)
 	setState("NextWaveAt", 0)
 	setState("MatchId", matchId)
+end
+
+-- Матч закончен (или все ушли): все возвращаются в лобби
+resetMatch = function()
+	clearMatch()
+	phase = "Idle"
+	setState("Phase", phase)
+	setState("Difficulty", "")
 	for _, pl in ipairs(Players:GetPlayers()) do
-		setMoney(pl, S.StartMoney)
+		if inMatch(pl) then
+			pl:SetAttribute("InMatch", false)
+			setMoney(pl, 0)
+			toLobby(pl)
+		end
 	end
 	notifyAll({ Type = "Reset" })
+end
+
+local function startNewMatch(diffKey)
+	clearMatch()
+	difficultyKey = diffKey
+	D = Config.Difficulties[diffKey]
+	coreHP = D.CoreHP
+	phase = "Prep"
+	setState("Difficulty", diffKey)
+	setState("CoreMaxHP", coreHP)
+	setState("CoreHP", coreHP)
+	setState("Phase", phase)
+end
+
+function GameService.JoinMatch(player, diffKey)
+	if inMatch(player) then
+		return false, "Ты уже в матче"
+	end
+	if phase == "Victory" or phase == "Defeat" then
+		return false, "Матч завершается, подожди пару секунд"
+	end
+	if phase == "Idle" then
+		if not Config.Difficulties[diffKey] then
+			return false, "Выбери сложность"
+		end
+		startNewMatch(diffKey)
+	end
+	player:SetAttribute("InMatch", true)
+	-- поздно зашедшим даём компенсацию за пропущенные волны
+	setMoney(player, (S.StartMoney + math.max(0, wave - 1) * 150) * D.Money)
+	toBattle(player)
+	notifyAll({ Type = "Toast", Text = player.DisplayName .. " вступил в бой (" .. D.Name .. ")", Kind = "good" })
+	return true, difficultyKey
+end
+
+function GameService.LeaveMatch(player)
+	if not inMatch(player) then
+		return false, "Ты не в матче"
+	end
+	for _, u in pairs(units) do
+		if u.Owner == player then
+			removeUnit(u)
+		end
+	end
+	player:SetAttribute("InMatch", false)
+	setMoney(player, 0)
+	toLobby(player)
+	if #matchPlayers() == 0 and phase ~= "Idle" then
+		resetMatch()
+	end
+	return true
+end
+
+function GameService.GetMatchInfo()
+	return { Phase = phase, Difficulty = difficultyKey, Wave = wave, Players = #matchPlayers() }
 end
 
 ------------------------------------------------------------------------
@@ -798,8 +908,18 @@ function GameService.PlayerAdded(player)
 	money.Name = "Money"
 	money.Parent = ls
 	ls.Parent = player
-	-- поздно зашедшим даём компенсацию за пропущенные волны
-	setMoney(player, S.StartMoney + math.max(0, wave - 1) * 150)
+	player:SetAttribute("InMatch", false)
+	setMoney(player, 0)
+	-- после смерти игрок в матче возвращается на карту, остальные — в лобби
+	player.CharacterAdded:Connect(function(char)
+		char:WaitForChild("HumanoidRootPart", 5)
+		task.wait(0.2)
+		if inMatch(player) then
+			toBattle(player)
+		else
+			toLobby(player)
+		end
+	end)
 end
 
 function GameService.PlayerRemoving(player)
@@ -808,6 +928,12 @@ function GameService.PlayerRemoving(player)
 			removeUnit(u)
 		end
 	end
+	player:SetAttribute("InMatch", false)
+	task.defer(function()
+		if #matchPlayers() == 0 and phase ~= "Idle" then
+			resetMatch()
+		end
+	end)
 end
 
 function GameService.GetEnemySnapshot()
@@ -822,6 +948,7 @@ function GameService.Init(remotes, state, unitsFolder, map)
 	Remotes, State, UnitsFolder, Map = remotes, state, unitsFolder, map
 	setState("MaxWave", S.MaxWave)
 	setState("CoreMaxHP", S.CoreMaxHP)
+	setState("CoreHP", S.CoreMaxHP)
 	setState("BossId", 0)
 	setState("BossName", "")
 	resetMatch()

@@ -93,14 +93,59 @@ Config.Settings = {
 Config.RarityOrder = { "Common", "Rare", "Epic", "Legendary", "Mythic" }
 
 Config.Rarities = {
-	Common    = { Order = 1, Color = Color3.fromRGB(165, 165, 175), Rate = 60,  PlacementLimit = 6 },
-	Rare      = { Order = 2, Color = Color3.fromRGB(60, 140, 255),  Rate = 25,  PlacementLimit = 5 },
-	Epic      = { Order = 3, Color = Color3.fromRGB(170, 80, 255),  Rate = 10.5,PlacementLimit = 4 },
-	Legendary = { Order = 4, Color = Color3.fromRGB(255, 195, 50),  Rate = 3.9, PlacementLimit = 3 },
-	Mythic    = { Order = 5, Color = Color3.fromRGB(235, 40, 130),  Rate = 0.6, PlacementLimit = 2 },
+	-- Rate — шанс выпадения в Summon (в процентах, сумма = 100)
+	Common    = { Order = 1, Color = Color3.fromRGB(165, 165, 175), Rate = 72,  PlacementLimit = 6 },
+	Rare      = { Order = 2, Color = Color3.fromRGB(60, 140, 255),  Rate = 21,  PlacementLimit = 5 },
+	Epic      = { Order = 3, Color = Color3.fromRGB(170, 80, 255),  Rate = 5.5, PlacementLimit = 4 },
+	Legendary = { Order = 4, Color = Color3.fromRGB(255, 195, 50),  Rate = 1.3, PlacementLimit = 3 },
+	Mythic    = { Order = 5, Color = Color3.fromRGB(235, 40, 130),  Rate = 0.2, PlacementLimit = 2 },
 }
 
 Config.TargetModes = { "First", "Last", "Strongest", "Weakest", "Closest" }
+
+------------------------------------------------------------------------
+-- СЛОЖНОСТЬ (выбирается в портале PLAY в лобби)
+-- HP / Speed — множители врагов, Money — множитель денег, Gems — множитель гемов.
+------------------------------------------------------------------------
+Config.DifficultyOrder = { "Easy", "Medium", "Hard", "Hardcore" }
+
+Config.Difficulties = {
+	Easy = {
+		Name = "ЛЁГКАЯ", Color = Color3.fromRGB(90, 220, 120),
+		HP = 0.55, Speed = 0.9, Money = 1.3, Gems = 0.6, CoreHP = 150, Intermission = 18,
+		Description = "Для новичков. Враги слабее, денег больше.",
+	},
+	Medium = {
+		Name = "СРЕДНЯЯ", Color = Color3.fromRGB(255, 205, 70),
+		HP = 1.0, Speed = 1.0, Money = 1.0, Gems = 1.0, CoreHP = 100, Intermission = 15,
+		Description = "Стандартный баланс.",
+	},
+	Hard = {
+		Name = "СЛОЖНАЯ", Color = Color3.fromRGB(255, 90, 80),
+		HP = 1.2, Speed = 1.05, Money = 1.0, Gems = 1.6, CoreHP = 100, Intermission = 12,
+		Description = "Враги крепче и быстрее. Награда x1.6.",
+	},
+	Hardcore = {
+		Name = "ХАРДКОР", Color = Color3.fromRGB(200, 40, 255),
+		HP = 1.4, Speed = 1.1, Money = 1.0, Gems = 2.5, CoreHP = 50, Intermission = 10,
+		Description = "Только для лучших. Слабое ядро, быстрые враги. Награда x2.5.",
+	},
+}
+
+------------------------------------------------------------------------
+-- ЛОББИ: остров рядом с картой. Встань в круг, чтобы открыть меню.
+------------------------------------------------------------------------
+Config.Lobby = {
+	Center = Vector3.new(0, 60, 400),
+	Radius = 58,
+	Spawn = Vector3.new(0, 60, 432),
+	Zones = {
+		Summon = { Offset = Vector3.new(-32, 0, 6), Radius = 7, Title = "SUMMON", Color = Color3.fromRGB(255, 70, 180) },
+		Units  = { Offset = Vector3.new(32, 0, 6),  Radius = 7, Title = "ЮНИТЫ",  Color = Color3.fromRGB(80, 170, 255) },
+		Play   = { Offset = Vector3.new(0, 0, -30), Radius = 8, Title = "ИГРАТЬ", Color = Color3.fromRGB(180, 80, 255) },
+	},
+}
+Config.BattleSpawn = Vector3.new(10, 60, 10)
 
 ------------------------------------------------------------------------
 -- ЮНИТЫ

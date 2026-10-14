@@ -22,10 +22,74 @@ local folder
 local rng = Random.new()
 local numberCount = 0
 
+------------------------------------------------------------------------
+-- ЗВУКИ (встроенные звуки клиента Roblox, без загрузки ассетов)
+------------------------------------------------------------------------
+local SoundService = game:GetService("SoundService")
+local SOUNDS = {
+	Slash = "rbxasset://sounds/swordslash.wav",
+	Lunge = "rbxasset://sounds/swordlunge.wav",
+	Place = "rbxasset://sounds/unsheath.wav",
+	Ping = "rbxasset://sounds/electronicpingshort.wav",
+}
+local lastSound = {}
+
+function FX.Sound(name, volume, pitch, pos)
+	local id = SOUNDS[name]
+	if not id then
+		return
+	end
+	local t = os.clock()
+	if lastSound[name] and t - lastSound[name] < 0.07 then
+		return
+	end
+	-- приглушаем далёкие звуки
+	if pos then
+		local cam = workspace.CurrentCamera
+		local d = cam and (cam.CFrame.Position - pos).Magnitude or 0
+		if d > 120 then
+			return
+		end
+		volume = (volume or 0.4) * math.clamp(1 - d / 120, 0.15, 1)
+	end
+	lastSound[name] = t
+	local s = Instance.new("Sound")
+	s.SoundId = id
+	s.Volume = volume or 0.4
+	s.PlaybackSpeed = pitch or 1
+	s.Parent = SoundService
+	s:Play()
+	task.delay(3, function()
+		s:Destroy()
+	end)
+end
+
+------------------------------------------------------------------------
+-- ТРЯСКА КАМЕРЫ
+------------------------------------------------------------------------
+local shakeUntil, shakeDur, shakeMag = 0, 1, 0
+
+function FX.Shake(magnitude, duration)
+	local t = os.clock()
+	if t + duration > shakeUntil or magnitude > shakeMag then
+		shakeUntil = t + duration
+		shakeDur = duration
+		shakeMag = magnitude
+	end
+end
+
 function FX.Init()
 	folder = workspace:FindFirstChild("VoidTD_FX") or Instance.new("Folder")
 	folder.Name = "VoidTD_FX"
 	folder.Parent = workspace
+	RunService:BindToRenderStep("VoidTD_Shake", Enum.RenderPriority.Camera.Value + 1, function()
+		local t = os.clock()
+		if t < shakeUntil then
+			local k = (shakeUntil - t) / shakeDur * shakeMag
+			local cam = workspace.CurrentCamera
+			cam.CFrame = cam.CFrame * CFrame.new(rng:NextNumber(-k, k), rng:NextNumber(-k, k), 0) * CFrame.Angles(0, 0, rng:NextNumber(-k, k) * 0.03)
+		end
+	end)
 end
 
 local function tween(obj, time, goal, style, dir)
@@ -315,6 +379,11 @@ end
 -- ECLIPSE SHOCKWAVE
 function FX.Shockwave(pos, radius, lv)
 	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	FX.Sound("Lunge", 0.6, 0.55, pos)
+	local cam = workspace.CurrentCamera
+	if cam and (cam.CFrame.Position - pos).Magnitude < 70 then
+		FX.Shake(lv >= 5 and 0.5 or 0.25, 0.35)
+	end
 	FX.Ring(g, radius, NEON, 0.55, 0.5, 1, 0.05)
 	FX.Ring(g + V(0, 0.15, 0), radius * 0.75, WHITE, 0.4, 0.3, 0.5, 0.2)
 	task.delay(0.08, function()
@@ -365,6 +434,7 @@ end
 
 -- VOID JUDGEMENT: энергетический разрез по врагу
 function FX.Judgement(pos, lv, hitIndex)
+	FX.Sound("Slash", 0.5, 0.8 + (hitIndex or 1) * 0.08, pos)
 	local color = (hitIndex or 1) % 2 == 0 and NEON or NEON_PINK
 	local p = pos + V(0, 2, 0)
 	FX.SlashMark(p, rad(35 + rng:NextNumber(-10, 10)), 9 + lv, 0.7 + lv * 0.08, color, 0.45)
@@ -382,6 +452,7 @@ end
 -- BLACK HOLE
 function FX.BlackHole(pos, radius, duration, lv, delay)
 	task.delay(delay or 0, function()
+		FX.Sound("Lunge", 0.7, 0.4, pos)
 		local center = pos + V(0, 2.2, 0)
 		local m = Instance.new("Model")
 		m.Name = "BlackHole"
@@ -454,6 +525,7 @@ function FX.Poof(pos, color, size)
 end
 
 function FX.LevelUp(pos, color)
+	FX.Sound("Ping", 0.4, 1.3, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 4, color or NEON, 0.6, 0.3)
 	local col = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 3, 3), CFrame = CF(pos + V(0, 0.3, 0)) * ANG(0, 0, rad(90)), Color = color or NEON, Transparency = 0.2 })
 	tween(col, 0.7, { CFrame = CF(pos + V(0, 7, 0)) * ANG(0, 0, rad(90)), Transparency = 1, Size = V(0.1, 4.5, 4.5) })
@@ -462,6 +534,7 @@ function FX.LevelUp(pos, color)
 end
 
 function FX.Place(pos)
+	FX.Sound("Place", 0.5, 1, pos)
 	FX.Ring(pos + V(0, 0.2, 0), 3.5, NEON_SOFT, 0.45, 0.25)
 	FX.Burst(pos + V(0, 0.5, 0), Color3.fromRGB(70, 60, 80), 8, 0.4, 5)
 end

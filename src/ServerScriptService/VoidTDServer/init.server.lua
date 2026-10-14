@@ -120,6 +120,18 @@ handlers.SetTarget = function(player, data)
 	return GameService.SetTargetMode(player, data.Uid, data.Mode)
 end
 
+handlers.JoinMatch = function(player, data)
+	return GameService.JoinMatch(player, type(data) == "table" and data.Difficulty or nil)
+end
+
+handlers.LeaveMatch = function(player)
+	return GameService.LeaveMatch(player)
+end
+
+handlers.GetMatchInfo = function()
+	return true, GameService.GetMatchInfo()
+end
+
 handlers.StartWave = function(player)
 	return GameService.RequestStartWave(player)
 end
