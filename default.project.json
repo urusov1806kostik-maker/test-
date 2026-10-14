@@ -1,0 +1,17 @@
+{
+  "name": "VoidTD",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "VoidTD": { "$path": "src/ReplicatedStorage/VoidTD" }
+    },
+    "ServerScriptService": {
+      "VoidTDServer": { "$path": "src/ServerScriptService/VoidTDServer" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "VoidTDClient": { "$path": "src/StarterPlayerScripts/VoidTDClient" }
+      }
+    }
+  }
+}
