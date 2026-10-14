@@ -262,8 +262,13 @@ local function buildHUD()
 		ctx.Request("StartWave")
 	end)
 
+	-- инвентарь всегда на экране
+	refs.InvButton = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "☰ ЮНИТЫ (G)", BackgroundColor3 = THEME.BG3 }, function()
+		UI.Toggle("Inventory")
+	end)
+
 	-- выход из матча в лобби
-	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
+	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 170), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
 		ctx.Placement.Stop()
 		local ok = ctx.Request("LeaveMatch")
 		if ok then
@@ -275,7 +280,7 @@ local function buildHUD()
 	local hint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(640, 86), Position = UDim2.new(0.5, 0, 1, -18), StrokeColor = THEME.Accent })
 	refs.LobbyHint = hint
 	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 36), Position = UDim2.fromOffset(10, 6), Text = "ЛОББИ", TextColor3 = THEME.Accent })
-	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Встань в круг:  ✦ SUMMON — призыв   •   ☰ ЮНИТЫ — экипировка   •   ▶ ИГРАТЬ — в бой" })
+	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Встань в круг:  ✦ SUMMON — призыв   •   ▶ ИГРАТЬ — в бой   •   ☰ ЮНИТЫ — кнопка слева или G" })
 
 	-- подсказка размещения
 	refs.PlaceHint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(520, 34), Position = UDim2.new(0.5, 0, 1, -150), Visible = false })
@@ -950,6 +955,7 @@ function UI.Update(dt)
 	refs.Money.Visible = inMatch
 	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
 	refs.Gems.Position = UDim2.fromOffset(12, inMatch and 50 or 8)
+	refs.InvButton.Position = UDim2.fromOffset(16, inMatch and 118 or 76)
 	refs.LobbyHint.Visible = not inMatch and not (modals.Mode.Visible or modals.Summon.Visible or modals.Inventory.Visible)
 	if not inMatch and UI.SelectedUid then
 		UI.CloseUnit()

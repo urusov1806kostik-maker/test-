@@ -105,6 +105,7 @@ CFm.__mul = function(a, b)
 	return mk(p.X, p.Y, p.Z, matmul(a.r, b.r))
 end
 CFm.__add = function(a, v) return mk(a.p.X+v.X, a.p.Y+v.Y, a.p.Z+v.Z, a.r) end
+CFm.__sub = function(a, v) return mk(a.p.X-v.X, a.p.Y-v.Y, a.p.Z-v.Z, a.r) end
 function CFm.Inverse(cf)
 	local rt = transpose(cf.r)
 	local p = -(matvec(rt, cf.p))

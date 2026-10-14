@@ -78,6 +78,8 @@ Remotes.Notify.OnClientEvent:Connect(function(p)
 		end
 	elseif p.Type == "Reset" then
 		Placement.Stop()
+	elseif p.Type == "WaveClear" or p.Type == "Victory" then
+		Renderer.Cheer()
 	end
 end)
 local okE, list = ctx.Request("GetEnemies")
@@ -93,7 +95,7 @@ for _, f in ipairs(UnitsFolder:GetChildren()) do
 end
 UnitsFolder.ChildAdded:Connect(function(f)
 	-- атрибуты приходят вместе с объектом, но подстрахуемся
-	task.defer(Renderer.AddUnit, f)
+	task.defer(Renderer.AddUnit, f, true)
 end)
 UnitsFolder.ChildRemoved:Connect(Renderer.RemoveUnit)
 
@@ -157,6 +159,8 @@ UserInputService.InputBegan:Connect(function(input, gp)
 			UI.SellSelected()
 		elseif k == Enum.KeyCode.T then
 			UI.CycleTarget()
+		elseif k == Enum.KeyCode.G then
+			UI.Toggle("Inventory")
 		end
 	elseif t == Enum.UserInputType.MouseButton1 then
 		if Placement.Active then

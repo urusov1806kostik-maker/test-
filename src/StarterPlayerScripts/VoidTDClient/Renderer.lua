@@ -148,6 +148,121 @@ Anims.BlackHoleCast = function(h)
 	}
 end
 
+-- Анимации в простое (fidget), повышения уровня, празднования и приземления
+Anims.LookAround = function()
+	return { { 0, {} }, { 0.5, { Neck = { 0, 40, 0 } } }, { 1.2, { Neck = { 5, -40, 0 } } }, { 1.8, {} } }
+end
+
+Anims.Twirl = function()
+	return {
+		{ 0, {} },
+		{ 0.25, { RS = { 85, 0, 0 } } },
+		{ 0.45, { RS = { 85, 120, 0 } } },
+		{ 0.65, { RS = { 85, 240, 0 } } },
+		{ 0.85, { RS = { 85, 360, 0 } } },
+		{ 1.2, { RS = { 15, 360, 0 } } },
+	}
+end
+
+Anims.Flex = function()
+	return {
+		{ 0, {} },
+		{ 0.35, { RS = { 0, 0, 95 }, LS = { 0, 0, -95 }, Root = { -4, 0, 0 } } },
+		{ 0.6, { RS = { 0, 0, 80 }, LS = { 0, 0, -80 }, Root = { -6, 0, 0, 0.1 } } },
+		{ 1.1, {} },
+	}
+end
+
+Anims.Stretch = function()
+	return {
+		{ 0, {} },
+		{ 0.5, { RS = { 170, 0, 15 }, LS = { 170, 0, -15 }, Root = { -8, 0, 0, 0.15 }, Neck = { -15, 0, 0 } } },
+		{ 1.1, { RS = { 165, 0, 20 }, LS = { 165, 0, -20 }, Root = { -6, 0, 0, 0.1 }, Neck = { -10, 0, 0 } } },
+		{ 1.6, {} },
+	}
+end
+
+Anims.StaffTap = function()
+	return {
+		{ 0, {} },
+		{ 0.25, { RS = { 35, 0, 0 } } },
+		{ 0.4, { RS = { -5, 0, 0 }, Root = { 0, 0, 0, -0.08 } } },
+		{ 0.55, { RS = { 25, 0, 0 } } },
+		{ 0.7, { RS = { -5, 0, 0 }, Root = { 0, 0, 0, -0.08 } } },
+		{ 1.1, {} },
+	}
+end
+
+Anims.CheckBow = function()
+	return {
+		{ 0, {} },
+		{ 0.4, { LS = { 75, 0, 35 }, Neck = { 20, -25, 0 }, RS = { 40, 0, -20 } } },
+		{ 1.3, { LS = { 70, 0, 30 }, Neck = { 22, -20, 0 }, RS = { 45, 0, -25 } } },
+		{ 1.7, {} },
+	}
+end
+
+Anims.Reload = function()
+	return {
+		{ 0, {} },
+		{ 0.3, { RS = { 45, 0, -30 }, LS = { 60, 0, 25 }, Neck = { 25, 0, 0 } } },
+		{ 0.5, { RS = { 45, 0, -30 }, LS = { 40, 0, 10 }, Neck = { 25, 0, 0 } } },
+		{ 0.7, { RS = { 45, 0, -30 }, LS = { 65, 0, 25 }, Neck = { 25, 0, 0 } } },
+		{ 1.2, {} },
+	}
+end
+
+Anims.WingSpread = function()
+	return {
+		{ 0, {} },
+		{ 0.4, { WingR = { 0, -35, 20 }, WingL = { 0, 35, -20 }, Neck = { -15, 0, 0 }, Root = { 0, 0, 0, 0.3 } } },
+		{ 1.0, { WingR = { 0, -30, 15 }, WingL = { 0, 30, -15 }, Neck = { -10, 0, 0 }, Root = { 0, 0, 0, 0.25 } } },
+		{ 1.5, {} },
+	}
+end
+
+Anims.Cheer = function()
+	return {
+		{ 0, {} },
+		{ 0.2, { RS = { 165, 0, 25 }, LS = { 165, 0, -25 }, Root = { 0, 0, 0, 0.6 } } },
+		{ 0.4, { RS = { 150, 0, 30 }, LS = { 150, 0, -30 }, Root = { 0, 0, 0, 0 } } },
+		{ 0.6, { RS = { 165, 0, 25 }, LS = { 165, 0, -25 }, Root = { 0, 0, 0, 0.6 } } },
+		{ 0.8, { RS = { 150, 0, 30 }, LS = { 150, 0, -30 }, Root = { 0, 0, 0, 0 } } },
+		{ 1.2, {} },
+	}
+end
+
+Anims.PowerUp = function()
+	return {
+		{ 0, {} },
+		{ 0.25, { Root = { 12, 0, 0, -0.45 }, RS = { 30, 0, 35 }, LS = { 30, 0, -35 }, Neck = { 15, 0, 0 } } },
+		{ 0.5, { Root = { -10, 0, 0, 0.6 }, RS = { 160, 0, 40 }, LS = { 160, 0, -40 }, Neck = { -20, 0, 0 } } },
+		{ 0.9, { Root = { -6, 0, 0, 0.3 }, RS = { 150, 0, 35 }, LS = { 150, 0, -35 } } },
+		{ 1.3, {} },
+	}
+end
+
+Anims.Land = function()
+	return {
+		{ 0, { Root = { 10, 0, 0, -0.45 }, RS = { 20, 0, 45 }, LS = { 20, 0, -45 } } },
+		{ 0.45, {} },
+	}
+end
+
+local FIDGETS = {
+	Slash = { "Twirl", "LookAround", "Flex" },
+	HeavySlash = { "Twirl", "LookAround", "Stretch" },
+	Katana = { "Twirl", "LookAround" },
+	Judgement = { "Twirl", "LookAround", "Flex" },
+	Bow = { "CheckBow", "LookAround" },
+	Cast = { "StaffTap", "LookAround", "Stretch" },
+	Gun = { "Reload", "LookAround" },
+	Reap = { "Twirl", "LookAround" },
+	Slam = { "Flex", "LookAround", "Stretch" },
+	Smash = { "Flex", "LookAround" },
+	Beam = { "WingSpread", "LookAround", "Stretch" },
+}
+
 local function ease(a)
 	return a * a * (3 - 2 * a)
 end
@@ -225,6 +340,11 @@ local function applyPose(rig, pose, t, phase)
 				cf = cf * ANG(0, math.sin(t * 2.4 + phase) * 0.12 * side, math.sin(t * 2.4 + phase) * 0.1 * side)
 			elseif name == "Neck" then
 				cf = cf * ANG(0, math.sin(t * 0.7 + phase) * 0.08, 0)
+			elseif name == "Cape" or name == "Scarf" then
+				local gust = (rig.Gust or 0)
+				cf = cf * ANG(rad(6 + math.sin(t * 1.7 + phase) * 4 + gust * 22), 0, rad(math.sin(t * 1.1 + phase) * 3))
+			elseif name:sub(1, 5) == "Orbit" then
+				cf = cf * ANG(0, t * 1.4 + phase, 0)
 			end
 			motor.C0 = cf
 		end
@@ -294,6 +414,15 @@ function Renderer.SpawnEnemy(data)
 	}
 	local pos, dir = PathUtil.OffsetPositionAt(dist, lateral)
 	view.CF = CFrame.lookAt(pos + V(0, rig.HipHeight, 0), pos + dir + V(0, rig.HipHeight, 0))
+	view.SpawnT = os.clock()
+	view.Emerge = dist <= 1
+	if Config.Enemies[typeId].IsBoss then
+		view.RoarT = os.clock() + 0.6
+		task.delay(0.6, function()
+			FX.Sound("Lunge", 0.8, 0.3)
+			FX.Shake(0.5, 0.9)
+		end)
+	end
 	rig.Root.CFrame = view.CF
 	makeHealthBar(view)
 	rig.Model.Parent = enemyFolder
@@ -384,6 +513,9 @@ function Renderer.OnSync(payload)
 		local v = enemyViews[list[i]]
 		if v then
 			v.ServerDist = list[i + 1]
+			if list[i + 2] < v.HP then
+				v.HitT = nowc
+			end
 			v.HP = list[i + 2]
 			v.Slowed = list[i + 3] == 1
 			v.LastSync = nowc
@@ -404,6 +536,9 @@ local function animateEnemy(view, t, dt)
 	local rig = view.Rig
 	local base = rig.Base
 	local m = rig.Motors
+	-- отшатывание от удара
+	local hitA = t - (view.HitT or -10)
+	local flinch = hitA < 0.2 and (1 - hitA / 0.2) * 0.22 or 0
 	local def = Config.Enemies[view.Type]
 	local freq = (view.Speed * (view.Slowed and 0.5 or 1)) / math.max(def.Scale or 1, 0.5) * 1.1
 	local w = t * freq + view.Phase
@@ -438,8 +573,24 @@ local function animateEnemy(view, t, dt)
 			end
 		end
 	end
+	if flinch > 0 then
+		m.Root.C0 = m.Root.C0 * ANG(-flinch, 0, flinch * 0.3)
+	end
+	-- рёв босса при появлении
+	local roarA = t - (view.RoarT or -10)
+	local roar = (roarA > 0 and roarA < 1.4) and math.sin(roarA / 1.4 * math.pi) or 0
+	if roar > 0 then
+		if m.RS and base.RS then
+			m.RS.C0 = base.RS * ANG(rad(150 * roar), 0, rad(30 * roar))
+			m.LS.C0 = base.LS * ANG(rad(150 * roar), 0, rad(-30 * roar))
+		end
+		if m.Neck and base.Neck then
+			m.Neck.C0 = base.Neck * ANG(rad(-30 * roar), 0, 0)
+		end
+		m.Root.C0 = m.Root.C0 * ANG(rad(-12 * roar), 0, 0)
+	end
 	if m.Jaw then
-		m.Jaw.C0 = base.Jaw * ANG(math.max(0, math.sin(t * 3 + view.Phase)) * 0.45, 0, 0)
+		m.Jaw.C0 = base.Jaw * ANG(math.max(0, math.sin(t * 3 + view.Phase)) * 0.45 + roar * 0.6, 0, 0)
 	end
 	if m.Halo then
 		m.Halo.C0 = base.Halo * ANG(0, t * 1.5, 0)
@@ -457,7 +608,15 @@ local function updateEnemies(t, dt)
 		local hip = v.Rig.HipHeight
 		local target = CFrame.lookAt(pos + V(0, hip, 0), pos + dir + V(0, hip, 0))
 		v.CF = v.CF:Lerp(target, math.min(1, dt * 9))
-		v.Rig.Root.CFrame = v.CF
+		local rise = 0
+		if v.Emerge then
+			local a = math.clamp((t - v.SpawnT) / 0.6, 0, 1)
+			rise = (1 - ease(a)) * (hip + 1.5)
+			if a >= 1 then
+				v.Emerge = false
+			end
+		end
+		v.Rig.Root.CFrame = v.CF - V(0, rise, 0)
 		animateEnemy(v, t, dt)
 		if v.Fill then
 			v.Fill.Size = UDim2.fromScale(math.clamp(v.HP / v.MaxHP, 0, 1), 1)
@@ -524,7 +683,7 @@ local function buildUnitView(view)
 	gui.Parent = rig.Root
 end
 
-function Renderer.AddUnit(folder)
+function Renderer.AddUnit(folder, isNew)
 	local uid = tonumber(folder.Name)
 	if not uid or unitViews[uid] then
 		return
@@ -544,7 +703,12 @@ function Renderer.AddUnit(folder)
 	end
 	unitViews[uid] = view
 	buildUnitView(view)
-	FX.Place(view.Pos)
+	view.NextFidget = os.clock() + 4 + math.random() * 8
+	if isNew then
+		view.DropT = os.clock()
+	else
+		FX.Place(view.Pos)
+	end
 	view.Conn = folder.AttributeChanged:Connect(function(attr)
 		if attr == "Level" then
 			local newLevel = folder:GetAttribute("Level")
@@ -552,6 +716,7 @@ function Renderer.AddUnit(folder)
 				view.Level = newLevel
 				buildUnitView(view)
 				FX.LevelUp(view.Pos, Config.Rarities[Config.Units[view.UnitId].Rarity].Color)
+				view.Anim = { Start = os.clock(), Frames = Anims.PowerUp() }
 				if Renderer.OnUnitChanged then
 					Renderer.OnUnitChanged(uid)
 				end
@@ -620,6 +785,8 @@ function Renderer.OnAttack(p)
 
 	local hits = p.T and #p.T or 1
 	playAnim(view, def.Anim, h, hits, p.I)
+	view.GustT = os.clock()
+	view.NextFidget = os.clock() + 6 + math.random() * 6
 
 	local function at(delay, fn)
 		task.delay(delay, fn)
@@ -738,16 +905,67 @@ function Renderer.OnImpact(p)
 	end
 end
 
+local function nearestEnemyYaw(v, range)
+	local best, bestD
+	for _, e in pairs(enemyViews) do
+		local p = e.Rig.Root.Position
+		local d = PathUtil.FlatDistance(p, v.Pos)
+		if d <= range and (not bestD or d < bestD) then
+			best, bestD = p, d
+		end
+	end
+	return best and yawTo(v.Pos, best)
+end
+
 local function updateUnits(t, dt)
 	for _, v in pairs(unitViews) do
 		local rig = v.Rig
 		if rig then
-			-- плавный поворот к цели
+			-- следим за ближайшим врагом даже до атаки
+			v.TrackT = (v.TrackT or 0) - dt
+			if v.TrackT <= 0 then
+				v.TrackT = 0.3
+				local def = Config.Units[v.UnitId]
+				local yaw = nearestEnemyYaw(v, def.Levels[v.Level].Range + 6)
+				if yaw and not v.Anim then
+					v.TargetYaw = yaw
+				end
+			end
+			-- случайные действия в простое
+			if not v.Anim and t >= (v.NextFidget or 0) then
+				local list = FIDGETS[Config.Units[v.UnitId].Anim] or { "LookAround" }
+				local pick = list[math.random(1, #list)]
+				v.Anim = { Start = t, Frames = Anims[pick]() }
+				v.NextFidget = t + 6 + math.random() * 8
+			end
+			-- плащ развевается сильнее во время атаки
+			rig.Gust = math.max(0, 1 - (t - (v.GustT or -10)) / 0.8)
 			local diff = (v.TargetYaw - v.Yaw + math.pi) % (2 * math.pi) - math.pi
-			v.Yaw = v.Yaw + diff * math.min(1, dt * 10)
-			rig.Root.CFrame = CF(v.Pos + V(0, rig.HipHeight, 0)) * ANG(0, v.Yaw, 0)
-			applyPose(rig, evalPose(v, os.clock()), t, v.Phase)
+			v.Yaw = v.Yaw + diff * math.min(1, dt * 8)
+			-- приземление после установки
+			local drop = 0
+			if v.DropT then
+				local a = math.clamp((t - v.DropT) / 0.3, 0, 1)
+				drop = (1 - a * a) * 7
+				if a >= 1 then
+					v.DropT = nil
+					v.Anim = { Start = t, Frames = Anims.Land() }
+					FX.Place(v.Pos)
+				end
+			end
+			rig.Root.CFrame = CF(v.Pos + V(0, rig.HipHeight + drop, 0)) * ANG(0, v.Yaw, 0)
+			applyPose(rig, evalPose(v, t), t, v.Phase)
 		end
+	end
+end
+
+function Renderer.Cheer()
+	for _, v in pairs(unitViews) do
+		task.delay(math.random() * 0.3, function()
+			if v.Rig then
+				v.Anim = { Start = os.clock(), Frames = Anims.Cheer() }
+			end
+		end)
 	end
 end
 

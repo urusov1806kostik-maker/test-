@@ -92,6 +92,13 @@ tick(0.2)
 standIn(nil)
 assert(not visible("☰ ЮНИТЫ"), "inventory must close when leaving circle")
 print("units circle ok")
+findButton("☰ ЮНИТЫ").Activated:Fire()
+tick(0.1)
+assert(visible("☰ ЮНИТЫ"), "inventory button must open inventory")
+UIS.InputBegan:Fire({ UserInputType = env.Enum.UserInputType.Keyboard, KeyCode = env.Enum.KeyCode.G }, false)
+tick(0.1)
+assert(not visible("☰ ЮНИТЫ"), "G must toggle inventory")
+print("inventory button ok")
 
 -- summon в круге
 standIn("Summon")
