@@ -7,7 +7,7 @@ prefix: "&8[<g:#7B2FF7:#F107A3>&lShadowSMP</g>&8] &7"
 # ---------- Обязательный ресурспак ----------
 resource-pack:
   # Прямая ссылка на ShadowSMP-pack.zip (GitHub raw / Dropbox ?dl=1 / mc-packs.net)
-  url: "https://raw.githubusercontent.com/urusov1806kostik-maker/test-/main/resourcepack/ShadowSMP-pack.zip"
+  url: "https://raw.githubusercontent.com/urusov1806kostik-maker/test-/claude/tender-archimedes-urm1j1/resourcepack/ShadowSMP-pack.zip"
   # Оставь пустым — плагин сам посчитает SHA-1 при старте
   sha1: ""
   force: true
