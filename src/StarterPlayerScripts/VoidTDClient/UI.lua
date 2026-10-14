@@ -267,6 +267,11 @@ local function buildHUD()
 		UI.Toggle("Inventory")
 	end)
 
+	-- облегчённая графика
+	refs.LiteButton = button({ Parent = gui, AnchorPoint = Vector2.new(1, 0), Size = UDim2.fromOffset(190, 40), Position = UDim2.new(1, -16, 0, 16), Text = "⚙ ГРАФИКА: ПОЛНАЯ", BackgroundColor3 = THEME.BG3 }, function()
+		ctx.SetLite(not ctx.Lite, true)
+	end)
+
 	-- выход из матча в лобби
 	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 170), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
 		ctx.Placement.Stop()
@@ -924,6 +929,11 @@ function UI.OnNotify(p)
 		UI.CloseUnit()
 		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
 	end
+end
+
+function UI.SetLiteText(on)
+	refs.LiteButton.Text = on and "⚙ ГРАФИКА: ЛЁГКАЯ" or "⚙ ГРАФИКА: ПОЛНАЯ"
+	refs.LiteButton.BackgroundColor3 = on and Color3.fromRGB(60, 110, 70) or THEME.BG3
 end
 
 function UI.SetProfile(prof)

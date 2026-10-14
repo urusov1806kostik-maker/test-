@@ -45,6 +45,47 @@ function ctx.Request(action, data)
 	return a, b
 end
 
+------------------------------------------------------------------------
+-- ОБЛЕГЧЁННАЯ ГРАФИКА
+------------------------------------------------------------------------
+local Lighting = game:GetService("Lighting")
+ctx.Lite = false
+
+local function applyWorldLite(on)
+	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby" }) do
+		local root = workspace:FindFirstChild(name)
+		if root then
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("ParticleEmitter") then
+					d.Enabled = not on
+				elseif d:IsA("PointLight") then
+					-- оставляем только самые яркие источники
+					d.Enabled = not on or d.Range >= 30
+				end
+			end
+		end
+	end
+	-- на клиенте изменения Lighting локальные
+	Lighting.GlobalShadows = not on
+	local bloom = Lighting:FindFirstChild("VoidBloom")
+	if bloom then
+		bloom.Enabled = not on
+	end
+end
+
+function ctx.SetLite(on, save)
+	ctx.Lite = on
+	ctx.UnitModels.Lite = on
+	FX.Lite = on
+	applyWorldLite(on)
+	Renderer.RebuildUnits()
+	UI.SetLiteText(on)
+	if save then
+		ctx.Request("SetLite", { On = on })
+		UI.Toast(on and "Лёгкая графика включена" or "Полная графика включена", "good")
+	end
+end
+
 FX.Init()
 Renderer.Init(ctx)
 UI.Init(ctx)
@@ -57,6 +98,17 @@ end
 local ok, prof = ctx.Request("GetProfile")
 if ok and prof then
 	UI.SetProfile(prof)
+end
+-- режим графики: из профиля, иначе на телефонах сразу лёгкий
+do
+	local saved = prof and prof.Settings and prof.Settings.Lite
+	local mobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+	local on = (saved == nil and mobile) or saved == true
+	task.spawn(function()
+		workspace:WaitForChild("VoidTDMap", 20)
+		workspace:WaitForChild("VoidTDLobby", 20)
+		ctx.SetLite(on, false)
+	end)
 end
 Remotes.Profile.OnClientEvent:Connect(function(p)
 	UI.SetProfile(p)

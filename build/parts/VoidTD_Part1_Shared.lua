@@ -528,6 +528,8 @@ FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "UnitModels" }, "ModuleSc
 -- UnitModels.Build(unitId, level) -> rig { Model, Motors, Base, Idle, Muzzle, ... }
 
 local UnitModels = {}
+-- Облегчённый режим: без мелких деталей, частиц, подсветки и шлейфов (меняется на клиенте)
+UnitModels.Lite = false
 
 local V = Vector3.new
 local V2 = Vector2.new
@@ -787,6 +789,9 @@ function Rig:Eyes(color, o)
 end
 
 function Rig:Glow(part, color, range, brightness)
+	if UnitModels.Lite then
+		return nil
+	end
 	local l = Instance.new("PointLight")
 	l.Color = color or P.Neon
 	l.Range = range or 8
@@ -797,6 +802,9 @@ function Rig:Glow(part, color, range, brightness)
 end
 
 function Rig:Sparkles(part, color, o)
+	if UnitModels.Lite then
+		return nil
+	end
 	o = o or {}
 	local e = Instance.new("ParticleEmitter")
 	e.Name = "Sparkles"
@@ -860,11 +868,17 @@ end
 
 -- Светящийся шлейф оружия (включается Renderer'ом во время анимаций)
 function Rig:WeaponTrail(limb, a, b, color)
+	if UnitModels.Lite then
+		return
+	end
 	table.insert(self.PendingTrails, { limb, a, b, color or P.NeonSoft })
 end
 
 -- Лицо: брови и рот. mood: "angry" | "calm" | "old"
 function Rig:Face(o)
+	if UnitModels.Lite then
+		return
+	end
 	local hs = self.HeadSize
 	local z = -hs.Z / 2 - 0.03
 	local y = (o.EyeY or 0.08) + 0.2
@@ -880,6 +894,9 @@ end
 
 -- Округлые кисти рук
 function Rig:Hands(color, material)
+	if UnitModels.Lite then
+		return
+	end
 	for _, A in ipairs({ self.RArm, self.LArm }) do
 		self:Sphere(A, V(1.08, 0.52, 1.08), CF(0, -0.93, 0), color or P.Coal, material or M.Plastic)
 	end
@@ -911,7 +928,7 @@ function Rig:Cape(width, length, color, tatter)
 	-- застёжки плаща
 	self:Box(T, V(0.3, 0.3, 0.2), CF(-0.75, 0.85, 0.55), P.Gold, M.Metal)
 	self:Box(T, V(0.3, 0.3, 0.2), CF(0.75, 0.85, 0.55), P.Gold, M.Metal)
-	if tatter then
+	if tatter and not UnitModels.Lite then
 		local seed = 0
 		for i = -2, 2 do
 			seed = seed + 1
@@ -1348,7 +1365,9 @@ local function VoidSoldier(lv)
 		r:Neon(T, V(0.55, 0.55, 0.08), CF(0, 0.35, -0.7) * ANG(0, 0, rad(45)), P.Neon)
 		r:Neon(H, V(1.48, 0.08, 0.06), CF(0, 0.55, -0.74), P.Neon)
 	end
-	Details.VoidSoldier(r, lv)
+	if not UnitModels.Lite then
+		Details.VoidSoldier(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1, { RS = { 15, 0, 0 } })
 end
@@ -1411,7 +1430,9 @@ local function ShadowArcher(lv)
 		r:Glow(quiver, P.Neon, 6, 1)
 	end
 	r:Hands(P.Coal, M.Fabric)
-	Details.ShadowArcher(r, lv)
+	if not UnitModels.Lite then
+		Details.ShadowArcher(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1, { LS = { 20, 0, 0 } })
 end
@@ -1465,7 +1486,9 @@ local function LostMage(lv)
 	r:Face({ Mood = "old", EyeY = 0.12, BrowColor = P.White, Mouth = false })
 	r:Hands(P.Pale)
 	r:WeaponTrail(RA, V(0, 2.0, -0.55), V(0, 3.0, -0.55), P.Neon)
-	Details.LostMage(r, lv)
+	if not UnitModels.Lite then
+		Details.LostMage(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1, { RS = { 10, 0, 0 }, LS = { 8, 0, 0 } })
 end
@@ -1527,7 +1550,9 @@ local function VoidKnight(lv)
 		r:Horn(H, 1, V(0.6, 0.55, 0.1), 0.8, P.Black)
 		r:Horn(H, -1, V(-0.6, 0.55, 0.1), 0.8, P.Black)
 	end
-	Details.VoidKnight(r, lv)
+	if not UnitModels.Lite then
+		Details.VoidKnight(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.1, { RS = { 20, 0, 0 } })
 end
@@ -1589,7 +1614,9 @@ local function DarkGunner(lv)
 		r:Box(T, V(0.6, 2.2, 0.15), CF(0.5, -0.3, 0.55) * ANG(0, 0, rad(10)), P.DeepViolet, M.Fabric)
 	end
 	r:Hands(P.Black)
-	Details.DarkGunner(r, lv)
+	if not UnitModels.Lite then
+		Details.DarkGunner(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.05, { RS = { 75, 0, 0 }, LS = { 70, 0, -25 }, Neck = { 0, 0, 0 } })
 end
@@ -1660,7 +1687,9 @@ local function AbyssReaper(lv)
 	end
 	r:Hands(P.Pale)
 	r:WeaponTrail(RA, top + V(0, -0.2, -0.6) * bl, top + V(0, -1.3, -3.2) * bl, P.Neon)
-	Details.AbyssReaper(r, lv)
+	if not UnitModels.Lite then
+		Details.AbyssReaper(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.15, { RS = { 8, 0, 0 } })
 end
@@ -1725,7 +1754,9 @@ local function CorruptedSamurai(lv)
 	end
 	r:Hands(P.Black)
 	r:WeaponTrail(RA, V(0, -0.95, -0.9), V(0, -0.8, -0.6 - len), lv >= 5 and P.NeonPink or P.Neon)
-	Details.CorruptedSamurai(r, lv)
+	if not UnitModels.Lite then
+		Details.CorruptedSamurai(r, lv)
+	end
 	levelAura(r, lv, lv >= 5 and P.NeonPink or P.Neon)
 	return r:Finish(1.1, { RS = { 25, 0, 0 }, LS = { 10, 0, 0 } })
 end
@@ -1790,7 +1821,9 @@ local function EclipseGuardian(lv)
 		r:Horn(H, 1, V(0.5, 0.75, 0.3), 0.8, P.Neon)
 		r:Horn(H, -1, V(-0.5, 0.75, 0.3), 0.8, P.Neon)
 	end
-	Details.EclipseGuardian(r, lv)
+	if not UnitModels.Lite then
+		Details.EclipseGuardian(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.3, { RS = { 30, 0, 0 } })
 end
@@ -1859,7 +1892,9 @@ local function FallenAngel(lv)
 	r:Face({ Mood = "calm", EyeY = 0.05, BrowColor = P.Coal })
 	r:Hands(P.Coal)
 	r:WeaponTrail(RA, V(0, 3.0 * sl, -0.55), V(0, 5.2 * sl, -0.55), P.NeonSoft)
-	Details.FallenAngel(r, lv)
+	if not UnitModels.Lite then
+		Details.FallenAngel(r, lv)
+	end
 	levelAura(r, lv, P.NeonSoft)
 	return r:Finish(1.25, { RS = { 10, 0, 0 } })
 end
@@ -1931,7 +1966,9 @@ local function VoidEmperor(lv)
 	end
 	r:Face({ Mood = "angry", EyeY = 0.1, BrowColor = P.Black, Mouth = false })
 	r:Hands(P.Black, M.Metal)
-	Details.VoidEmperor(r, lv)
+	if not UnitModels.Lite then
+		Details.VoidEmperor(r, lv)
+	end
 	levelAura(r, lv, P.NeonPink)
 	return r:Finish(1.4, { RS = { 15, 0, 0 } })
 end
@@ -1994,7 +2031,9 @@ local function AbyssOverlord(lv)
 	end
 	r:WeaponTrail(RA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
 	r:WeaponTrail(LA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
-	Details.AbyssOverlord(r, lv)
+	if not UnitModels.Lite then
+		Details.AbyssOverlord(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.55, { RS = { 12, 0, 8 }, LS = { 12, 0, -8 } })
 end
@@ -2034,7 +2073,7 @@ function UnitModels.Build(unitId, level)
 	end
 	local rig = builder(math.clamp(level or 1, 1, 5))
 	rig.Model.Name = unitId
-	local aura = RARITY_AURA[UNIT_RARITY[unitId] or ""]
+	local aura = not UnitModels.Lite and RARITY_AURA[UNIT_RARITY[unitId] or ""]
 	if aura then
 		local at = Instance.new("Attachment")
 		at.Name = "AuraPoint"

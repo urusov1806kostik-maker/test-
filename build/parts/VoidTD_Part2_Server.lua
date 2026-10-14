@@ -175,6 +175,14 @@ handlers.GetMatchInfo = function()
 	return true, GameService.GetMatchInfo()
 end
 
+handlers.SetLite = function(player, data)
+	local prof = DataService.Get(player)
+	prof.Settings = prof.Settings or {}
+	prof.Settings.Lite = type(data) == "table" and data.On == true
+	DataService.Save(player)
+	return true
+end
+
 handlers.StartWave = function(player)
 	return GameService.RequestStartWave(player)
 end
@@ -1280,6 +1288,7 @@ local function defaultProfile()
 		Inventory = {},
 		Equipped = {},
 		Stats = { Wins = 0, BestWave = 0, Summons = 0 },
+		Settings = {},
 	}
 	for i, id in ipairs(s.StarterUnits) do
 		p.Inventory[id] = 1
@@ -1297,6 +1306,7 @@ local function sanitize(p)
 	p.Inventory = type(p.Inventory) == "table" and p.Inventory or d.Inventory
 	p.Equipped = type(p.Equipped) == "table" and p.Equipped or d.Equipped
 	p.Stats = type(p.Stats) == "table" and p.Stats or d.Stats
+	p.Settings = type(p.Settings) == "table" and p.Settings or {}
 	-- убрать неизвестные юниты
 	for id in pairs(p.Inventory) do
 		if not Config.Units[id] then
@@ -1395,6 +1405,7 @@ function DataService.Snapshot(player)
 		Inventory = deepCopy(p.Inventory),
 		Equipped = eq,
 		Stats = deepCopy(p.Stats),
+		Settings = deepCopy(p.Settings or {}),
 	}
 end
 

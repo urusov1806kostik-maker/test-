@@ -667,7 +667,7 @@ local function buildUnitView(view)
 	gui.Name = "Tag"
 	gui.Size = UDim2.fromOffset(110, 34)
 	gui.StudsOffsetWorldSpace = V(0, 2.7 * rig.Scale + 1.2, 0)
-	gui.MaxDistance = 70
+	gui.MaxDistance = (ctx and ctx.Lite) and 30 or 70
 	gui.LightInfluence = 0
 	gui.Adornee = rig.Root
 	local def = Config.Units[view.UnitId]
@@ -975,6 +975,13 @@ local function updateUnits(t, dt)
 				end
 			end
 		end
+	end
+end
+
+-- Перестроить все модели юнитов (после смены режима графики)
+function Renderer.RebuildUnits()
+	for _, v in pairs(unitViews) do
+		buildUnitView(v)
 	end
 end
 

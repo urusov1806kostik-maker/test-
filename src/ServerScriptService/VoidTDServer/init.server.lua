@@ -132,6 +132,14 @@ handlers.GetMatchInfo = function()
 	return true, GameService.GetMatchInfo()
 end
 
+handlers.SetLite = function(player, data)
+	local prof = DataService.Get(player)
+	prof.Settings = prof.Settings or {}
+	prof.Settings.Lite = type(data) == "table" and data.On == true
+	DataService.Save(player)
+	return true
+end
+
 handlers.StartWave = function(player)
 	return GameService.RequestStartWave(player)
 end

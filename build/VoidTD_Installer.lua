@@ -542,6 +542,8 @@ FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "UnitModels" }, "ModuleSc
 -- UnitModels.Build(unitId, level) -> rig { Model, Motors, Base, Idle, Muzzle, ... }
 
 local UnitModels = {}
+-- Облегчённый режим: без мелких деталей, частиц, подсветки и шлейфов (меняется на клиенте)
+UnitModels.Lite = false
 
 local V = Vector3.new
 local V2 = Vector2.new
@@ -801,6 +803,9 @@ function Rig:Eyes(color, o)
 end
 
 function Rig:Glow(part, color, range, brightness)
+	if UnitModels.Lite then
+		return nil
+	end
 	local l = Instance.new("PointLight")
 	l.Color = color or P.Neon
 	l.Range = range or 8
@@ -811,6 +816,9 @@ function Rig:Glow(part, color, range, brightness)
 end
 
 function Rig:Sparkles(part, color, o)
+	if UnitModels.Lite then
+		return nil
+	end
 	o = o or {}
 	local e = Instance.new("ParticleEmitter")
 	e.Name = "Sparkles"
@@ -874,11 +882,17 @@ end
 
 -- Светящийся шлейф оружия (включается Renderer'ом во время анимаций)
 function Rig:WeaponTrail(limb, a, b, color)
+	if UnitModels.Lite then
+		return
+	end
 	table.insert(self.PendingTrails, { limb, a, b, color or P.NeonSoft })
 end
 
 -- Лицо: брови и рот. mood: "angry" | "calm" | "old"
 function Rig:Face(o)
+	if UnitModels.Lite then
+		return
+	end
 	local hs = self.HeadSize
 	local z = -hs.Z / 2 - 0.03
 	local y = (o.EyeY or 0.08) + 0.2
@@ -894,6 +908,9 @@ end
 
 -- Округлые кисти рук
 function Rig:Hands(color, material)
+	if UnitModels.Lite then
+		return
+	end
 	for _, A in ipairs({ self.RArm, self.LArm }) do
 		self:Sphere(A, V(1.08, 0.52, 1.08), CF(0, -0.93, 0), color or P.Coal, material or M.Plastic)
 	end
@@ -925,7 +942,7 @@ function Rig:Cape(width, length, color, tatter)
 	-- застёжки плаща
 	self:Box(T, V(0.3, 0.3, 0.2), CF(-0.75, 0.85, 0.55), P.Gold, M.Metal)
 	self:Box(T, V(0.3, 0.3, 0.2), CF(0.75, 0.85, 0.55), P.Gold, M.Metal)
-	if tatter then
+	if tatter and not UnitModels.Lite then
 		local seed = 0
 		for i = -2, 2 do
 			seed = seed + 1
@@ -1362,7 +1379,9 @@ local function VoidSoldier(lv)
 		r:Neon(T, V(0.55, 0.55, 0.08), CF(0, 0.35, -0.7) * ANG(0, 0, rad(45)), P.Neon)
 		r:Neon(H, V(1.48, 0.08, 0.06), CF(0, 0.55, -0.74), P.Neon)
 	end
-	Details.VoidSoldier(r, lv)
+	if not UnitModels.Lite then
+		Details.VoidSoldier(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1, { RS = { 15, 0, 0 } })
 end
@@ -1425,7 +1444,9 @@ local function ShadowArcher(lv)
 		r:Glow(quiver, P.Neon, 6, 1)
 	end
 	r:Hands(P.Coal, M.Fabric)
-	Details.ShadowArcher(r, lv)
+	if not UnitModels.Lite then
+		Details.ShadowArcher(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1, { LS = { 20, 0, 0 } })
 end
@@ -1479,7 +1500,9 @@ local function LostMage(lv)
 	r:Face({ Mood = "old", EyeY = 0.12, BrowColor = P.White, Mouth = false })
 	r:Hands(P.Pale)
 	r:WeaponTrail(RA, V(0, 2.0, -0.55), V(0, 3.0, -0.55), P.Neon)
-	Details.LostMage(r, lv)
+	if not UnitModels.Lite then
+		Details.LostMage(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1, { RS = { 10, 0, 0 }, LS = { 8, 0, 0 } })
 end
@@ -1541,7 +1564,9 @@ local function VoidKnight(lv)
 		r:Horn(H, 1, V(0.6, 0.55, 0.1), 0.8, P.Black)
 		r:Horn(H, -1, V(-0.6, 0.55, 0.1), 0.8, P.Black)
 	end
-	Details.VoidKnight(r, lv)
+	if not UnitModels.Lite then
+		Details.VoidKnight(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.1, { RS = { 20, 0, 0 } })
 end
@@ -1603,7 +1628,9 @@ local function DarkGunner(lv)
 		r:Box(T, V(0.6, 2.2, 0.15), CF(0.5, -0.3, 0.55) * ANG(0, 0, rad(10)), P.DeepViolet, M.Fabric)
 	end
 	r:Hands(P.Black)
-	Details.DarkGunner(r, lv)
+	if not UnitModels.Lite then
+		Details.DarkGunner(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.05, { RS = { 75, 0, 0 }, LS = { 70, 0, -25 }, Neck = { 0, 0, 0 } })
 end
@@ -1674,7 +1701,9 @@ local function AbyssReaper(lv)
 	end
 	r:Hands(P.Pale)
 	r:WeaponTrail(RA, top + V(0, -0.2, -0.6) * bl, top + V(0, -1.3, -3.2) * bl, P.Neon)
-	Details.AbyssReaper(r, lv)
+	if not UnitModels.Lite then
+		Details.AbyssReaper(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.15, { RS = { 8, 0, 0 } })
 end
@@ -1739,7 +1768,9 @@ local function CorruptedSamurai(lv)
 	end
 	r:Hands(P.Black)
 	r:WeaponTrail(RA, V(0, -0.95, -0.9), V(0, -0.8, -0.6 - len), lv >= 5 and P.NeonPink or P.Neon)
-	Details.CorruptedSamurai(r, lv)
+	if not UnitModels.Lite then
+		Details.CorruptedSamurai(r, lv)
+	end
 	levelAura(r, lv, lv >= 5 and P.NeonPink or P.Neon)
 	return r:Finish(1.1, { RS = { 25, 0, 0 }, LS = { 10, 0, 0 } })
 end
@@ -1804,7 +1835,9 @@ local function EclipseGuardian(lv)
 		r:Horn(H, 1, V(0.5, 0.75, 0.3), 0.8, P.Neon)
 		r:Horn(H, -1, V(-0.5, 0.75, 0.3), 0.8, P.Neon)
 	end
-	Details.EclipseGuardian(r, lv)
+	if not UnitModels.Lite then
+		Details.EclipseGuardian(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.3, { RS = { 30, 0, 0 } })
 end
@@ -1873,7 +1906,9 @@ local function FallenAngel(lv)
 	r:Face({ Mood = "calm", EyeY = 0.05, BrowColor = P.Coal })
 	r:Hands(P.Coal)
 	r:WeaponTrail(RA, V(0, 3.0 * sl, -0.55), V(0, 5.2 * sl, -0.55), P.NeonSoft)
-	Details.FallenAngel(r, lv)
+	if not UnitModels.Lite then
+		Details.FallenAngel(r, lv)
+	end
 	levelAura(r, lv, P.NeonSoft)
 	return r:Finish(1.25, { RS = { 10, 0, 0 } })
 end
@@ -1945,7 +1980,9 @@ local function VoidEmperor(lv)
 	end
 	r:Face({ Mood = "angry", EyeY = 0.1, BrowColor = P.Black, Mouth = false })
 	r:Hands(P.Black, M.Metal)
-	Details.VoidEmperor(r, lv)
+	if not UnitModels.Lite then
+		Details.VoidEmperor(r, lv)
+	end
 	levelAura(r, lv, P.NeonPink)
 	return r:Finish(1.4, { RS = { 15, 0, 0 } })
 end
@@ -2008,7 +2045,9 @@ local function AbyssOverlord(lv)
 	end
 	r:WeaponTrail(RA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
 	r:WeaponTrail(LA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
-	Details.AbyssOverlord(r, lv)
+	if not UnitModels.Lite then
+		Details.AbyssOverlord(r, lv)
+	end
 	levelAura(r, lv)
 	return r:Finish(1.55, { RS = { 12, 0, 8 }, LS = { 12, 0, -8 } })
 end
@@ -2048,7 +2087,7 @@ function UnitModels.Build(unitId, level)
 	end
 	local rig = builder(math.clamp(level or 1, 1, 5))
 	rig.Model.Name = unitId
-	local aura = RARITY_AURA[UNIT_RARITY[unitId] or ""]
+	local aura = not UnitModels.Lite and RARITY_AURA[UNIT_RARITY[unitId] or ""]
 	if aura then
 		local at = Instance.new("Attachment")
 		at.Name = "AuraPoint"
@@ -2604,6 +2643,14 @@ end
 
 handlers.GetMatchInfo = function()
 	return true, GameService.GetMatchInfo()
+end
+
+handlers.SetLite = function(player, data)
+	local prof = DataService.Get(player)
+	prof.Settings = prof.Settings or {}
+	prof.Settings.Lite = type(data) == "table" and data.On == true
+	DataService.Save(player)
+	return true
 end
 
 handlers.StartWave = function(player)
@@ -3711,6 +3758,7 @@ local function defaultProfile()
 		Inventory = {},
 		Equipped = {},
 		Stats = { Wins = 0, BestWave = 0, Summons = 0 },
+		Settings = {},
 	}
 	for i, id in ipairs(s.StarterUnits) do
 		p.Inventory[id] = 1
@@ -3728,6 +3776,7 @@ local function sanitize(p)
 	p.Inventory = type(p.Inventory) == "table" and p.Inventory or d.Inventory
 	p.Equipped = type(p.Equipped) == "table" and p.Equipped or d.Equipped
 	p.Stats = type(p.Stats) == "table" and p.Stats or d.Stats
+	p.Settings = type(p.Settings) == "table" and p.Settings or {}
 	-- убрать неизвестные юниты
 	for id in pairs(p.Inventory) do
 		if not Config.Units[id] then
@@ -3826,6 +3875,7 @@ function DataService.Snapshot(player)
 		Inventory = deepCopy(p.Inventory),
 		Equipped = eq,
 		Stats = deepCopy(p.Stats),
+		Settings = deepCopy(p.Settings or {}),
 	}
 end
 
@@ -4948,6 +4998,47 @@ function ctx.Request(action, data)
 	return a, b
 end
 
+------------------------------------------------------------------------
+-- ОБЛЕГЧЁННАЯ ГРАФИКА
+------------------------------------------------------------------------
+local Lighting = game:GetService("Lighting")
+ctx.Lite = false
+
+local function applyWorldLite(on)
+	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby" }) do
+		local root = workspace:FindFirstChild(name)
+		if root then
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("ParticleEmitter") then
+					d.Enabled = not on
+				elseif d:IsA("PointLight") then
+					-- оставляем только самые яркие источники
+					d.Enabled = not on or d.Range >= 30
+				end
+			end
+		end
+	end
+	-- на клиенте изменения Lighting локальные
+	Lighting.GlobalShadows = not on
+	local bloom = Lighting:FindFirstChild("VoidBloom")
+	if bloom then
+		bloom.Enabled = not on
+	end
+end
+
+function ctx.SetLite(on, save)
+	ctx.Lite = on
+	ctx.UnitModels.Lite = on
+	FX.Lite = on
+	applyWorldLite(on)
+	Renderer.RebuildUnits()
+	UI.SetLiteText(on)
+	if save then
+		ctx.Request("SetLite", { On = on })
+		UI.Toast(on and "Лёгкая графика включена" or "Полная графика включена", "good")
+	end
+end
+
 FX.Init()
 Renderer.Init(ctx)
 UI.Init(ctx)
@@ -4960,6 +5051,17 @@ end
 local ok, prof = ctx.Request("GetProfile")
 if ok and prof then
 	UI.SetProfile(prof)
+end
+-- режим графики: из профиля, иначе на телефонах сразу лёгкий
+do
+	local saved = prof and prof.Settings and prof.Settings.Lite
+	local mobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+	local on = (saved == nil and mobile) or saved == true
+	task.spawn(function()
+		workspace:WaitForChild("VoidTDMap", 20)
+		workspace:WaitForChild("VoidTDLobby", 20)
+		ctx.SetLite(on, false)
+	end)
 end
 Remotes.Profile.OnClientEvent:Connect(function(p)
 	UI.SetProfile(p)
@@ -5220,6 +5322,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local FX = {}
+FX.Lite = false -- облегчённый режим: меньше частиц и обломков
 
 local V = Vector3.new
 local CF = CFrame.new
@@ -5360,6 +5463,9 @@ end
 ------------------------------------------------------------------------
 function FX.Burst(pos, color, count, size, speed, life)
 	count = count or 8
+	if FX.Lite then
+		count = math.min(math.ceil(count / 3), 4)
+	end
 	size = size or 0.4
 	speed = speed or 6
 	life = life or 0.45
@@ -5460,6 +5566,9 @@ function FX.SlashMark(pos, angle, length, width, color, life)
 end
 
 function FX.Cracks(pos, radius, color, count, life)
+	if FX.Lite then
+		return
+	end
 	count = count or 8
 	life = life or 1.4
 	for i = 1, count do
@@ -5575,7 +5684,7 @@ function FX.Beam(from, to, width, color, life, big)
 	cleanup(outer, life + 0.2)
 	cleanup(inner, life + 0.2)
 	-- кольца вдоль луча
-	local rings = big and 6 or 3
+	local rings = FX.Lite and 1 or (big and 6 or 3)
 	for i = 1, rings do
 		local pt = from:Lerp(to, i / (rings + 1))
 		local ring = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.15, width * 1.6, width * 1.6), CFrame = CFrame.lookAt(pt, to) * ANG(0, rad(90), 0), Color = color or NEON, Transparency = 0.3 })
@@ -5605,7 +5714,7 @@ function FX.Shockwave(pos, radius, lv)
 	end)
 	FX.Cracks(g, radius, NEON, 6 + lv * 2, 1.4)
 	-- пыль/осколки
-	for _ = 1, 6 + lv do
+	for _ = 1, FX.Lite and 0 or (6 + lv) do
 		local a = rng:NextNumber(0, math.pi * 2)
 		local r = rng:NextNumber(1, radius * 0.8)
 		local p = g + V(math.cos(a) * r, 0, math.sin(a) * r)
@@ -5683,7 +5792,7 @@ function FX.BlackHole(pos, radius, duration, lv, delay)
 		tween(edge, 0.4, { Size = V(0.1, radius * 2 + 0.6, radius * 2 + 0.6) })
 		-- закручивающиеся рукава
 		local arms = {}
-		for i = 1, 4 + (lv >= 5 and 2 or 0) do
+		for i = 1, FX.Lite and 2 or (4 + (lv >= 5 and 2 or 0)) do
 			arms[i] = FX.Part({ Size = V(0.35, 0.2, radius * 0.9), Color = (i % 2 == 0) and NEON or NEON_SOFT, Transparency = 0.2, Parent = m })
 		end
 		local emitter = Instance.new("ParticleEmitter")
@@ -5757,7 +5866,7 @@ end
 -- ЦИФРЫ УРОНА
 ------------------------------------------------------------------------
 function FX.DamageNumber(pos, amount, flag)
-	if numberCount > 70 then
+	if numberCount > (FX.Lite and 20 or 70) then
 		return
 	end
 	numberCount = numberCount + 1
@@ -6472,7 +6581,7 @@ local function buildUnitView(view)
 	gui.Name = "Tag"
 	gui.Size = UDim2.fromOffset(110, 34)
 	gui.StudsOffsetWorldSpace = V(0, 2.7 * rig.Scale + 1.2, 0)
-	gui.MaxDistance = 70
+	gui.MaxDistance = (ctx and ctx.Lite) and 30 or 70
 	gui.LightInfluence = 0
 	gui.Adornee = rig.Root
 	local def = Config.Units[view.UnitId]
@@ -6783,6 +6892,13 @@ local function updateUnits(t, dt)
 	end
 end
 
+-- Перестроить все модели юнитов (после смены режима графики)
+function Renderer.RebuildUnits()
+	for _, v in pairs(unitViews) do
+		buildUnitView(v)
+	end
+end
+
 function Renderer.Cheer()
 	for _, v in pairs(unitViews) do
 		task.delay(math.random() * 0.3, function()
@@ -7089,6 +7205,11 @@ local function buildHUD()
 	-- инвентарь всегда на экране
 	refs.InvButton = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "☰ ЮНИТЫ (G)", BackgroundColor3 = THEME.BG3 }, function()
 		UI.Toggle("Inventory")
+	end)
+
+	-- облегчённая графика
+	refs.LiteButton = button({ Parent = gui, AnchorPoint = Vector2.new(1, 0), Size = UDim2.fromOffset(190, 40), Position = UDim2.new(1, -16, 0, 16), Text = "⚙ ГРАФИКА: ПОЛНАЯ", BackgroundColor3 = THEME.BG3 }, function()
+		ctx.SetLite(not ctx.Lite, true)
 	end)
 
 	-- выход из матча в лобби
@@ -7748,6 +7869,11 @@ function UI.OnNotify(p)
 		UI.CloseUnit()
 		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
 	end
+end
+
+function UI.SetLiteText(on)
+	refs.LiteButton.Text = on and "⚙ ГРАФИКА: ЛЁГКАЯ" or "⚙ ГРАФИКА: ПОЛНАЯ"
+	refs.LiteButton.BackgroundColor3 = on and Color3.fromRGB(60, 110, 70) or THEME.BG3
 end
 
 function UI.SetProfile(prof)

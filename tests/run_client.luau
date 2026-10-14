@@ -157,6 +157,25 @@ for _, f in ipairs(RS.VoidTD.Units:GetChildren()) do
 	key("T")
 	tick(0.3)
 end
+-- облегчённая графика: меньше деталей у моделей
+local function unitParts()
+	local n = 0
+	for _, d in ipairs(M.workspace.VoidTD_Units:GetDescendants()) do
+		if rawget(d, "_isPart") then n += 1 end
+	end
+	return n
+end
+local fullParts = unitParts()
+findButton("⚙").Activated:Fire()
+tick(0.2)
+local liteParts = unitParts()
+print("unit parts full/lite:", fullParts, liteParts)
+assert(liteParts < fullParts * 0.75, "lite mode must reduce parts")
+assert(findButton("⚙").Text:find("ЛЁГКАЯ"), "button text")
+assert(DS.Get(player).Settings.Lite == true, "lite setting must be saved")
+findButton("⚙").Activated:Fire()
+tick(0.2)
+assert(unitParts() == fullParts, "full mode must restore parts")
 print("upgrades done; levels:", (function() local s = 0 for _, f in ipairs(RS.VoidTD.Units:GetChildren()) do s = s + f:GetAttribute("Level") end return s end)())
 
 -- волны с боссом

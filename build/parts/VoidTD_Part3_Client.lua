@@ -88,6 +88,47 @@ function ctx.Request(action, data)
 	return a, b
 end
 
+------------------------------------------------------------------------
+-- ОБЛЕГЧЁННАЯ ГРАФИКА
+------------------------------------------------------------------------
+local Lighting = game:GetService("Lighting")
+ctx.Lite = false
+
+local function applyWorldLite(on)
+	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby" }) do
+		local root = workspace:FindFirstChild(name)
+		if root then
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("ParticleEmitter") then
+					d.Enabled = not on
+				elseif d:IsA("PointLight") then
+					-- оставляем только самые яркие источники
+					d.Enabled = not on or d.Range >= 30
+				end
+			end
+		end
+	end
+	-- на клиенте изменения Lighting локальные
+	Lighting.GlobalShadows = not on
+	local bloom = Lighting:FindFirstChild("VoidBloom")
+	if bloom then
+		bloom.Enabled = not on
+	end
+end
+
+function ctx.SetLite(on, save)
+	ctx.Lite = on
+	ctx.UnitModels.Lite = on
+	FX.Lite = on
+	applyWorldLite(on)
+	Renderer.RebuildUnits()
+	UI.SetLiteText(on)
+	if save then
+		ctx.Request("SetLite", { On = on })
+		UI.Toast(on and "Лёгкая графика включена" or "Полная графика включена", "good")
+	end
+end
+
 FX.Init()
 Renderer.Init(ctx)
 UI.Init(ctx)
@@ -100,6 +141,17 @@ end
 local ok, prof = ctx.Request("GetProfile")
 if ok and prof then
 	UI.SetProfile(prof)
+end
+-- режим графики: из профиля, иначе на телефонах сразу лёгкий
+do
+	local saved = prof and prof.Settings and prof.Settings.Lite
+	local mobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+	local on = (saved == nil and mobile) or saved == true
+	task.spawn(function()
+		workspace:WaitForChild("VoidTDMap", 20)
+		workspace:WaitForChild("VoidTDLobby", 20)
+		ctx.SetLite(on, false)
+	end)
 end
 Remotes.Profile.OnClientEvent:Connect(function(p)
 	UI.SetProfile(p)
@@ -360,6 +412,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local FX = {}
+FX.Lite = false -- облегчённый режим: меньше частиц и обломков
 
 local V = Vector3.new
 local CF = CFrame.new
@@ -500,6 +553,9 @@ end
 ------------------------------------------------------------------------
 function FX.Burst(pos, color, count, size, speed, life)
 	count = count or 8
+	if FX.Lite then
+		count = math.min(math.ceil(count / 3), 4)
+	end
 	size = size or 0.4
 	speed = speed or 6
 	life = life or 0.45
@@ -600,6 +656,9 @@ function FX.SlashMark(pos, angle, length, width, color, life)
 end
 
 function FX.Cracks(pos, radius, color, count, life)
+	if FX.Lite then
+		return
+	end
 	count = count or 8
 	life = life or 1.4
 	for i = 1, count do
@@ -715,7 +774,7 @@ function FX.Beam(from, to, width, color, life, big)
 	cleanup(outer, life + 0.2)
 	cleanup(inner, life + 0.2)
 	-- кольца вдоль луча
-	local rings = big and 6 or 3
+	local rings = FX.Lite and 1 or (big and 6 or 3)
 	for i = 1, rings do
 		local pt = from:Lerp(to, i / (rings + 1))
 		local ring = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.15, width * 1.6, width * 1.6), CFrame = CFrame.lookAt(pt, to) * ANG(0, rad(90), 0), Color = color or NEON, Transparency = 0.3 })
@@ -745,7 +804,7 @@ function FX.Shockwave(pos, radius, lv)
 	end)
 	FX.Cracks(g, radius, NEON, 6 + lv * 2, 1.4)
 	-- пыль/осколки
-	for _ = 1, 6 + lv do
+	for _ = 1, FX.Lite and 0 or (6 + lv) do
 		local a = rng:NextNumber(0, math.pi * 2)
 		local r = rng:NextNumber(1, radius * 0.8)
 		local p = g + V(math.cos(a) * r, 0, math.sin(a) * r)
@@ -823,7 +882,7 @@ function FX.BlackHole(pos, radius, duration, lv, delay)
 		tween(edge, 0.4, { Size = V(0.1, radius * 2 + 0.6, radius * 2 + 0.6) })
 		-- закручивающиеся рукава
 		local arms = {}
-		for i = 1, 4 + (lv >= 5 and 2 or 0) do
+		for i = 1, FX.Lite and 2 or (4 + (lv >= 5 and 2 or 0)) do
 			arms[i] = FX.Part({ Size = V(0.35, 0.2, radius * 0.9), Color = (i % 2 == 0) and NEON or NEON_SOFT, Transparency = 0.2, Parent = m })
 		end
 		local emitter = Instance.new("ParticleEmitter")
@@ -897,7 +956,7 @@ end
 -- ЦИФРЫ УРОНА
 ------------------------------------------------------------------------
 function FX.DamageNumber(pos, amount, flag)
-	if numberCount > 70 then
+	if numberCount > (FX.Lite and 20 or 70) then
 		return
 	end
 	numberCount = numberCount + 1
@@ -1612,7 +1671,7 @@ local function buildUnitView(view)
 	gui.Name = "Tag"
 	gui.Size = UDim2.fromOffset(110, 34)
 	gui.StudsOffsetWorldSpace = V(0, 2.7 * rig.Scale + 1.2, 0)
-	gui.MaxDistance = 70
+	gui.MaxDistance = (ctx and ctx.Lite) and 30 or 70
 	gui.LightInfluence = 0
 	gui.Adornee = rig.Root
 	local def = Config.Units[view.UnitId]
@@ -1923,6 +1982,13 @@ local function updateUnits(t, dt)
 	end
 end
 
+-- Перестроить все модели юнитов (после смены режима графики)
+function Renderer.RebuildUnits()
+	for _, v in pairs(unitViews) do
+		buildUnitView(v)
+	end
+end
+
 function Renderer.Cheer()
 	for _, v in pairs(unitViews) do
 		task.delay(math.random() * 0.3, function()
@@ -2229,6 +2295,11 @@ local function buildHUD()
 	-- инвентарь всегда на экране
 	refs.InvButton = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "☰ ЮНИТЫ (G)", BackgroundColor3 = THEME.BG3 }, function()
 		UI.Toggle("Inventory")
+	end)
+
+	-- облегчённая графика
+	refs.LiteButton = button({ Parent = gui, AnchorPoint = Vector2.new(1, 0), Size = UDim2.fromOffset(190, 40), Position = UDim2.new(1, -16, 0, 16), Text = "⚙ ГРАФИКА: ПОЛНАЯ", BackgroundColor3 = THEME.BG3 }, function()
+		ctx.SetLite(not ctx.Lite, true)
 	end)
 
 	-- выход из матча в лобби
@@ -2888,6 +2959,11 @@ function UI.OnNotify(p)
 		UI.CloseUnit()
 		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
 	end
+end
+
+function UI.SetLiteText(on)
+	refs.LiteButton.Text = on and "⚙ ГРАФИКА: ЛЁГКАЯ" or "⚙ ГРАФИКА: ПОЛНАЯ"
+	refs.LiteButton.BackgroundColor3 = on and Color3.fromRGB(60, 110, 70) or THEME.BG3
 end
 
 function UI.SetProfile(prof)

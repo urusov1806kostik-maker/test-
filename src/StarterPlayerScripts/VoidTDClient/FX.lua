@@ -6,6 +6,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local FX = {}
+FX.Lite = false -- облегчённый режим: меньше частиц и обломков
 
 local V = Vector3.new
 local CF = CFrame.new
@@ -146,6 +147,9 @@ end
 ------------------------------------------------------------------------
 function FX.Burst(pos, color, count, size, speed, life)
 	count = count or 8
+	if FX.Lite then
+		count = math.min(math.ceil(count / 3), 4)
+	end
 	size = size or 0.4
 	speed = speed or 6
 	life = life or 0.45
@@ -246,6 +250,9 @@ function FX.SlashMark(pos, angle, length, width, color, life)
 end
 
 function FX.Cracks(pos, radius, color, count, life)
+	if FX.Lite then
+		return
+	end
 	count = count or 8
 	life = life or 1.4
 	for i = 1, count do
@@ -361,7 +368,7 @@ function FX.Beam(from, to, width, color, life, big)
 	cleanup(outer, life + 0.2)
 	cleanup(inner, life + 0.2)
 	-- кольца вдоль луча
-	local rings = big and 6 or 3
+	local rings = FX.Lite and 1 or (big and 6 or 3)
 	for i = 1, rings do
 		local pt = from:Lerp(to, i / (rings + 1))
 		local ring = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.15, width * 1.6, width * 1.6), CFrame = CFrame.lookAt(pt, to) * ANG(0, rad(90), 0), Color = color or NEON, Transparency = 0.3 })
@@ -391,7 +398,7 @@ function FX.Shockwave(pos, radius, lv)
 	end)
 	FX.Cracks(g, radius, NEON, 6 + lv * 2, 1.4)
 	-- пыль/осколки
-	for _ = 1, 6 + lv do
+	for _ = 1, FX.Lite and 0 or (6 + lv) do
 		local a = rng:NextNumber(0, math.pi * 2)
 		local r = rng:NextNumber(1, radius * 0.8)
 		local p = g + V(math.cos(a) * r, 0, math.sin(a) * r)
@@ -469,7 +476,7 @@ function FX.BlackHole(pos, radius, duration, lv, delay)
 		tween(edge, 0.4, { Size = V(0.1, radius * 2 + 0.6, radius * 2 + 0.6) })
 		-- закручивающиеся рукава
 		local arms = {}
-		for i = 1, 4 + (lv >= 5 and 2 or 0) do
+		for i = 1, FX.Lite and 2 or (4 + (lv >= 5 and 2 or 0)) do
 			arms[i] = FX.Part({ Size = V(0.35, 0.2, radius * 0.9), Color = (i % 2 == 0) and NEON or NEON_SOFT, Transparency = 0.2, Parent = m })
 		end
 		local emitter = Instance.new("ParticleEmitter")
@@ -543,7 +550,7 @@ end
 -- ЦИФРЫ УРОНА
 ------------------------------------------------------------------------
 function FX.DamageNumber(pos, amount, flag)
-	if numberCount > 70 then
+	if numberCount > (FX.Lite and 20 or 70) then
 		return
 	end
 	numberCount = numberCount + 1
