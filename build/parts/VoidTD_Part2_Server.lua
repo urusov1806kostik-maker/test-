@@ -789,23 +789,25 @@ local function darkTree(parent, rng, p)
 		local len = rng:NextNumber(3, 5)
 		local branch = topCF * ANG(0, a, 0) * CF(0, -1.2 * i * 0.5, 0) * ANG(rad(55), 0, 0) * CF(0, len / 2, 0)
 		part(m, { Name = "Branch", Size = V(0.7, len, 0.7), CFrame = branch, Color = C.Bark, Material = Enum.Material.Wood })
-		part(m, {
+		local leaves = part(m, {
 			Name = "Leaves",
 			Size = V(rng:NextNumber(3.5, 5.5), rng:NextNumber(2.5, 3.5), rng:NextNumber(3.5, 5.5)),
 			CFrame = branch * CF(0, len / 2 + 0.6, 0) * ANG(rad(rng:NextNumber(-15, 15)), rad(rng:NextNumber(0, 90)), 0),
 			Color = (i % 2 == 0) and C.Leaf or C.Leaf2,
 			Material = Enum.Material.Grass,
 		})
+		Instance.new("SpecialMesh", leaves).MeshType = Enum.MeshType.Sphere -- округлая листва
 	end
-	part(m, {
+	local crown = part(m, {
 		Name = "Crown",
 		Size = V(5.5, 4, 5.5),
 		CFrame = topCF * CF(0, 1.4, 0) * ANG(0, rad(rng:NextNumber(0, 90)), rad(rng:NextNumber(-8, 8))),
 		Color = C.Leaf,
 		Material = Enum.Material.Grass,
 	})
+	Instance.new("SpecialMesh", crown).MeshType = Enum.MeshType.Sphere
 	if rng:NextNumber() < 0.5 then
-		local fruit = part(m, { Name = "Glow", Size = V(0.7, 0.7, 0.7), CFrame = topCF * CF(1.5, 0, -1.8), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
+		local fruit = part(m, { Name = "Glow", Shape = Enum.PartType.Ball, Size = V(0.8, 0.8, 0.8), CFrame = topCF * CF(1.5, 0, -1.8), Color = C.NeonPink, Material = Enum.Material.Neon, CanCollide = false })
 		light(fruit, C.NeonPink, 8, 1)
 	end
 	return m

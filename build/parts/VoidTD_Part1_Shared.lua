@@ -619,6 +619,7 @@ function Rig.new(o)
 	self.LArm = limb("Left Arm", V(1, 2, 1), CF(-1.5, 0, 0), o.Arm or o.Torso or P.Dark)
 	self.RLeg = limb("Right Leg", V(1, 2, 1), CF(0.5, -2, 0), o.Leg or P.Black)
 	self.LLeg = limb("Left Leg", V(1, 2, 1), CF(-0.5, -2, 0), o.Leg or P.Black)
+	self.Pending = {}
 
 	local function motor(name, p0, p1, c0, c1)
 		local m = Instance.new("Motor6D")
@@ -636,6 +637,11 @@ function Rig.new(o)
 	motor("LS", self.Torso, self.LArm, CF(-1.5, 0.5, 0), CF(0, 0.5, 0))
 	motor("RH", self.Torso, self.RLeg, CF(0.5, -1, 0), CF(0, 1, 0))
 	motor("LH", self.Torso, self.LLeg, CF(-0.5, -1, 0), CF(0, 1, 0))
+	if o.RoundHead then
+		-- круглая голова-цилиндр в стиле классического Roblox; детали крепятся к невидимому кубу Head
+		self.Head.Transparency = 1
+		self:Cyl(self.Head, hs.Y, math.max(hs.X, hs.Z), CF(), o.Head or P.Skin, M.Plastic, "Y").Name = "HeadShape"
+	end
 	return self
 end
 
@@ -660,6 +666,36 @@ end
 
 function Rig:Box(limb, size, offset, color, material, props)
 	return self:Add(limb, "Part", size, offset, color, material, props)
+end
+
+local AXIS = {
+	X = CF(),
+	Y = ANG(0, 0, rad(90)),
+	Z = ANG(0, rad(90), 0),
+}
+
+-- Цилиндр: длина len вдоль оси axis ("X" | "Y" | "Z"), диаметр d
+function Rig:Cyl(limb, len, d, offset, color, material, axis, props)
+	props = props or {}
+	props.Shape = Enum.PartType.Cylinder
+	return self:Add(limb, "Part", V(len, d, d), offset * AXIS[axis or "X"], color, material, props)
+end
+
+-- Эллипсоид (купол наплечника, круглое тело). Меш создаётся в Finish после масштабирования.
+function Rig:Sphere(limb, size, offset, color, material, props)
+	local p = self:Add(limb, "Part", size, offset, color, material, props)
+	table.insert(self.Pending, p)
+	return p
+end
+
+-- Круглый наплечник: купол-эллипсоид + обод
+function Rig:Pauldron(limb, side, size, color, rim, lift, rimMat)
+	size = size or 1
+	local off = CF(0.12 * side, 0.82 + (lift or 0), 0) * ANG(0, 0, rad(-14 * side))
+	self:Sphere(limb, V(1.55, 1.0, 1.5) * size, off, color or P.Black, M.Metal)
+	if rim then
+		self:Cyl(limb, 0.16, 1.6 * size, off * CF(0, -0.18 * size, 0), rim, rimMat or M.Metal, "Y")
+	end
 end
 
 function Rig:Wedge(limb, size, offset, color, material, props)
@@ -689,15 +725,30 @@ function Rig:Seg(limb, a, b, thick, color, material, props)
 	if typeof(thick) == "Vector2" then
 		tx, ty = thick.X, thick.Y
 	end
+	if props and props.Round then
+		props.Round = nil
+		props.Shape = Enum.PartType.Cylinder
+		return self:Add(limb, "Part", V(len, tx, tx), cf * AXIS.Z, color, material, props)
+	end
 	return self:Add(limb, "Part", V(tx, ty, len), cf, color, material, props)
 end
 
+-- Круглый стержень между точками (древки, рога, щупальца)
+function Rig:Rod(limb, a, b, d, color, material, props)
+	props = props or {}
+	props.Round = true
+	return self:Seg(limb, a, b, d, color, material, props)
+end
+
 -- Цепочка брусков (рога, щупальца, изогнутые лезвия)
-function Rig:Chain(limb, points, thick, color, material, taper)
+function Rig:Chain(limb, points, thick, color, material, taper, round)
 	local parts = {}
 	local t = thick
 	for i = 1, #points - 1 do
-		parts[#parts + 1] = self:Seg(limb, points[i], points[i + 1], t, color, material)
+		parts[#parts + 1] = self:Seg(limb, points[i], points[i + 1], t, color, material, round and { Round = true } or nil)
+		if round and i > 1 then
+			self:Ball(limb, t * 1.02, CF(points[i]), color, material)
+		end
 		if taper then
 			t = math.max(t * taper, 0.08)
 		end
@@ -778,9 +829,12 @@ function Rig:Sword(limb, o)
 	local len = o.Length or 3
 	local w = o.Width or 0.42
 	local y = o.Y or -1.05
-	self:Box(limb, V(0.24, 0.24, 0.9), CF(0, y, 0.05), o.Handle or P.Black)
-	self:Box(limb, V(0.32, 0.32, 0.32), CF(0, y, 0.55), o.Pommel or o.Guard or P.Steel, M.Metal)
-	self:Box(limb, V(0.3, o.GuardWidth or w + 0.6, 0.26), CF(0, y, -0.45), o.Guard or P.Steel, M.Metal)
+	self:Cyl(limb, 0.9, 0.26, CF(0, y, 0.05), o.Handle or P.Black, M.Fabric, "Z")
+	self:Ball(limb, 0.4, CF(0, y, 0.55), o.Pommel or o.Guard or P.Steel, M.Metal)
+	local gw = o.GuardWidth or w + 0.6
+	self:Box(limb, V(0.3, gw, 0.26), CF(0, y, -0.45), o.Guard or P.Steel, M.Metal)
+	self:Ball(limb, 0.34, CF(0, y + gw / 2, -0.45), o.Guard or P.Steel, M.Metal)
+	self:Ball(limb, 0.34, CF(0, y - gw / 2, -0.45), o.Guard or P.Steel, M.Metal)
 	local blade = self:Box(limb, V(0.14, w, len), CF(0, y, -0.58 - len / 2), o.Blade or P.Gray, o.BladeMat or M.Metal)
 	blade.Name = "Blade"
 	self:Wedge(limb, V(0.14, w, w * 1.3), CF(0, y, -0.58 - len - w * 0.65) * ANG(0, math.pi, 0), o.Blade or P.Gray, o.BladeMat or M.Metal)
@@ -803,7 +857,10 @@ function Rig:Horn(limb, side, base, size, color)
 		base + V(0.55 * side, 0.95, 0.2) * s,
 		base + V(0.45 * side, 1.4, 0.45) * s,
 	}
-	self:Chain(limb, pts, 0.32 * s, color or P.Black, M.Plastic, 0.72)
+	self:Ball(limb, 0.4 * s, CF(base), color or P.Black)
+	self:Chain(limb, pts, 0.34 * s, color or P.Black, M.Plastic, 0.72, true)
+	local d = pts[4] - pts[3]
+	self:Seg(limb, pts[4], pts[4] + d.Unit * 0.35 * s, 0.12 * s, color or P.Black, M.Plastic, { Round = true })
 end
 
 -- Плащ на собственном моторе: развевается в анимации
@@ -881,6 +938,13 @@ function Rig:Finish(scale, idle)
 	if scale ~= 1 then
 		model:ScaleTo(scale)
 	end
+	-- эллипсоиды: меш добавляем после ScaleTo, чтобы масштаб не применился дважды
+	for _, p in ipairs(self.Pending or {}) do
+		local mesh = Instance.new("SpecialMesh")
+		mesh.MeshType = Enum.MeshType.Sphere
+		mesh.Parent = p
+	end
+	self.Pending = {}
 	self.Scale = scale
 	for name, m in pairs(self.Motors) do
 		self.Base[name] = m.C0
@@ -928,21 +992,22 @@ function Details.VoidSoldier(r, lv)
 	r:Box(T, V(2.04, 0.4, 1.04), CF(0, -1.15, 0), P.Steel, M.Metal) -- кольчужная юбка
 	r:Seg(T, V(-0.85, 0.95, -0.72), V(0.75, -0.6, -0.72), 0.16, P.Maroon) -- ремень через плечо
 	r:Pouch(T, CF(0.72, -0.8, -0.62), P.Maroon)
-	r:Box(H, V(0.16, 0.16, 0.16), CF(-0.79, 0.25, -0.4), P.Steel, M.Metal)
-	r:Box(H, V(0.16, 0.16, 0.16), CF(0.79, 0.3, -0.4), P.Steel, M.Metal)
+	r:Ball(H, 0.2, CF(-0.79, 0.25, -0.4), P.Steel, M.Metal)
+	r:Ball(H, 0.2, CF(0.79, 0.3, -0.4), P.Steel, M.Metal)
 	for _, Lg in ipairs({ RL, LL }) do
 		r:Box(Lg, V(0.9, 0.28, 0.25), CF(0, -0.88, -0.68), P.Black, M.Metal) -- носки сапог
 	end
 	if lv >= 3 then
-		r:Box(T, V(1.3, 1.3, 0.16), CF(0, 0.1, 0.62) * ANG(0, 0, rad(45)), P.Coal, M.Metal) -- щит на спине
-		r:Neon(T, V(0.35, 0.35, 0.1), CF(0, 0.1, 0.72) * ANG(0, 0, rad(45)), P.Neon)
+		r:Cyl(T, 0.16, 1.6, CF(0, 0.1, 0.62), P.Coal, M.Metal, "Z") -- круглый щит на спине
+		r:Cyl(T, 0.12, 1.75, CF(0, 0.1, 0.6), P.Steel, M.Metal, "Z")
+		r:Sphere(T, V(0.5, 0.5, 0.3), CF(0, 0.1, 0.72), P.Neon, M.Neon)
 	end
 end
 
 function Details.ShadowArcher(r, lv)
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
 	r:Box(T, V(2.06, 0.25, 1.06), CF(0, -0.85, 0), P.Maroon)
-	r:Box(T, V(0.18, 0.5, 0.18), CF(1.05, -0.85, -0.2), P.Black) -- кинжал
+	r:Cyl(T, 0.5, 0.18, CF(1.05, -0.85, -0.2), P.Black, M.Plastic, "Y") -- кинжал
 	r:Box(T, V(0.1, 0.7, 0.24), CF(1.05, -1.45, -0.2), P.Pale, M.Metal)
 	r:Pouch(T, CF(-0.65, -0.9, -0.6), P.Coal)
 	for _, Lg in ipairs({ RL, LL }) do
@@ -963,13 +1028,19 @@ end
 function Details.LostMage(r, lv)
 	local T, RA = r.Torso, r.RArm
 	r:Pouch(T, CF(-0.7, -0.75, -0.66), P.Maroon)
-	r:Neon(T, V(0.2, 0.35, 0.2), CF(0.55, -0.95, -0.7), P.NeonPink) -- зелье
-	r:Neon(T, V(0.18, 0.3, 0.18), CF(0.8, -0.95, -0.68), Color3.fromRGB(90, 200, 255))
+	r:Ball(T, 0.32, CF(0.55, -1.0, -0.7), P.NeonPink, M.Neon) -- зелья
+	r:Cyl(T, 0.18, 0.12, CF(0.55, -0.8, -0.7), P.Pale, M.Glass, "Y")
+	r:Ball(T, 0.28, CF(0.82, -1.0, -0.68), Color3.fromRGB(90, 200, 255), M.Neon)
+	r:Cyl(T, 0.16, 0.1, CF(0.82, -0.82, -0.68), P.Pale, M.Glass, "Y")
 	r:Box(T, V(0.28, 0.75, 0.6), CF(1.15, -0.9, 0), P.Maroon) -- книга
 	r:Box(T, V(0.3, 0.65, 0.5), CF(1.16, -0.9, 0), P.Pale)
 	r:Box(T, V(2.24, 0.15, 1.34), CF(0, -2.95, 0), lv >= 3 and P.Neon or P.Violet, lv >= 3 and M.Neon or M.Fabric) -- кайма мантии
 	if lv >= 2 then
-		r:Orbit("OrbitStaff", RA, CF(0, 2.75, -0.55), 0.95, lv >= 4 and 3 or 2, 0.22, P.NeonSoft)
+		local hub = r:Orbit("OrbitStaff", RA, CF(0, 2.75, -0.55), 0.95, 0, 0.22, P.NeonSoft)
+		for i = 0, (lv >= 4 and 3 or 2) - 1 do
+			local a = i / (lv >= 4 and 3 or 2) * math.pi * 2
+			r:Ball(hub, 0.3, CF(math.cos(a) * 0.95, 0, math.sin(a) * 0.95), P.NeonSoft, M.Neon)
+		end
 	end
 	if lv >= 3 then
 		for i = 0, 2 do
@@ -992,7 +1063,7 @@ function Details.VoidKnight(r, lv)
 		r:Box(Lg, V(0.7, 0.5, 0.3), CF(0, 0.05, -0.62), P.Steel, M.Metal) -- наколенники
 	end
 	for i = -1, 1 do
-		r:Box(RA, V(0.14, 0.14, 0.14), CF(0.4 + i * 0.12, 1.2, -0.55 + i * 0.5), P.Gray, M.Metal) -- заклёпки
+		r:Ball(RA, 0.16, CF(0.45 + i * 0.1, 1.05, -0.62 + i * 0.55), P.Gray, M.Metal) -- заклёпки
 	end
 	if lv >= 5 then
 		r:Seg(H, V(-0.5, 0.6, -0.77), V(-0.2, 0.25, -0.77), 0.07, P.Neon, M.Neon)
@@ -1010,12 +1081,13 @@ function Details.DarkGunner(r, lv)
 	r:Box(T, V(2.18, 0.25, 1.24), CF(0, -0.5, 0), P.Black)
 	r:Pouch(T, CF(-0.7, -0.7, -0.66), P.Coal)
 	r:Box(RL, V(0.3, 0.8, 0.5), CF(0.64, -0.05, 0), P.Coal) -- кобура
+	r:Cyl(RL, 0.3, 0.2, CF(0.64, -0.6, -0.1), P.Steel, M.Metal, "Y")
 	r:Box(RL, V(0.22, 0.35, 0.3), CF(0.64, 0.45, -0.05), P.Black)
 	for _, Lg in ipairs({ RL, LL }) do
 		r:Box(Lg, V(0.8, 0.45, 0.25), CF(0, 0.1, -0.6), P.Steel, M.Metal)
 	end
-	r:Box(T, V(0.08, 1.4, 0.08), CF(0.6, 1.4, 1.0), P.Steel, M.Metal) -- антенна
-	local tip = r:Neon(T, V(0.18, 0.18, 0.18), CF(0.6, 2.1, 1.0), lv >= 3 and P.NeonPink or P.Neon)
+	r:Cyl(T, 1.4, 0.08, CF(0.6, 1.4, 1.0), P.Steel, M.Metal, "Y") -- антенна
+	local tip = r:Ball(T, 0.24, CF(0.6, 2.1, 1.0), lv >= 3 and P.NeonPink or P.Neon, M.Neon)
 	if lv >= 4 then
 		r:Glow(tip, P.NeonPink, 5, 1)
 	end
@@ -1024,20 +1096,29 @@ end
 function Details.AbyssReaper(r, lv)
 	local T = r.Torso
 	-- черепок на груди
-	r:Box(T, V(0.5, 0.45, 0.1), CF(0, 0.45, -0.72), P.Pale)
-	r:Box(T, V(0.12, 0.12, 0.06), CF(-0.11, 0.48, -0.78), P.Black)
-	r:Box(T, V(0.12, 0.12, 0.06), CF(0.11, 0.48, -0.78), P.Black)
+	r:Sphere(T, V(0.55, 0.5, 0.35), CF(0, 0.45, -0.7), P.Pale)
+	r:Ball(T, 0.14, CF(-0.12, 0.5, -0.86), P.Black)
+	r:Ball(T, 0.14, CF(0.12, 0.5, -0.86), P.Black)
 	-- фонарь душ
 	r:Seg(T, V(-1.0, -0.6, -0.3), V(-1.05, -0.9, -0.3), 0.08, P.Steel, M.Metal)
-	r:Box(T, V(0.45, 0.6, 0.45), CF(-1.1, -1.2, -0.3), P.Coal, M.Metal)
-	local soul = r:Neon(T, V(0.3, 0.4, 0.3), CF(-1.1, -1.2, -0.3), P.NeonSoft)
+	r:Cyl(T, 0.12, 0.5, CF(-1.1, -0.92, -0.3), P.Coal, M.Metal, "Y")
+	r:Cyl(T, 0.12, 0.5, CF(-1.1, -1.48, -0.3), P.Coal, M.Metal, "Y")
+	r:Cyl(T, 0.5, 0.42, CF(-1.1, -1.2, -0.3), P.Coal, M.Glass, "Y", { Transparency = 0.5 })
+	local soul = r:Ball(T, 0.32, CF(-1.1, -1.2, -0.3), P.NeonSoft, M.Neon)
 	r:Glow(soul, P.NeonSoft, 6, 1)
 	-- цепи
 	for i = 0, 3 do
 		r:Box(T, V(0.18, 0.28, 0.08), CF(0.6, -1.0 - i * 0.3, -0.68) * ANG(0, 0, rad(i % 2 == 0 and 0 or 90)), P.Steel, M.Metal)
 	end
 	if lv >= 3 then
-		r:Orbit("OrbitSouls", T, CF(0, 0.6, 0), 2.3, lv >= 5 and 5 or 3, 0.35, P.NeonSoft, M.Neon, 0.25)
+		local hub = r:Orbit("OrbitSouls", T, CF(0, 0.6, 0), 2.3, 0, 0.35, P.NeonSoft)
+		local n = lv >= 5 and 5 or 3
+		for i = 0, n - 1 do
+			local a = i / n * math.pi * 2
+			local c = CF(math.cos(a) * 2.3, math.sin(a * 2) * 0.2, math.sin(a) * 2.3)
+			r:Ball(hub, 0.42, c, P.NeonSoft, M.Neon, { Transparency = 0.2 })
+			r:Sphere(hub, V(0.25, 0.25, 0.7), c * CF(0, 0, 0.45), P.Neon, M.Neon, { Transparency = 0.5 }) -- хвост души
+		end
 	end
 end
 
@@ -1045,7 +1126,7 @@ function Details.CorruptedSamurai(r, lv)
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
 	r:Box(T, V(2.2, 0.32, 1.22), CF(0, -0.95, 0), P.Crimson, M.Fabric) -- оби
 	r:Box(T, V(0.6, 0.4, 0.3), CF(0.2, -0.95, 0.72), P.Crimson, M.Fabric)
-	r:Box(H, V(0.35, 0.5, 0.35), CF(0, 0.95, 0.55) * ANG(rad(-25), 0, 0), P.Black) -- пучок волос
+	r:Sphere(H, V(0.45, 0.55, 0.45), CF(0, 0.95, 0.6) * ANG(rad(-25), 0, 0), P.Black) -- пучок волос
 	for _, A in ipairs({ RA, LA }) do
 		r:Box(A, V(1.08, 0.55, 1.08), CF(0, -0.55, 0), P.Maroon, M.Fabric)
 		r:Box(A, V(1.1, 0.08, 1.1), CF(0, -0.3, 0), P.Gold, M.Metal)
@@ -1057,7 +1138,8 @@ function Details.CorruptedSamurai(r, lv)
 	end
 	if lv >= 3 then
 		-- сасимоно (флаг на спине)
-		r:Box(T, V(0.1, 3.2, 0.1), CF(0.55, 1.6, 0.65), P.Black)
+		r:Cyl(T, 3.2, 0.12, CF(0.55, 1.6, 0.65), P.Black, M.Plastic, "Y")
+		r:Ball(T, 0.22, CF(0.55, 3.25, 0.65), P.Gold, M.Metal)
 		local flag = r:Box(T, V(0.06, 1.6, 0.9), CF(0.55, 2.4, 0.2), P.Crimson, M.Fabric)
 		r:Neon(flag, V(0.08, 0.6, 0.2), CF(0, 0.1, 0), P.Neon)
 	end
@@ -1104,7 +1186,11 @@ function Details.FallenAngel(r, lv)
 		end
 	end
 	if lv >= 4 then
-		r:Orbit("OrbitHalo", H, CF(0, 1.25, 0.15), 1.25, 4, 0.18, P.White)
+		local hub = r:Orbit("OrbitHalo", H, CF(0, 1.25, 0.15), 1.25, 0, 0.18, P.White)
+		for i = 0, 3 do
+			local a = i / 4 * math.pi * 2
+			r:Ball(hub, 0.24, CF(math.cos(a) * 1.25, 0, math.sin(a) * 1.25), P.White, M.Neon)
+		end
 	end
 	if lv >= 5 then
 		for _, Lg in ipairs({ RL, LL }) do
@@ -1123,7 +1209,11 @@ function Details.VoidEmperor(r, lv)
 		r:Box(A, V(1.14, 0.25, 1.14), CF(0, -0.95, 0), P.Gold, M.Metal)
 	end
 	if lv >= 3 then
-		r:Orbit("OrbitCrown", H, CF(0, 1.6, 0), 1.5, 5, 0.28, P.NeonPink)
+		local hub = r:Orbit("OrbitCrown", H, CF(0, 1.6, 0), 1.5, 0, 0.28, P.NeonPink)
+		for i = 0, 4 do
+			local a = i / 5 * math.pi * 2
+			r:Wedge(hub, V(0.2, 0.5, 0.3), CF(math.cos(a) * 1.5, 0, math.sin(a) * 1.5) * ANG(0, -a, 0), P.NeonPink, M.Neon)
+		end
 	end
 end
 
@@ -1133,7 +1223,7 @@ function Details.AbyssOverlord(r, lv)
 		r:Wedge(T, V(0.35, 0.9 - i * 0.15, 0.7), CF(0, 1.0 - i * 0.7, 1.05) * ANG(rad(-25), 0, 0), P.Steel, M.Metal) -- шипы на спине
 	end
 	for _, x in ipairs({ -0.35, -0.12, 0.12, 0.35 }) do
-		r:Box(T, V(0.08, 1.0, 0.08), CF(x, 0.35, -1.12), P.Steel, M.Metal) -- клетка кристалла
+		r:Cyl(T, 1.0, 0.09, CF(x, 0.35, -1.12), P.Steel, M.Metal, "Y") -- клетка кристалла
 	end
 	for i = -3, 3 do
 		r:Box(T, V(0.3, 0.2, 0.15), CF(i * 0.36, -0.9, -0.8) * ANG(0, 0, rad(i % 2 == 0 and 0 or 90)), P.Steel, M.Metal) -- цепь
@@ -1179,10 +1269,10 @@ local function VoidSoldier(lv)
 		Guard = P.Black,
 	})
 	if lv >= 2 then
-		r:Box(RA, V(1.28, 0.46, 1.25), CF(0.05, 0.86, 0) * ANG(0, 0, rad(-9)), P.Black, M.Metal)
+		r:Pauldron(RA, 1, 0.85, P.Black, P.Steel)
 	end
 	if lv >= 3 then
-		r:Box(LA, V(1.2, 0.42, 1.2), CF(-0.04, 0.84, 0) * ANG(0, 0, rad(7)), P.Steel, M.Metal)
+		r:Pauldron(LA, -1, 0.8, P.Steel, P.Black)
 		r:Box(RL, V(1.04, 0.45, 0.2), CF(0, 0.15, -0.55), P.Dark, M.Metal)
 		r:Box(LL, V(1.04, 0.45, 0.2), CF(0, 0.15, -0.55), P.Dark, M.Metal)
 	end
@@ -1216,22 +1306,27 @@ local function ShadowArcher(lv)
 	-- плащ на плечах, ремень, колчан
 	r:Box(T, V(2.2, 0.5, 1.2), CF(0, 0.8, 0), hood, M.Fabric)
 	r:Seg(T, V(-0.9, 0.9, -0.56), V(0.9, -0.9, -0.56), V2(0.25, 0.08), P.Maroon)
-	local quiver = r:Box(T, V(0.6, 1.9, 0.6), CF(0.4, 0.2, 0.85) * ANG(0, 0, rad(-20)), P.Maroon, M.Fabric)
+	local quiver = r:Cyl(T, 1.9, 0.65, CF(0.4, 0.2, 0.85) * ANG(0, 0, rad(-20)), P.Maroon, M.Fabric, "Y")
+	r:Cyl(T, 0.12, 0.7, CF(0.4, 0.2, 0.85) * ANG(0, 0, rad(-20)) * CF(0, 0.85, 0), P.DarkGold, M.Metal, "Y")
 	for i = 0, 2 do
-		r:Neon(T, V(0.12, 0.45, 0.12), CF(0.62 + i * 0.12, 1.3 - i * 0.05, 0.85 + (i - 1) * 0.1) * ANG(0, 0, rad(-20)), P.Neon)
+		local base = CF(0.62 + i * 0.12, 1.3 - i * 0.05, 0.85 + (i - 1) * 0.1) * ANG(0, 0, rad(-20))
+		r:Cyl(T, 0.5, 0.08, base, P.Coal, M.Plastic, "Y")
+		r:Wedge(T, V(0.06, 0.25, 0.2), base * CF(0, 0.3, 0), P.Neon, M.Neon) -- оперение
 	end
 	-- лук в левой руке (вертикален в позе прицеливания)
 	local s = lv >= 3 and 1.25 or 1
 	local bowColor = lv >= 2 and P.Coal or P.Dark
-	r:Box(LA, V(0.26, 0.3, 0.55), CF(0, -1.15, 0), P.Maroon)
-	r:Seg(LA, V(0, -1.3, -0.25), V(0, -1.0, -1.7 * s), 0.24, bowColor)
-	r:Seg(LA, V(0, -1.3, 0.25), V(0, -1.0, 1.7 * s), 0.24, bowColor)
-	r:Seg(LA, V(0, -1.0, -1.7 * s), V(0, -0.65, -2.0 * s), 0.18, bowColor)
-	r:Seg(LA, V(0, -1.0, 1.7 * s), V(0, -0.65, 2.0 * s), 0.18, bowColor)
+	r:Cyl(LA, 0.6, 0.3, CF(0, -1.15, 0), P.Maroon, M.Fabric, "Z")
+	r:Rod(LA, V(0, -1.3, -0.25), V(0, -1.0, -1.7 * s), 0.24, bowColor)
+	r:Rod(LA, V(0, -1.3, 0.25), V(0, -1.0, 1.7 * s), 0.24, bowColor)
+	r:Rod(LA, V(0, -1.0, -1.7 * s), V(0, -0.65, -2.0 * s), 0.18, bowColor)
+	r:Rod(LA, V(0, -1.0, 1.7 * s), V(0, -0.65, 2.0 * s), 0.18, bowColor)
+	r:Ball(LA, 0.26, CF(0, -1.0, -1.7 * s), bowColor)
+	r:Ball(LA, 0.26, CF(0, -1.0, 1.7 * s), bowColor)
 	r:Neon(LA, V(0.05, 0.05, 4.0 * s), CF(0, -0.62, 0), lv >= 4 and P.Neon or P.White)
 	if lv >= 3 then
-		r:Neon(LA, V(0.28, 0.28, 0.28), CF(0, -0.62, -2.05 * s), P.Neon)
-		r:Neon(LA, V(0.28, 0.28, 0.28), CF(0, -0.62, 2.05 * s), P.Neon)
+		r:Ball(LA, 0.32, CF(0, -0.62, -2.05 * s), P.Neon, M.Neon)
+		r:Ball(LA, 0.32, CF(0, -0.62, 2.05 * s), P.Neon, M.Neon)
 	end
 	local muzzle = r:Box(LA, V(0.2, 0.2, 0.2), CF(0, -1.5, 0), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
 	r.Muzzle = muzzle
@@ -1259,7 +1354,7 @@ end
 -- 3. LOST MAGE (Common)
 ------------------------------------------------------------------------
 local function LostMage(lv)
-	local r = Rig.new({ Name = "LostMage", Torso = P.DeepViolet, Arm = P.DeepViolet, Leg = P.Black, Head = P.Pale })
+	local r = Rig.new({ Name = "LostMage", Torso = P.DeepViolet, Arm = P.DeepViolet, Leg = P.Black, Head = P.Pale, RoundHead = true })
 	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
 	-- мантия до земли
 	r:Box(T, V(2.2, 2.1, 1.3), CF(0, -2.0, 0), P.DeepViolet, M.Fabric)
@@ -1270,18 +1365,20 @@ local function LostMage(lv)
 	r:Box(RA, V(1.2, 0.8, 1.2), CF(0, -0.6, 0), P.Violet, M.Fabric)
 	r:Box(LA, V(1.2, 0.8, 1.2), CF(0, -0.6, 0), P.Violet, M.Fabric)
 	-- шляпа (кривая, классическая)
-	r:Box(H, V(2.1, 0.16, 2.1), CF(0, 0.7, 0) * ANG(rad(-4), 0, rad(3)), P.Coal, M.Fabric)
-	r:Box(H, V(1.3, 0.6, 1.3), CF(0, 1.05, 0.05) * ANG(rad(-6), 0, rad(4)), P.Coal, M.Fabric)
-	r:Box(H, V(0.95, 0.6, 0.95), CF(0.08, 1.58, 0.22) * ANG(rad(-14), 0, rad(9)), P.Coal, M.Fabric)
-	r:Box(H, V(0.6, 0.55, 0.6), CF(0.22, 2.04, 0.48) * ANG(rad(-24), 0, rad(16)), P.Coal, M.Fabric)
-	r:Box(H, V(0.32, 0.45, 0.32), CF(0.4, 2.38, 0.78) * ANG(rad(-38), 0, rad(24)), P.Coal, M.Fabric)
-	r:Box(H, V(1.34, 0.16, 1.34), CF(0, 0.85, 0.02) * ANG(rad(-5), 0, rad(3)), lv >= 5 and P.Neon or P.Violet, lv >= 5 and M.Neon or M.Fabric)
+	r:Cyl(H, 0.16, 2.3, CF(0, 0.7, 0) * ANG(rad(-4), 0, rad(3)), P.Coal, M.Fabric, "Y") -- круглые поля
+	r:Cyl(H, 0.6, 1.35, CF(0, 1.05, 0.05) * ANG(rad(-6), 0, rad(4)), P.Coal, M.Fabric, "Y")
+	r:Cyl(H, 0.6, 1.0, CF(0.08, 1.58, 0.22) * ANG(rad(-14), 0, rad(9)), P.Coal, M.Fabric, "Y")
+	r:Cyl(H, 0.55, 0.66, CF(0.22, 2.04, 0.48) * ANG(rad(-24), 0, rad(16)), P.Coal, M.Fabric, "Y")
+	r:Cyl(H, 0.45, 0.36, CF(0.4, 2.38, 0.78) * ANG(rad(-38), 0, rad(24)), P.Coal, M.Fabric, "Y")
+	r:Ball(H, 0.3, CF(0.52, 2.62, 1.0), lv >= 3 and P.Neon or P.Coal, lv >= 3 and M.Neon or M.Fabric)
+	r:Cyl(H, 0.16, 1.4, CF(0, 0.85, 0.02) * ANG(rad(-5), 0, rad(3)), lv >= 5 and P.Neon or P.Violet, lv >= 5 and M.Neon or M.Fabric, "Y")
 	r:Box(H, V(1.36, 0.42, 0.2), CF(0, -0.42, -0.6), P.Pale) -- борода-шарф
 	r:Eyes(P.Neon, { Y = 0.12, Spacing = 0.3, Size = V(0.22, 0.22, 0.06) })
 	-- посох (вертикальный в правой руке)
 	local staffColor = lv >= 3 and P.Maroon or P.Coal
-	r:Box(RA, V(0.24, 5, 0.24), CF(0, -0.5, -0.55), staffColor)
-	r:Box(RA, V(0.4, 0.3, 0.4), CF(0, 1.9, -0.55), P.Steel, M.Metal)
+	r:Cyl(RA, 5, 0.26, CF(0, -0.5, -0.55), staffColor, M.Plastic, "Y")
+	r:Cyl(RA, 0.3, 0.44, CF(0, 1.9, -0.55), P.Steel, M.Metal, "Y")
+	r:Ball(RA, 0.34, CF(0, -3.0, -0.55), P.Steel, M.Metal)
 	local cs = lv >= 3 and 0.75 or 0.5
 	local crystal = r:Neon(RA, V(cs, cs * 1.4, cs), CF(0, 2.35 + cs * 0.3, -0.55) * ANG(0, rad(45), rad(12)), P.Neon)
 	crystal.Name = "Crystal"
@@ -1289,14 +1386,14 @@ local function LostMage(lv)
 	local muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, 2.6 + cs * 0.3, -0.55), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
 	r.Muzzle = muzzle
 	if lv >= 2 then
-		r:Seg(RA, V(-0.2, 1.8, -0.55), V(-0.5, 2.4, -0.55), 0.14, staffColor)
-		r:Seg(RA, V(0.2, 1.8, -0.55), V(0.45, 2.5, -0.55), 0.14, staffColor)
+		r:Rod(RA, V(-0.2, 1.8, -0.55), V(-0.5, 2.4, -0.55), 0.14, staffColor)
+		r:Rod(RA, V(0.2, 1.8, -0.55), V(0.45, 2.5, -0.55), 0.14, staffColor)
 	end
 	if lv >= 3 then
 		r:Box(T, V(2.25, 0.6, 1.3), CF(0, 0.75, 0), P.Violet, M.Fabric)
 	end
 	if lv >= 4 then
-		r:Neon(LA, V(0.45, 0.45, 0.45), CF(0, -1.6, -0.3) * ANG(rad(45), rad(45), 0), P.NeonSoft)
+		r:Ball(LA, 0.55, CF(0, -1.6, -0.3), P.NeonSoft, M.Neon)
 		r:Cape(1.9, 3.2, P.Coal, true)
 	end
 	Details.LostMage(r, lv)
@@ -1318,17 +1415,18 @@ local function VoidKnight(lv)
 	r:Seg(T, V(-0.2, 0.2, -0.64), V(-0.45, -0.3, -0.64), 0.09, P.Neon, M.Neon)
 	r:Seg(T, V(0.5, 0.6, -0.64), V(0.25, -0.1, -0.64), 0.09, P.Neon, M.Neon)
 	-- шлем (большой, с Т-визором)
-	r:Box(H, V(1.5, 1.5, 1.5), CF(0, 0.02, 0), P.Black, M.Metal)
-	r:Box(H, V(1.0, 0.12, 0.08), CF(0, 0.15, -0.76), P.Neon, M.Neon)
-	r:Box(H, V(0.14, 0.5, 0.08), CF(0, -0.1, -0.76), P.Neon, M.Neon)
+	r:Cyl(H, 1.45, 1.6, CF(0, 0.0, 0), P.Black, M.Metal, "Y") -- шлем-ведро
+	r:Sphere(H, V(1.6, 0.6, 1.6), CF(0, 0.72, 0), P.Black, M.Metal)
+	r:Cyl(H, 0.14, 1.66, CF(0, 0.45, 0), P.Steel, M.Metal, "Y")
+	r:Box(H, V(1.0, 0.12, 0.08), CF(0, 0.15, -0.81), P.Neon, M.Neon)
+	r:Box(H, V(0.14, 0.5, 0.08), CF(0, -0.1, -0.81), P.Neon, M.Neon)
 	r:Box(H, V(0.3, 0.35, 1.3), CF(0, 0.88, 0.05), P.Steel, M.Metal)
 	r:Wedge(H, V(0.22, 0.7, 0.9), CF(0, 1.3, 0.4) * ANG(rad(-10), 0, 0), lv >= 3 and P.Crimson or P.Steel)
 	-- наплечники (асимметрия: правый крупнее)
 	local ps = lv >= 5 and 1.25 or 1
-	r:Box(RA, V(1.5, 0.55, 1.45) * ps, CF(0.12, 0.92, 0) * ANG(0, 0, rad(-12)), P.Black, M.Metal)
-	r:Wedge(RA, V(1.3, 0.45, 1.3) * ps, CF(0.15, 1.35, 0) * ANG(0, rad(90), rad(-12)), P.Steel, M.Metal)
-	r:Box(LA, V(1.35, 0.5, 1.35) * ps, CF(-0.1, 0.9, 0) * ANG(0, 0, rad(10)), P.Black, M.Metal)
-	r:Neon(RA, V(0.08, 0.5, 1.2), CF(0.78, 0.92, 0) * ANG(0, 0, rad(-12)), P.Neon)
+	r:Pauldron(RA, 1, 1.05 * ps, P.Black, P.Neon, 0, M.Neon)
+	r:Sphere(RA, V(1.1, 0.7, 1.05) * ps, CF(0.2, 1.25 * ps, 0) * ANG(0, 0, rad(-14)), P.Steel, M.Metal)
+	r:Pauldron(LA, -1, 0.95 * ps, P.Black, P.Steel)
 	-- наручи и поножи
 	r:Box(RA, V(1.1, 0.8, 1.1), CF(0, -0.55, 0), P.Black, M.Metal)
 	r:Box(LA, V(1.1, 0.8, 1.1), CF(0, -0.55, 0), P.Black, M.Metal)
@@ -1345,8 +1443,9 @@ local function VoidKnight(lv)
 		GuardWidth = 1.4,
 	})
 	if lv >= 2 then
-		r:Box(LA, V(0.25, 1.9, 1.5), CF(-0.62, -0.6, 0), P.Dark, M.Metal) -- небольшой щит-наруч
-		r:Neon(LA, V(0.1, 0.9, 0.12), CF(-0.76, -0.6, 0), P.Neon)
+		r:Cyl(LA, 0.22, 1.7, CF(-0.62, -0.6, 0), P.Dark, M.Metal, "X") -- круглый щит-наруч
+		r:Cyl(LA, 0.16, 1.85, CF(-0.6, -0.6, 0), P.Steel, M.Metal, "X")
+		r:Ball(LA, 0.4, CF(-0.76, -0.6, 0), P.Neon, M.Neon)
 	end
 	if lv >= 3 then
 		r:Sparkles(blade, P.Neon, { Rate = 10, Size = 0.3 })
@@ -1367,7 +1466,7 @@ end
 -- 5. DARK GUNNER (Rare)
 ------------------------------------------------------------------------
 local function DarkGunner(lv)
-	local r = Rig.new({ Name = "DarkGunner", Torso = P.Black, Arm = P.Coal, Leg = P.Black, Head = P.Skin })
+	local r = Rig.new({ Name = "DarkGunner", Torso = P.Black, Arm = P.Coal, Leg = P.Black, Head = P.Skin, RoundHead = true })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
 	-- броня
 	r:Box(T, V(2.15, 1.4, 1.2), CF(0, 0.3, 0), P.Coal, M.Metal)
@@ -1375,11 +1474,16 @@ local function DarkGunner(lv)
 	r:Neon(T, V(0.1, 0.8, 0.08), CF(0.6, 0.5, -0.62), P.Neon)
 	-- рюкзак-батарея
 	r:Box(T, V(1.6, 1.8, 0.7), CF(0, 0.1, 0.85), P.Dark, M.Metal)
-	local cell = r:Neon(T, V(0.4, 1.2, 0.4), CF(0.4, 0.1, 1.2), P.Neon)
-	r:Neon(T, V(0.4, 1.2, 0.4), CF(-0.4, 0.1, 1.2), lv >= 3 and P.Neon or P.Purple, lv < 3 and { Material = M.Plastic } or nil)
+	local cell = r:Cyl(T, 1.2, 0.45, CF(0.4, 0.1, 1.2), P.Neon, M.Neon, "Y")
+	r:Cyl(T, 1.2, 0.45, CF(-0.4, 0.1, 1.2), lv >= 3 and P.Neon or P.Purple, lv >= 3 and M.Neon or M.Plastic, "Y")
+	for _, x in ipairs({ -0.4, 0.4 }) do
+		r:Cyl(T, 0.12, 0.52, CF(x, 0.72, 1.2), P.Steel, M.Metal, "Y")
+		r:Cyl(T, 0.12, 0.52, CF(x, -0.52, 1.2), P.Steel, M.Metal, "Y")
+	end
 	-- шапка-берет и визор
-	r:Box(H, V(1.42, 0.45, 1.42), CF(0.05, 0.62, 0.05) * ANG(0, 0, rad(-6)), P.Coal, M.Fabric)
-	r:Box(H, V(0.9, 0.2, 0.6), CF(-0.45, 0.82, -0.2) * ANG(0, 0, rad(-12)), P.Coal, M.Fabric)
+	r:Cyl(H, 0.4, 1.5, CF(0.05, 0.68, 0.05) * ANG(0, 0, rad(-8)), P.Coal, M.Fabric, "Y") -- берет
+	r:Sphere(H, V(1.1, 0.4, 1.0), CF(-0.25, 0.9, 0) * ANG(0, 0, rad(-14)), P.Coal, M.Fabric)
+	r:Box(H, V(0.3, 0.3, 0.12), CF(-0.35, 0.72, -0.72), P.Neon, M.Neon) -- кокарда
 	r:Box(H, V(1.4, 0.32, 0.25), CF(0, 0.12, -0.68), P.Black, M.Metal)
 	r:Neon(H, V(1.2, 0.16, 0.06), CF(0, 0.12, -0.82), P.Neon)
 	r:Box(H, V(1.36, 0.45, 0.12), CF(0, -0.38, -0.62), P.Black, M.Fabric) -- маска
@@ -1391,17 +1495,21 @@ local function DarkGunner(lv)
 	r:Box(RA, V(0.6, 1.9, 0.75) * gs, CF(0, -1.85, -0.15), P.Black, M.Metal)
 	r:Box(RA, V(0.5, 0.6, 1.3), CF(0, -1.2, 0.35), P.Coal, M.Metal) -- приклад
 	r:Neon(RA, V(0.64, 1.0, 0.12), CF(0, -1.9, -0.55), P.Neon)
-	r:Box(RA, V(0.35, 1.0, 0.35), CF(0, -3.2 * gs + 0.2, -0.15), P.Dark, M.Metal)
-	if lv >= 3 then
-		r:Box(RA, V(0.3, 0.9, 0.3), CF(0, -3.1 * gs + 0.2, -0.55), P.Dark, M.Metal) -- второй ствол
-		r:Box(RA, V(0.25, 0.6, 0.6), CF(0, -1.7, -0.8), P.Steel, M.Metal) -- прицел
+	r:Cyl(RA, 1.0, 0.38, CF(0, -3.2 * gs + 0.2, -0.15), P.Dark, M.Metal, "Y")
+	for i = 0, 2 do
+		r:Cyl(RA, 0.08, 0.46, CF(0, -2.85 * gs - i * 0.22 + 0.2, -0.15), P.Steel, M.Metal, "Y") -- рёбра охлаждения
 	end
-	local tip = r:Neon(RA, V(0.42, 0.18, 0.42), CF(0, -3.75 * gs + 0.2, -0.15), P.NeonSoft)
+	if lv >= 3 then
+		r:Cyl(RA, 0.9, 0.3, CF(0, -3.1 * gs + 0.2, -0.55), P.Dark, M.Metal, "Y") -- второй ствол
+		r:Cyl(RA, 0.7, 0.26, CF(0, -1.75, -0.82), P.Steel, M.Metal, "Y") -- прицел
+		r:Cyl(RA, 0.06, 0.2, CF(0, -2.1, -0.82), P.NeonSoft, M.Neon, "Y")
+	end
+	local tip = r:Cyl(RA, 0.18, 0.44, CF(0, -3.75 * gs + 0.2, -0.15), P.NeonSoft, M.Neon, "Y")
 	tip.Name = "Muzzle"
 	r.Muzzle = tip
 	if lv >= 2 then
-		r:Box(RA, V(1.2, 0.45, 1.2), CF(0.06, 0.85, 0) * ANG(0, 0, rad(-8)), P.Coal, M.Metal)
-		r:Box(LA, V(1.15, 0.42, 1.15), CF(-0.05, 0.85, 0) * ANG(0, 0, rad(6)), P.Coal, M.Metal)
+		r:Pauldron(RA, 1, 0.8, P.Coal, P.Neon, 0, M.Neon)
+		r:Pauldron(LA, -1, 0.75, P.Coal)
 	end
 	if lv >= 4 then
 		r:Glow(cell, P.Neon, 8, 1.5)
@@ -1444,7 +1552,10 @@ local function AbyssReaper(lv)
 	r:Seg(T, V(-0.9, 0.8, -0.66), V(0.8, -0.6, -0.66), 0.14, P.Steel, M.Metal)
 	-- коса: древко вертикально в правой руке, лезвие наверху
 	local pole = lv >= 3 and P.Maroon or P.Coal
-	r:Box(RA, V(0.24, 6, 0.24), CF(0, 0.2, -0.55), pole)
+	r:Cyl(RA, 6, 0.26, CF(0, 0.2, -0.55), pole, M.Plastic, "Y")
+	for i = 0, 2 do
+		r:Cyl(RA, 0.14, 0.32, CF(0, -1.5 + i * 1.6, -0.55), P.Steel, M.Metal, "Y") -- кольца на древке
+	end
 	local bl = lv >= 5 and 1.3 or 1
 	local top = V(0, 3.15, -0.55)
 	local bladePts = {
@@ -1462,7 +1573,7 @@ local function AbyssReaper(lv)
 		end
 		r:Chain(RA, edge, 0.12, P.Neon, M.Neon, 1)
 	end
-	r:Box(RA, V(0.45, 0.45, 0.45), CF(top), P.Black, M.Metal)
+	r:Ball(RA, 0.55, CF(top), P.Black, M.Metal)
 	local muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top + V(0, -0.6, -2.4) * bl), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
 	r.Muzzle = muzzle
 	if lv >= 4 then
@@ -1502,13 +1613,15 @@ local function CorruptedSamurai(lv)
 	r:Box(RA, V(1.42, 0.18, 1.32), CF(0.4, 0.25, 0) * ANG(0, 0, rad(-22)), P.Black, M.Metal)
 	r:Box(LA, V(1.25, 1.0, 1.2), CF(-0.3, 0.6, 0) * ANG(0, 0, rad(18)), P.Maroon, M.Metal)
 	-- кабуто
-	r:Box(H, V(1.5, 0.55, 1.5), CF(0, 0.55, 0), P.Black, M.Metal)
-	r:Box(H, V(2.0, 0.14, 1.8), CF(0, 0.3, 0.1) * ANG(rad(-8), 0, rad(2)), P.Maroon, M.Metal)
+	r:Sphere(H, V(1.6, 1.0, 1.6), CF(0, 0.6, 0), P.Black, M.Metal) -- купол кабуто
+	r:Cyl(H, 0.14, 2.2, CF(0, 0.3, 0.1) * ANG(rad(-8), 0, rad(2)), P.Maroon, M.Metal, "Y") -- широкие круглые поля
+	r:Ball(H, 0.3, CF(0, 1.12, 0), P.Gold, M.Metal)
 	r:Wedge(H, V(0.4, 0.8, 0.7), CF(-0.95, 0.0, 0.3) * ANG(0, rad(-90), rad(10)), P.Maroon, M.Metal)
 	r:Wedge(H, V(0.4, 0.7, 0.6), CF(0.95, 0.05, 0.3) * ANG(0, rad(90), rad(-8)), P.Maroon, M.Metal)
 	-- маэдатэ (полумесяц на шлеме)
-	r:Chain(H, { V(0, 0.75, -0.75), V(-0.45, 1.15, -0.8), V(-0.75, 1.75, -0.8) }, 0.16, P.Gold, M.Metal, 0.8)
-	r:Chain(H, { V(0, 0.75, -0.75), V(0.4, 1.1, -0.8), V(0.6, 1.55, -0.8) }, 0.16, P.Gold, M.Metal, 0.8)
+	r:Chain(H, { V(0, 0.75, -0.75), V(-0.45, 1.15, -0.8), V(-0.75, 1.75, -0.8) }, 0.16, P.Gold, M.Metal, 0.8, true)
+	r:Chain(H, { V(0, 0.75, -0.75), V(0.4, 1.1, -0.8), V(0.6, 1.55, -0.8) }, 0.16, P.Gold, M.Metal, 0.8, true)
+	r:Ball(H, 0.26, CF(0, 0.75, -0.77), P.Neon, M.Neon)
 	-- демоническая маска
 	r:Box(H, V(1.3, 0.85, 0.15), CF(0, -0.15, -0.7), P.Crimson)
 	r:Wedge(H, V(0.15, 0.4, 0.2), CF(-0.35, -0.6, -0.78) * ANG(0, 0, math.pi), P.White)
@@ -1516,15 +1629,15 @@ local function CorruptedSamurai(lv)
 	r:Eyes(P.Neon, { Y = 0.05, Spacing = 0.3, Size = V(0.3, 0.12, 0.06), Tilt = -14, Inset = -0.08 })
 	-- катана (тонкая и длинная, чуть изогнутая)
 	local len = 3.6 + (lv >= 4 and 0.5 or 0)
-	r:Box(RA, V(0.22, 0.22, 1.1), CF(0, -1.05, 0.05), P.Maroon)
-	r:Box(RA, V(0.5, 0.55, 0.12), CF(0, -1.05, -0.55), P.Gold, M.Metal)
+	r:Cyl(RA, 1.1, 0.24, CF(0, -1.05, 0.05), P.Maroon, M.Fabric, "Z")
+	r:Cyl(RA, 0.12, 0.6, CF(0, -1.05, -0.55), P.Gold, M.Metal, "Z") -- круглая цуба
 	r:Seg(RA, V(0, -1.05, -0.6), V(0, -1.0, -0.6 - len * 0.55), V2(0.1, 0.3), P.Pale, M.Metal)
 	r:Seg(RA, V(0, -1.0, -0.6 - len * 0.55), V(0, -0.8, -0.6 - len), V2(0.1, 0.27), P.Pale, M.Metal)
 	r:Seg(RA, V(0, -0.88, -0.6), V(0, -0.65, -0.6 - len), V2(0.12, 0.07), lv >= 2 and P.Neon or P.White, M.Neon)
 	local muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -0.85, -0.6 - len), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
 	r.Muzzle = muzzle
 	-- ножны на поясе
-	r:Seg(T, V(-1.05, -0.8, 0.4), V(-1.2, -1.2, -1.6), 0.28, P.Black)
+	r:Rod(T, V(-1.05, -0.8, 0.4), V(-1.2, -1.2, -1.6), 0.28, P.Black) -- ножны
 	if lv >= 3 then
 		r:Horn(H, 1, V(0.55, 0.75, 0.1), 0.7, P.Crimson)
 		r:Horn(H, -1, V(-0.55, 0.75, 0.1), 0.6, P.Crimson)
@@ -1535,7 +1648,7 @@ local function CorruptedSamurai(lv)
 	end
 	if lv >= 5 then
 		r:Cape(1.6, 3.0, P.Crimson, true)
-		r:Seg(T, V(1.05, -0.8, 0.4), V(1.2, -1.2, -1.6), 0.24, P.Maroon) -- вторая катана
+		r:Rod(T, V(1.05, -0.8, 0.4), V(1.2, -1.2, -1.6), 0.24, P.Maroon) -- вторая катана
 	end
 	Details.CorruptedSamurai(r, lv)
 	levelAura(r, lv, lv >= 5 and P.NeonPink or P.Neon)
@@ -1564,11 +1677,11 @@ local function EclipseGuardian(lv)
 	r:Horn(H, 1, V(0.75, 0.45, 0), 1.3, P.Coal)
 	r:Horn(H, -1, V(-0.75, 0.45, 0), 1.15, P.Coal)
 	-- огромные наплечники
-	r:Box(RA, V(1.8, 0.8, 1.8), CF(0.2, 1.0, 0) * ANG(0, 0, rad(-15)), P.Black, M.Metal)
-	r:Wedge(RA, V(1.6, 0.6, 1.6), CF(0.25, 1.6, 0) * ANG(0, rad(90), rad(-15)), P.Coal, M.Metal)
-	r:Neon(RA, V(0.08, 0.7, 1.6), CF(1.08, 0.95, 0) * ANG(0, 0, rad(-15)), P.Neon)
-	r:Box(LA, V(1.7, 0.75, 1.7), CF(-0.2, 0.98, 0) * ANG(0, 0, rad(13)), P.Black, M.Metal)
-	r:Wedge(LA, V(1.5, 0.55, 1.5), CF(-0.25, 1.55, 0) * ANG(0, rad(-90), rad(13)), P.Coal, M.Metal)
+	r:Pauldron(RA, 1, 1.25, P.Black, P.Neon, 0.1, M.Neon)
+	r:Sphere(RA, V(1.3, 0.8, 1.25), CF(0.25, 1.45, 0) * ANG(0, 0, rad(-16)), P.Coal, M.Metal)
+	r:Wedge(RA, V(0.35, 0.8, 0.6), CF(0.45, 1.95, 0) * ANG(0, rad(90), rad(-20)), P.Steel, M.Metal)
+	r:Pauldron(LA, -1, 1.18, P.Black, P.Steel, 0.1)
+	r:Sphere(LA, V(1.2, 0.75, 1.15), CF(-0.25, 1.4, 0) * ANG(0, 0, rad(16)), P.Coal, M.Metal)
 	r:Box(RA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
 	r:Box(LA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
 	r:Box(RL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
@@ -1609,13 +1722,13 @@ end
 -- 9. FALLEN ANGEL (Legendary) — single target
 ------------------------------------------------------------------------
 local function FallenAngel(lv)
-	local r = Rig.new({ Name = "FallenAngel", Torso = P.Coal, Arm = P.Coal, Leg = P.Black, Head = P.Pale })
+	local r = Rig.new({ Name = "FallenAngel", Torso = P.Coal, Arm = P.Coal, Leg = P.Black, Head = P.Pale, RoundHead = true })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
 	r:Box(T, V(2.15, 1.4, 1.15), CF(0, 0.35, 0), P.Black, M.Metal)
 	r:Neon(T, V(0.5, 0.5, 0.06), CF(0, 0.4, -0.6) * ANG(0, 0, rad(45)), P.Neon)
 	r:Box(T, V(2.2, 1.2, 1.25), CF(0, -1.5, 0), P.Black, M.Fabric)
-	r:Box(RA, V(1.2, 0.45, 1.2), CF(0, 0.85, 0) * ANG(0, 0, rad(-8)), P.Black, M.Metal)
-	r:Box(LA, V(1.2, 0.45, 1.2), CF(0, 0.85, 0) * ANG(0, 0, rad(8)), P.Black, M.Metal)
+	r:Pauldron(RA, 1, 0.85, P.Black, P.DarkGold)
+	r:Pauldron(LA, -1, 0.85, P.Black, P.DarkGold)
 	r:Box(RL, V(1.08, 0.6, 1.12), CF(0, -0.72, 0), P.Coal, M.Metal)
 	r:Box(LL, V(1.08, 0.6, 1.12), CF(0, -0.72, 0), P.Coal, M.Metal)
 	-- волосы / шлем
@@ -1630,7 +1743,7 @@ local function FallenAngel(lv)
 	for i = 0, segs - 1 do
 		local a1 = (i / segs) * math.pi * 2
 		local a2 = ((i + 1) / segs) * math.pi * 2
-		halo[#halo + 1] = r:Seg(H, V(math.cos(a1) * hr, 1.25, math.sin(a1) * hr + 0.15), V(math.cos(a2) * hr, 1.25, math.sin(a2) * hr + 0.15), 0.14, lv >= 3 and P.NeonSoft or P.White, M.Neon)
+		halo[#halo + 1] = r:Rod(H, V(math.cos(a1) * hr, 1.25, math.sin(a1) * hr + 0.15), V(math.cos(a2) * hr, 1.25, math.sin(a2) * hr + 0.15), 0.15, lv >= 3 and P.NeonSoft or P.White, M.Neon)
 	end
 	r:Glow(halo[1], P.NeonSoft, 7, 1)
 	-- чёрные блочные крылья на моторах
@@ -1649,15 +1762,16 @@ local function FallenAngel(lv)
 	end
 	-- копьё (вертикально в правой руке)
 	local sl = lv >= 5 and 1.2 or 1
-	r:Box(RA, V(0.22, 6.2 * sl, 0.22), CF(0, 0.3, -0.55), P.Black, M.Metal)
-	r:Box(RA, V(0.45, 0.25, 0.45), CF(0, 3.1 * sl + 0.2, -0.55), P.DarkGold, M.Metal)
+	r:Cyl(RA, 6.2 * sl, 0.24, CF(0, 0.3, -0.55), P.Black, M.Metal, "Y")
+	r:Cyl(RA, 0.25, 0.5, CF(0, 3.1 * sl + 0.2, -0.55), P.DarkGold, M.Metal, "Y")
+	r:Ball(RA, 0.4, CF(0, -2.8 * sl, -0.55), P.DarkGold, M.Metal)
 	local tip = r:Neon(RA, V(0.35, 1.6 * sl, 0.12), CF(0, 4.1 * sl + 0.2, -0.55), P.Neon)
 	r:Wedge(RA, V(0.12, 0.6, 0.35), CF(0, 5.2 * sl, -0.55) * ANG(0, rad(90), 0), P.Neon, M.Neon)
 	tip.Name = "Muzzle"
 	r.Muzzle = tip
 	if lv >= 3 then
-		r:Seg(RA, V(-0.5, 3.1 * sl, -0.55), V(-0.2, 3.6 * sl, -0.55), 0.14, P.Neon, M.Neon)
-		r:Seg(RA, V(0.5, 3.1 * sl, -0.55), V(0.2, 3.6 * sl, -0.55), 0.14, P.Neon, M.Neon)
+		r:Rod(RA, V(-0.5, 3.1 * sl, -0.55), V(-0.2, 3.6 * sl, -0.55), 0.14, P.Neon, M.Neon)
+		r:Rod(RA, V(0.5, 3.1 * sl, -0.55), V(0.2, 3.6 * sl, -0.55), 0.14, P.Neon, M.Neon)
 	end
 	if lv >= 4 then
 		r:Glow(tip, P.Neon, 10, 2)
@@ -1674,7 +1788,7 @@ end
 -- 10. VOID EMPEROR (Mythic)
 ------------------------------------------------------------------------
 local function VoidEmperor(lv)
-	local r = Rig.new({ Name = "VoidEmperor", Torso = P.DeepViolet, Arm = P.DeepViolet, Leg = P.Coal, Head = P.Pale, TorsoMat = M.Metal })
+	local r = Rig.new({ Name = "VoidEmperor", Torso = P.DeepViolet, Arm = P.DeepViolet, Leg = P.Coal, Head = P.Pale, TorsoMat = M.Metal, RoundHead = true })
 	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
 	-- королевская броня
 	r:Box(T, V(2.3, 1.7, 1.3), CF(0, 0.2, 0), P.Violet, M.Metal)
@@ -1683,8 +1797,8 @@ local function VoidEmperor(lv)
 	r:Box(T, V(2.25, 1.6, 1.3), CF(0, -1.7, 0), P.DeepViolet, M.Fabric)
 	r:Box(T, V(2.27, 0.2, 1.32), CF(0, -2.4, 0), P.DarkGold, M.Metal)
 	-- наплечники с шипами
-	r:Box(RA, V(1.5, 0.55, 1.45), CF(0.1, 0.9, 0) * ANG(0, 0, rad(-10)), P.Violet, M.Metal)
-	r:Box(LA, V(1.5, 0.55, 1.45), CF(-0.1, 0.9, 0) * ANG(0, 0, rad(10)), P.Violet, M.Metal)
+	r:Pauldron(RA, 1, 1.0, P.Violet, P.Gold)
+	r:Pauldron(LA, -1, 1.0, P.Violet, P.Gold)
 	r:Wedge(RA, V(0.25, 0.8, 0.5), CF(0.45, 1.45, 0) * ANG(0, rad(90), 0), P.DarkGold, M.Metal)
 	r:Wedge(LA, V(0.25, 0.7, 0.5), CF(-0.45, 1.4, 0) * ANG(0, rad(-90), 0), P.DarkGold, M.Metal)
 	r:Box(RA, V(1.1, 0.7, 1.1), CF(0, -0.65, 0), P.Black, M.Metal)
@@ -1694,19 +1808,20 @@ local function VoidEmperor(lv)
 	r:Eyes(P.NeonPink, { Y = 0.1, Spacing = 0.3, Size = V(0.28, 0.12, 0.06), Tilt = -6 })
 	-- огромная корона
 	local cs = lv >= 3 and 1.15 or 1
-	r:Box(H, V(1.75, 0.55, 1.75), CF(0, 0.85, 0), P.Gold, M.Metal)
+	r:Cyl(H, 0.55, 1.85, CF(0, 0.85, 0), P.Gold, M.Metal, "Y") -- круглая корона
+	r:Cyl(H, 0.12, 1.95, CF(0, 0.62, 0), P.DarkGold, M.Metal, "Y")
 	local spikes = { { -0.7, 1.2, -0.7 }, { 0, 1.7, -0.75 }, { 0.7, 1.3, -0.7 }, { -0.75, 1.1, 0.7 }, { 0.72, 1.4, 0.7 }, { 0, 1.0, 0.75 } }
 	for i, s in ipairs(spikes) do
 		local h = s[2] * cs
-		r:Box(H, V(0.32, h, 0.32), CF(s[1], 1.1 + h / 2, s[3]) * ANG(0, 0, rad(s[1] * -10)), P.Gold, M.Metal)
+		r:Wedge(H, V(0.34, h, 0.34), CF(s[1], 1.1 + h / 2, s[3]) * ANG(0, s[3] > 0 and 0 or math.pi, rad(s[1] * -10)), P.Gold, M.Metal)
 		if i <= 3 or lv >= 4 then
-			r:Neon(H, V(0.3, 0.3, 0.3), CF(s[1], 1.15 + h, s[3]) * ANG(rad(45), rad(45), 0), i == 2 and P.NeonPink or P.Neon)
+			r:Ball(H, 0.34, CF(s[1], 1.15 + h, s[3]), i == 2 and P.NeonPink or P.Neon, M.Neon)
 		end
 	end
 	r:Neon(H, V(0.35, 0.35, 0.08), CF(0, 0.85, -0.9) * ANG(0, 0, rad(45)), P.NeonPink)
 	-- плащ с частицами
 	local cape = r:Cape(2.4, 4.2, P.Maroon, true)
-	r:Box(T, V(2.6, 0.5, 1.4), CF(0, 0.95, 0.1), P.Crimson, M.Fabric) -- меховой воротник
+	r:Sphere(T, V(2.7, 0.7, 1.5), CF(0, 0.95, 0.1), P.Crimson, M.Fabric) -- меховой воротник
 	r:Sparkles(cape, P.NeonPink, { Rate = 8, Size = 0.3 })
 	-- большой меч с красно-фиолетовым свечением
 	local blade = r:Sword(RA, {
@@ -1767,9 +1882,9 @@ local function AbyssOverlord(lv)
 	-- огромные руки
 	for _, A in ipairs({ RA, LA }) do
 		local s = A == RA and 1 or -1
-		r:Box(A, V(1.7, 1.1, 1.7), CF(0.2 * s, 0.75, 0) * ANG(0, 0, rad(-12 * s)), P.Coal, M.Metal)
+		r:Sphere(A, V(2.0, 1.4, 1.9), CF(0.2 * s, 0.85, 0) * ANG(0, 0, rad(-12 * s)), P.Coal, M.Metal) -- огромные наплечники
 		r:Box(A, V(1.8, 1.6, 1.8), CF(0, -0.6, 0), P.Black, M.Metal)
-		r:Box(A, V(1.9, 0.7, 1.9), CF(0, -1.3, 0), P.Coal, M.Metal)
+		r:Cyl(A, 0.7, 2.0, CF(0, -1.3, 0), P.Coal, M.Metal, "Y") -- кулаки-латы
 		for k = -1, 1 do
 			r:Wedge(A, V(0.3, 0.5, 0.45), CF(k * 0.55, -1.75, -0.7) * ANG(0, math.pi, math.pi), P.Steel, M.Metal) -- когти
 		end
@@ -1789,8 +1904,8 @@ local function AbyssOverlord(lv)
 		end
 	end
 	if lv >= 5 then
-		local orbit = r:Neon(T, V(0.6, 0.6, 0.6), CF(1.9, 2.4, 0.3) * ANG(rad(30), rad(45), 0), P.Neon)
-		r:Neon(T, V(0.5, 0.5, 0.5), CF(-1.9, 2.1, 0.5) * ANG(rad(45), rad(20), 0), P.Neon)
+		local orbit = r:Ball(T, 0.7, CF(1.9, 2.4, 0.3), P.Neon, M.Neon)
+		r:Ball(T, 0.55, CF(-1.9, 2.1, 0.5), P.Neon, M.Neon)
 		r:Glow(orbit, P.Neon, 8, 1)
 	end
 	Details.AbyssOverlord(r, lv)
@@ -1889,6 +2004,7 @@ local function newCreature(name, bodySize, bodyColor, bodyMat)
 	body.CFrame = CF()
 	body.Parent = model
 	self.Torso = body
+	self.Pending = {}
 	local m = Instance.new("Motor6D")
 	m.Name = "Root"
 	m.Part0 = root
@@ -1923,10 +2039,11 @@ local function LostSoul(scale)
 	local r = newCreature("LostSoul", V(1.6, 1.6, 1.4), P.Pale)
 	local B = r.Torso
 	B.Transparency = 0.25
+	table.insert(r.Pending, B) -- тело-эллипсоид
 	r.Head = B
 	r.HeadSize = B.Size
 	r:Eyes(P.Neon, { Y = 0.15, Spacing = 0.32, Size = V(0.3, 0.3, 0.06) })
-	r:Box(B, V(0.5, 0.18, 0.06), CF(0, -0.3, -0.72), P.Black)
+	r:Sphere(B, V(0.45, 0.3, 0.1), CF(0, -0.3, -0.68), P.Black) -- рот
 	r:Wedge(B, V(1.2, 0.9, 1.0), CF(0, -1.2, 0.1) * ANG(0, 0, math.pi), P.Pale, M.Plastic, { Transparency = 0.35 })
 	r:Wedge(B, V(0.6, 0.7, 0.6), CF(0.1, -1.8, 0.4) * ANG(0, 0, math.pi), P.Pale, M.Plastic, { Transparency = 0.5 })
 	r:Joint("ArmR", B, V(0.35, 0.9, 0.35), CF(0.8, 0, 0), CF(0.25, -0.35, 0) * ANG(0, 0, rad(25)), P.Pale)
@@ -1941,15 +2058,15 @@ end
 local function VoidCrawler(scale)
 	local r = newCreature("VoidCrawler", V(2.2, 1.0, 2.8), P.DeepViolet)
 	local B = r.Torso
-	r:Box(B, V(2.0, 0.5, 2.4), CF(0, 0.6, 0.15) * ANG(rad(-4), 0, 0), P.Coal, M.Metal)
-	r:Box(B, V(1.4, 0.4, 1.0), CF(0.1, 0.95, 0.5), P.Black, M.Metal)
+	r:Sphere(B, V(2.3, 1.1, 2.8), CF(0, 0.5, 0.15) * ANG(rad(-4), 0, 0), P.Coal, M.Metal) -- панцирь
+	r:Sphere(B, V(1.3, 0.6, 1.2), CF(0.1, 0.95, 0.5), P.Black, M.Metal)
 	r:Neon(B, V(0.1, 0.12, 2.2), CF(0, 0.88, 0.1), P.Neon)
-	local head = r:Box(B, V(1.3, 0.85, 1.0), CF(0, 0.05, -1.75), P.Coal)
+	r:Sphere(B, V(1.35, 0.95, 1.1), CF(0, 0.05, -1.75), P.Coal)
 	r:Wedge(B, V(0.25, 0.3, 0.8), CF(-0.4, -0.25, -2.5) * ANG(0, 0, 0), P.Pale)
 	r:Wedge(B, V(0.25, 0.3, 0.7), CF(0.42, -0.22, -2.45), P.Pale)
-	r:Neon(B, V(0.22, 0.22, 0.06), CF(-0.35, 0.2, -2.27), P.Neon)
-	r:Neon(B, V(0.22, 0.22, 0.06), CF(0.35, 0.22, -2.27), P.Neon)
-	r:Neon(B, V(0.16, 0.16, 0.06), CF(0.05, 0.38, -2.27), P.NeonPink)
+	r:Ball(B, 0.26, CF(-0.33, 0.2, -2.22), P.Neon, M.Neon)
+	r:Ball(B, 0.26, CF(0.35, 0.22, -2.22), P.Neon, M.Neon)
+	r:Ball(B, 0.2, CF(0.05, 0.4, -2.2), P.NeonPink, M.Neon)
 	local legs = { { "FR", 1, -0.8 }, { "FL", -1, -0.8 }, { "BR", 1, 0.8 }, { "BL", -1, 0.8 } }
 	for _, l in ipairs(legs) do
 		local leg = r:Joint(l[1], B, V(0.32, 1.5, 0.32), CF(1.05 * l[2], -0.1, l[3]), CF(0.45 * l[2], -0.6, 0) * ANG(0, 0, rad(32 * l[2])), P.Black)
@@ -1974,7 +2091,8 @@ local function ShadowBeast(scale)
 	for i = 0, 3 do
 		r:Wedge(B, V(0.25, 0.4 + (i % 2) * 0.2, 0.5), CF(0, 0.85, -0.9 + i * 0.6), P.DeepViolet)
 	end
-	r:Chain(B, { V(0, 0.4, 1.5), V(0, 0.8, 2.2), V(0.2, 1.3, 2.6) }, 0.3, P.Black, M.Plastic, 0.75)
+	r:Chain(B, { V(0, 0.4, 1.5), V(0, 0.8, 2.2), V(0.2, 1.3, 2.6) }, 0.32, P.Black, M.Plastic, 0.75, true)
+	r:Sphere(r.Head, V(0.5, 0.4, 0.4), CF(0, -0.2, -1.5), P.Black) -- нос
 	local legs = { { "FR", 0.55, -1.1 }, { "FL", -0.55, -1.1 }, { "BR", 0.55, 1.1 }, { "BL", -0.55, 1.1 } }
 	for _, l in ipairs(legs) do
 		local leg = r:Joint(l[1], B, V(0.5, 1.5, 0.5), CF(l[2], -0.5, l[3]), CF(0, -0.75, 0), P.Black)
@@ -1997,10 +2115,11 @@ local function ArmoredHorror(scale)
 	for i = -1, 1 do
 		r:Wedge(H, V(0.25, 0.6, 0.4), CF(i * 0.5, 1.05, 0), P.Steel, M.Metal)
 	end
-	r:Box(RA, V(1.5, 0.6, 1.5), CF(0.15, 0.9, 0) * ANG(0, 0, rad(-12)), P.Gray, M.Metal)
-	r:Box(LA, V(1.4, 0.55, 1.4), CF(-0.12, 0.88, 0) * ANG(0, 0, rad(10)), P.Gray, M.Metal)
-	r:Box(LA, V(0.3, 2.6, 2.0), CF(-0.7, -0.6, -0.2), P.Steel, M.Metal) -- щит
-	r:Neon(LA, V(0.1, 1.2, 0.2), CF(-0.88, -0.6, -0.2), P.Neon)
+	r:Pauldron(RA, 1, 1.0, P.Gray, P.Steel)
+	r:Pauldron(LA, -1, 0.95, P.Gray, P.Steel)
+	r:Cyl(LA, 0.3, 2.6, CF(-0.7, -0.6, -0.2), P.Steel, M.Metal, "X") -- круглый щит
+	r:Cyl(LA, 0.2, 2.8, CF(-0.66, -0.6, -0.2), P.Dark, M.Metal, "X")
+	r:Sphere(LA, V(0.3, 0.8, 0.8), CF(-0.88, -0.6, -0.2), P.Neon, M.Neon)
 	r:Box(RL, V(1.15, 1.2, 1.2), CF(0, -0.4, 0), P.Gray, M.Metal)
 	r:Box(LL, V(1.15, 1.2, 1.2), CF(0, -0.4, 0), P.Gray, M.Metal)
 	r:Box(RA, V(1.15, 1.2, 1.15), CF(0, -0.4, 0), P.Steel, M.Metal)
@@ -2024,7 +2143,7 @@ local function RiftPhantom(scale)
 	-- плащ сужается книзу
 	for i = 1, 4 do
 		local w = 1.8 - i * 0.32
-		r:Box(B, V(w, 0.6, w * 0.65), CF(0.05 * (i % 2), -1.0 - i * 0.5, 0.05 * i), P.DeepViolet, M.Fabric, { Transparency = 0.3 + i * 0.1 })
+		r:Cyl(B, 0.6, w, CF(0.05 * (i % 2), -1.0 - i * 0.5, 0.05 * i), P.DeepViolet, M.Fabric, "Y", { Transparency = 0.3 + i * 0.1 })
 	end
 	r:Neon(B, V(0.12, 1.8, 0.06), CF(0.4, 0, -0.58), P.Neon, { Transparency = 0.2 })
 	for _, s in ipairs({ 1, -1 }) do
@@ -2084,14 +2203,19 @@ local function CorruptedTitan(scale)
 	for i, x in ipairs(spikes) do
 		r:Box(H, V(0.25, 0.5 + (i % 2) * 0.35, 0.25), CF(x, 1.0 + (i % 2) * 0.15, -0.5), P.Steel, M.Metal)
 	end
-	r:Box(RA, V(1.8, 0.8, 1.8), CF(0.2, 0.9, 0) * ANG(0, 0, rad(-15)), P.Black, M.Slate)
-	r:Box(LA, V(1.6, 0.7, 1.6), CF(-0.2, 0.85, 0) * ANG(0, 0, rad(10)), P.Black, M.Slate)
+	r:Pauldron(RA, 1, 1.15, P.Black, P.Neon, 0, M.Neon)
+	r:Pauldron(LA, -1, 1.05, P.Black)
 	r:Box(RL, V(1.2, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Slate)
 	r:Box(LL, V(1.2, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Slate)
 	-- дубина
-	r:Box(RA, V(0.35, 0.35, 1.2), CF(0, -1.05, -0.2), P.Maroon)
-	r:Box(RA, V(1.0, 1.0, 2.6), CF(0, -1.05, -2.0), P.Black, M.Slate)
-	r:Neon(RA, V(1.05, 0.15, 2.0), CF(0, -0.6, -2.0), P.Neon)
+	r:Cyl(RA, 1.2, 0.38, CF(0, -1.05, -0.2), P.Maroon, M.Fabric, "Z")
+	r:Cyl(RA, 2.6, 1.1, CF(0, -1.05, -2.0), P.Black, M.Slate, "Z") -- дубина
+	r:Ball(RA, 1.3, CF(0, -1.05, -3.3), P.Black, M.Slate)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		r:Wedge(RA, V(0.3, 0.5, 0.3), CF(math.cos(a) * 0.6, -1.05 + math.sin(a) * 0.6, -2.4 - (i % 2) * 0.6) * ANG(0, 0, a - math.pi / 2), P.Steel, M.Metal)
+	end
+	r:Cyl(RA, 0.15, 1.15, CF(0, -1.05, -1.4), P.Neon, M.Neon, "Z")
 	r:Sparkles(T, P.Neon, { Rate = 12, Size = 0.5 })
 	r:Glow(T, P.Neon, 14, 1.5)
 	return finishBiped(r:Finish(scale), scale)
@@ -2108,7 +2232,7 @@ local function VoidDevourer(scale)
 	-- глаза (асимметричные)
 	local eyes = { { -1.2, 0.8, 0.5 }, { 1.1, 0.9, 0.42 }, { -0.4, 1.2, 0.3 }, { 0.5, 0.6, 0.3 }, { 1.6, 0.4, 0.25 } }
 	for _, e in ipairs(eyes) do
-		r:Neon(B, V(e[3], e[3], 0.1), CF(e[1], e[2], -2.12), P.NeonPink)
+		r:Ball(B, e[3] * 1.2, CF(e[1], e[2], -2.08), P.NeonPink, M.Neon)
 	end
 	-- верхние зубы
 	for i = -3, 3 do
@@ -2129,7 +2253,8 @@ local function VoidDevourer(scale)
 	-- щупальца на спине
 	for i, x in ipairs({ -1.2, 0, 1.2 }) do
 		local lift = 1.6 + (i % 2) * 0.6
-		r:Chain(B, { V(x, 1.8, 1.6), V(x * 1.3, 1.8 + lift * 0.6, 2.4), V(x * 1.6, 1.8 + lift, 3.4) }, 0.45, P.Black, M.Plastic, 0.7)
+		r:Chain(B, { V(x, 1.8, 1.6), V(x * 1.3, 1.8 + lift * 0.6, 2.4), V(x * 1.6, 1.8 + lift, 3.4) }, 0.48, P.Black, M.Plastic, 0.7, true)
+		r:Ball(B, 0.4, CF(x * 1.6, 1.8 + lift, 3.4), P.NeonPink, M.Neon)
 	end
 	r:Sparkles(B, P.NeonPink, { Rate = 14, Size = 0.6 })
 	r:Glow(B, P.NeonPink, 16, 1.5)
@@ -2147,7 +2272,7 @@ local function TheEntity(scale)
 	LL.Transparency = 1
 	for i = 1, 5 do
 		local w = 2.2 - i * 0.35
-		r:Box(T, V(w, 0.7, w * 0.6), CF(math.sin(i) * 0.15, -1.2 - i * 0.6, 0.1 * i), P.Black, M.Plastic, { Transparency = (i - 1) * 0.12 })
+		r:Cyl(T, 0.7, w, CF(math.sin(i) * 0.15, -1.2 - i * 0.6, 0.1 * i), P.Black, M.Plastic, "Y", { Transparency = (i - 1) * 0.12 })
 	end
 	r:Neon(T, V(0.15, 1.6, 0.06), CF(0, 0.1, -0.52), P.White)
 	r:Seg(T, V(-0.8, 0.8, -0.52), V(0, 0.1, -0.52), 0.1, P.Neon, M.Neon)

@@ -58,6 +58,7 @@ local function newCreature(name, bodySize, bodyColor, bodyMat)
 	body.CFrame = CF()
 	body.Parent = model
 	self.Torso = body
+	self.Pending = {}
 	local m = Instance.new("Motor6D")
 	m.Name = "Root"
 	m.Part0 = root
@@ -92,10 +93,11 @@ local function LostSoul(scale)
 	local r = newCreature("LostSoul", V(1.6, 1.6, 1.4), P.Pale)
 	local B = r.Torso
 	B.Transparency = 0.25
+	table.insert(r.Pending, B) -- тело-эллипсоид
 	r.Head = B
 	r.HeadSize = B.Size
 	r:Eyes(P.Neon, { Y = 0.15, Spacing = 0.32, Size = V(0.3, 0.3, 0.06) })
-	r:Box(B, V(0.5, 0.18, 0.06), CF(0, -0.3, -0.72), P.Black)
+	r:Sphere(B, V(0.45, 0.3, 0.1), CF(0, -0.3, -0.68), P.Black) -- рот
 	r:Wedge(B, V(1.2, 0.9, 1.0), CF(0, -1.2, 0.1) * ANG(0, 0, math.pi), P.Pale, M.Plastic, { Transparency = 0.35 })
 	r:Wedge(B, V(0.6, 0.7, 0.6), CF(0.1, -1.8, 0.4) * ANG(0, 0, math.pi), P.Pale, M.Plastic, { Transparency = 0.5 })
 	r:Joint("ArmR", B, V(0.35, 0.9, 0.35), CF(0.8, 0, 0), CF(0.25, -0.35, 0) * ANG(0, 0, rad(25)), P.Pale)
@@ -110,15 +112,15 @@ end
 local function VoidCrawler(scale)
 	local r = newCreature("VoidCrawler", V(2.2, 1.0, 2.8), P.DeepViolet)
 	local B = r.Torso
-	r:Box(B, V(2.0, 0.5, 2.4), CF(0, 0.6, 0.15) * ANG(rad(-4), 0, 0), P.Coal, M.Metal)
-	r:Box(B, V(1.4, 0.4, 1.0), CF(0.1, 0.95, 0.5), P.Black, M.Metal)
+	r:Sphere(B, V(2.3, 1.1, 2.8), CF(0, 0.5, 0.15) * ANG(rad(-4), 0, 0), P.Coal, M.Metal) -- панцирь
+	r:Sphere(B, V(1.3, 0.6, 1.2), CF(0.1, 0.95, 0.5), P.Black, M.Metal)
 	r:Neon(B, V(0.1, 0.12, 2.2), CF(0, 0.88, 0.1), P.Neon)
-	local head = r:Box(B, V(1.3, 0.85, 1.0), CF(0, 0.05, -1.75), P.Coal)
+	r:Sphere(B, V(1.35, 0.95, 1.1), CF(0, 0.05, -1.75), P.Coal)
 	r:Wedge(B, V(0.25, 0.3, 0.8), CF(-0.4, -0.25, -2.5) * ANG(0, 0, 0), P.Pale)
 	r:Wedge(B, V(0.25, 0.3, 0.7), CF(0.42, -0.22, -2.45), P.Pale)
-	r:Neon(B, V(0.22, 0.22, 0.06), CF(-0.35, 0.2, -2.27), P.Neon)
-	r:Neon(B, V(0.22, 0.22, 0.06), CF(0.35, 0.22, -2.27), P.Neon)
-	r:Neon(B, V(0.16, 0.16, 0.06), CF(0.05, 0.38, -2.27), P.NeonPink)
+	r:Ball(B, 0.26, CF(-0.33, 0.2, -2.22), P.Neon, M.Neon)
+	r:Ball(B, 0.26, CF(0.35, 0.22, -2.22), P.Neon, M.Neon)
+	r:Ball(B, 0.2, CF(0.05, 0.4, -2.2), P.NeonPink, M.Neon)
 	local legs = { { "FR", 1, -0.8 }, { "FL", -1, -0.8 }, { "BR", 1, 0.8 }, { "BL", -1, 0.8 } }
 	for _, l in ipairs(legs) do
 		local leg = r:Joint(l[1], B, V(0.32, 1.5, 0.32), CF(1.05 * l[2], -0.1, l[3]), CF(0.45 * l[2], -0.6, 0) * ANG(0, 0, rad(32 * l[2])), P.Black)
@@ -143,7 +145,8 @@ local function ShadowBeast(scale)
 	for i = 0, 3 do
 		r:Wedge(B, V(0.25, 0.4 + (i % 2) * 0.2, 0.5), CF(0, 0.85, -0.9 + i * 0.6), P.DeepViolet)
 	end
-	r:Chain(B, { V(0, 0.4, 1.5), V(0, 0.8, 2.2), V(0.2, 1.3, 2.6) }, 0.3, P.Black, M.Plastic, 0.75)
+	r:Chain(B, { V(0, 0.4, 1.5), V(0, 0.8, 2.2), V(0.2, 1.3, 2.6) }, 0.32, P.Black, M.Plastic, 0.75, true)
+	r:Sphere(r.Head, V(0.5, 0.4, 0.4), CF(0, -0.2, -1.5), P.Black) -- нос
 	local legs = { { "FR", 0.55, -1.1 }, { "FL", -0.55, -1.1 }, { "BR", 0.55, 1.1 }, { "BL", -0.55, 1.1 } }
 	for _, l in ipairs(legs) do
 		local leg = r:Joint(l[1], B, V(0.5, 1.5, 0.5), CF(l[2], -0.5, l[3]), CF(0, -0.75, 0), P.Black)
@@ -166,10 +169,11 @@ local function ArmoredHorror(scale)
 	for i = -1, 1 do
 		r:Wedge(H, V(0.25, 0.6, 0.4), CF(i * 0.5, 1.05, 0), P.Steel, M.Metal)
 	end
-	r:Box(RA, V(1.5, 0.6, 1.5), CF(0.15, 0.9, 0) * ANG(0, 0, rad(-12)), P.Gray, M.Metal)
-	r:Box(LA, V(1.4, 0.55, 1.4), CF(-0.12, 0.88, 0) * ANG(0, 0, rad(10)), P.Gray, M.Metal)
-	r:Box(LA, V(0.3, 2.6, 2.0), CF(-0.7, -0.6, -0.2), P.Steel, M.Metal) -- щит
-	r:Neon(LA, V(0.1, 1.2, 0.2), CF(-0.88, -0.6, -0.2), P.Neon)
+	r:Pauldron(RA, 1, 1.0, P.Gray, P.Steel)
+	r:Pauldron(LA, -1, 0.95, P.Gray, P.Steel)
+	r:Cyl(LA, 0.3, 2.6, CF(-0.7, -0.6, -0.2), P.Steel, M.Metal, "X") -- круглый щит
+	r:Cyl(LA, 0.2, 2.8, CF(-0.66, -0.6, -0.2), P.Dark, M.Metal, "X")
+	r:Sphere(LA, V(0.3, 0.8, 0.8), CF(-0.88, -0.6, -0.2), P.Neon, M.Neon)
 	r:Box(RL, V(1.15, 1.2, 1.2), CF(0, -0.4, 0), P.Gray, M.Metal)
 	r:Box(LL, V(1.15, 1.2, 1.2), CF(0, -0.4, 0), P.Gray, M.Metal)
 	r:Box(RA, V(1.15, 1.2, 1.15), CF(0, -0.4, 0), P.Steel, M.Metal)
@@ -193,7 +197,7 @@ local function RiftPhantom(scale)
 	-- плащ сужается книзу
 	for i = 1, 4 do
 		local w = 1.8 - i * 0.32
-		r:Box(B, V(w, 0.6, w * 0.65), CF(0.05 * (i % 2), -1.0 - i * 0.5, 0.05 * i), P.DeepViolet, M.Fabric, { Transparency = 0.3 + i * 0.1 })
+		r:Cyl(B, 0.6, w, CF(0.05 * (i % 2), -1.0 - i * 0.5, 0.05 * i), P.DeepViolet, M.Fabric, "Y", { Transparency = 0.3 + i * 0.1 })
 	end
 	r:Neon(B, V(0.12, 1.8, 0.06), CF(0.4, 0, -0.58), P.Neon, { Transparency = 0.2 })
 	for _, s in ipairs({ 1, -1 }) do
@@ -253,14 +257,19 @@ local function CorruptedTitan(scale)
 	for i, x in ipairs(spikes) do
 		r:Box(H, V(0.25, 0.5 + (i % 2) * 0.35, 0.25), CF(x, 1.0 + (i % 2) * 0.15, -0.5), P.Steel, M.Metal)
 	end
-	r:Box(RA, V(1.8, 0.8, 1.8), CF(0.2, 0.9, 0) * ANG(0, 0, rad(-15)), P.Black, M.Slate)
-	r:Box(LA, V(1.6, 0.7, 1.6), CF(-0.2, 0.85, 0) * ANG(0, 0, rad(10)), P.Black, M.Slate)
+	r:Pauldron(RA, 1, 1.15, P.Black, P.Neon, 0, M.Neon)
+	r:Pauldron(LA, -1, 1.05, P.Black)
 	r:Box(RL, V(1.2, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Slate)
 	r:Box(LL, V(1.2, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Slate)
 	-- дубина
-	r:Box(RA, V(0.35, 0.35, 1.2), CF(0, -1.05, -0.2), P.Maroon)
-	r:Box(RA, V(1.0, 1.0, 2.6), CF(0, -1.05, -2.0), P.Black, M.Slate)
-	r:Neon(RA, V(1.05, 0.15, 2.0), CF(0, -0.6, -2.0), P.Neon)
+	r:Cyl(RA, 1.2, 0.38, CF(0, -1.05, -0.2), P.Maroon, M.Fabric, "Z")
+	r:Cyl(RA, 2.6, 1.1, CF(0, -1.05, -2.0), P.Black, M.Slate, "Z") -- дубина
+	r:Ball(RA, 1.3, CF(0, -1.05, -3.3), P.Black, M.Slate)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		r:Wedge(RA, V(0.3, 0.5, 0.3), CF(math.cos(a) * 0.6, -1.05 + math.sin(a) * 0.6, -2.4 - (i % 2) * 0.6) * ANG(0, 0, a - math.pi / 2), P.Steel, M.Metal)
+	end
+	r:Cyl(RA, 0.15, 1.15, CF(0, -1.05, -1.4), P.Neon, M.Neon, "Z")
 	r:Sparkles(T, P.Neon, { Rate = 12, Size = 0.5 })
 	r:Glow(T, P.Neon, 14, 1.5)
 	return finishBiped(r:Finish(scale), scale)
@@ -277,7 +286,7 @@ local function VoidDevourer(scale)
 	-- глаза (асимметричные)
 	local eyes = { { -1.2, 0.8, 0.5 }, { 1.1, 0.9, 0.42 }, { -0.4, 1.2, 0.3 }, { 0.5, 0.6, 0.3 }, { 1.6, 0.4, 0.25 } }
 	for _, e in ipairs(eyes) do
-		r:Neon(B, V(e[3], e[3], 0.1), CF(e[1], e[2], -2.12), P.NeonPink)
+		r:Ball(B, e[3] * 1.2, CF(e[1], e[2], -2.08), P.NeonPink, M.Neon)
 	end
 	-- верхние зубы
 	for i = -3, 3 do
@@ -298,7 +307,8 @@ local function VoidDevourer(scale)
 	-- щупальца на спине
 	for i, x in ipairs({ -1.2, 0, 1.2 }) do
 		local lift = 1.6 + (i % 2) * 0.6
-		r:Chain(B, { V(x, 1.8, 1.6), V(x * 1.3, 1.8 + lift * 0.6, 2.4), V(x * 1.6, 1.8 + lift, 3.4) }, 0.45, P.Black, M.Plastic, 0.7)
+		r:Chain(B, { V(x, 1.8, 1.6), V(x * 1.3, 1.8 + lift * 0.6, 2.4), V(x * 1.6, 1.8 + lift, 3.4) }, 0.48, P.Black, M.Plastic, 0.7, true)
+		r:Ball(B, 0.4, CF(x * 1.6, 1.8 + lift, 3.4), P.NeonPink, M.Neon)
 	end
 	r:Sparkles(B, P.NeonPink, { Rate = 14, Size = 0.6 })
 	r:Glow(B, P.NeonPink, 16, 1.5)
@@ -316,7 +326,7 @@ local function TheEntity(scale)
 	LL.Transparency = 1
 	for i = 1, 5 do
 		local w = 2.2 - i * 0.35
-		r:Box(T, V(w, 0.7, w * 0.6), CF(math.sin(i) * 0.15, -1.2 - i * 0.6, 0.1 * i), P.Black, M.Plastic, { Transparency = (i - 1) * 0.12 })
+		r:Cyl(T, 0.7, w, CF(math.sin(i) * 0.15, -1.2 - i * 0.6, 0.1 * i), P.Black, M.Plastic, "Y", { Transparency = (i - 1) * 0.12 })
 	end
 	r:Neon(T, V(0.15, 1.6, 0.06), CF(0, 0.1, -0.52), P.White)
 	r:Seg(T, V(-0.8, 0.8, -0.52), V(0, 0.1, -0.52), 0.1, P.Neon, M.Neon)
