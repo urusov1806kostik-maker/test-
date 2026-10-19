@@ -285,6 +285,48 @@ for _, id in ipairs(Config.UnitOrder) do
 	UV.PlayAnim("Fidget")
 	tick(0.3)
 end
+-- способности часовщика в предпросмотре
+UV.Open("CursedClockmaker", 5)
+for _, ab in ipairs({ "TimeBreak", "TimeHaste", "TimeStorm" }) do
+	UV.PlayAnim(ab)
+	tick(1.0)
+end
+tick(4)
+-- эффекты способностей времени на карте
+local Rd = env.require(clientScript.Renderer)
+local P0 = M.Vector3.new(0, 60, 0)
+Rd.OnImpact({ K = "ChronoHit", P = P0, L = 3 })
+Rd.OnImpact({ K = "ChronoBurst", P = P0, R = 5, L = 3 })
+Rd.OnImpact({ K = "TimeBreak", P = P0, R = 9, DUR = 1.5, L = 3 })
+Rd.OnImpact({ K = "TimeHaste", P = P0, R = 14, A = {}, DUR = 2, L = 3 })
+Rd.OnImpact({ K = "TimeStorm", P = P0, R = 6, DL = 1.3, L = 3 })
+FXm = env.require(clientScript.FX)
+FXm.GearDisc(P0 + M.Vector3.new(0, 3, 0), P0 + M.Vector3.new(20, 3, 0), 0.4, 5, true)
+FXm.ClockPortal(P0, 1.3)
+tick(3)
+-- установка часовщика на карту (подъём из портала) и «Временная буря» на модели
+local fold = env.Instance.new("Folder")
+fold.Name = "9999"
+fold:SetAttribute("UnitId", "CursedClockmaker")
+fold:SetAttribute("Level", 4)
+fold:SetAttribute("Position", P0)
+fold:SetAttribute("Rotation", 0)
+Rd.AddUnit(fold, true)
+tick(1.5)
+fold:SetAttribute("Storm", true)
+tick(0.5)
+local shown = 0
+for _, d in ipairs(Rd.UnitViews[9999].Rig.Model:GetDescendants()) do
+	if d:IsA("BasePart") and d:GetAttribute("StormFX") and d.Transparency < 1 then shown = shown + 1 end
+end
+assert(shown > 0, "storm gears must show during Time Storm")
+Rd.OnAttack({ U = 9999, T = {}, L = 4, D = 1.2, AB = "TimeStorm" })
+tick(2.5)
+fold:SetAttribute("Storm", false)
+tick(1)
+Rd.RemoveUnit(fold)
+tick(3)
+print("clock fx ok, fx children", #M.workspace.VoidTD_FX:GetChildren())
 assert(UV.IsOpen(), "viewer must be open")
 local vf
 for _, d in ipairs(player.PlayerGui:GetDescendants()) do

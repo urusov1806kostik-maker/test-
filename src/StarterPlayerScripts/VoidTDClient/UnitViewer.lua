@@ -34,6 +34,7 @@ local window -- корневая рамка (создаётся один раз)
 local refs = {}
 local state -- текущее открытие: { Id, Level, Rig, Yaw, Pitch, Dist, ... }
 local conns = {} -- соединения, живущие только пока окно открыто
+local previewFx -- эффекты способностей в предпросмотре (определены ниже)
 
 ------------------------------------------------------------------------
 -- 3D-сцена
@@ -337,6 +338,10 @@ local function build()
 			UnitViewer.PlayAnim(a[2])
 		end)
 	end
+	-- кнопки способностей (только у юнитов с PreviewAbilities)
+	refs.AbilityRow = K.new("Frame", { Parent = scene, Position = UDim2.fromOffset(10, 48), Size = UDim2.fromOffset(420, 32), BackgroundTransparency = 1, ZIndex = 24 }, {
+		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }),
+	})
 	K.button({ Parent = scene, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), Size = UDim2.fromOffset(40, 32), Text = "⟲", BackgroundColor3 = THEME.BG3, ZIndex = 25 }, function()
 		if state then
 			state.Yaw, state.Pitch, state.Zoom = math.rad(200), math.rad(12), 1
@@ -458,6 +463,65 @@ local function step(dt)
 end
 
 ------------------------------------------------------------------------
+-- ЭФФЕКТЫ СПОСОБНОСТЕЙ В ПРЕДПРОСМОТРЕ (детали внутри WorldModel, удаляются сами)
+------------------------------------------------------------------------
+local GOLD, ORANGE = Color3.fromRGB(230, 178, 74), Color3.fromRGB(255, 140, 40)
+
+local function fxPart(props, life)
+	local p = part(props)
+	task.delay(life, function()
+		if p.Parent then
+			p:Destroy()
+		end
+	end)
+	return p
+end
+
+local function previewRing(y, r0, r1, color, time, delay)
+	task.delay(delay or 0, function()
+		if not state or not refs.World then
+			return
+		end
+		local p = fxPart({ Shape = Enum.PartType.Cylinder, Size = V(0.15, r0 * 2, r0 * 2), CFrame = CF(0, y, 0) * ANG(0, 0, rad(90)), Color = color, Material = Enum.Material.Neon, Transparency = 0.2 }, time + 0.1)
+		K.tween(p, time, { Size = V(0.1, r1 * 2, r1 * 2), Transparency = 1 })
+	end)
+end
+
+-- показать/скрыть шестерни бури на копии модели
+local function previewStorm(on)
+	if not state or not state.Rig then
+		return
+	end
+	state.Rig.Storm = on
+	for _, d in ipairs(state.Rig.Model:GetDescendants()) do
+		if d:IsA("BasePart") and d:GetAttribute("StormFX") then
+			d.Transparency = on and d:GetAttribute("StormFX") or 1
+		end
+	end
+end
+
+previewFx = function(kind)
+	local s = state.Rig.Scale or 1
+	if kind == "TimeBreak" then
+		previewRing(0.05, 1, 6 * s, GOLD, 0.9, 0.5)
+		previewRing(0.1, 0.5, 4 * s, ORANGE, 0.6, 0.55)
+	elseif kind == "TimeHaste" then
+		previewRing(0.1, 1, 9 * s, GOLD, 1.0, 0.4)
+		previewRing(0.15, 1, 7 * s, ORANGE, 0.8, 0.5)
+	elseif kind == "TimeStorm" then
+		previewStorm(true)
+		previewRing(0.1, 1, 8 * s, GOLD, 0.9, 1.3)
+		previewRing(0.15, 0.5, 5 * s, ORANGE, 0.6, 1.35)
+		local rig = state.Rig
+		task.delay(4, function()
+			if state and state.Rig == rig then
+				previewStorm(false)
+			end
+		end)
+	end
+end
+
+------------------------------------------------------------------------
 -- API
 ------------------------------------------------------------------------
 function UnitViewer.Open(unitId, level)
@@ -483,6 +547,16 @@ function UnitViewer.Open(unitId, level)
 	buildModel(false)
 	refreshInfo()
 	applyRarityFx(true)
+	for _, c in ipairs(refs.AbilityRow:GetChildren()) do
+		if c:IsA("GuiButton") then
+			c:Destroy()
+		end
+	end
+	for i, ab in ipairs(Config.Units[unitId].PreviewAbilities or {}) do
+		K.button({ Parent = refs.AbilityRow, Size = UDim2.fromOffset(132, 30), Text = ab[2], LayoutOrder = i, BackgroundColor3 = Color3.fromRGB(90, 56, 20), StrokeColor = Color3.fromRGB(230, 170, 70), ZIndex = 25 }, function()
+			UnitViewer.PlayAnim(ab[1])
+		end)
+	end
 	-- соединения живут только пока окно открыто
 	for _, c in ipairs(conns) do
 		c:Disconnect()
@@ -515,8 +589,12 @@ function UnitViewer.PlayAnim(kind)
 		state.Anim = nil
 	elseif kind == "Attack" then
 		Renderer.PreviewAttack(state, state.Id, state.Level)
-	else
+	elseif kind == "Fidget" then
 		Renderer.PreviewFidget(state, state.Id)
+	else
+		-- способность: только анимация и эффекты в окне, на матч не влияет
+		Renderer.PreviewAbility(state, kind)
+		previewFx(kind)
 	end
 end
 

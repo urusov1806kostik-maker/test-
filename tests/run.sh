@@ -16,6 +16,8 @@ for set in old shattered blood; do
 	echo "== client: $set"
 	luau run_client.luau -a "$set" 2>&1 | grep -E "CLIENT TEST OK|attempt|Error"
 done
+echo "== clockmaker"
+luau run_clock.luau 2>&1 | grep -E "CLOCK TEST OK|attempt|Error"
 echo "== enemies"
 luau run_enemies.luau 2>&1 | grep -E "ENEMY TEST OK|attempt|Error"
 for preset in shattered blood; do

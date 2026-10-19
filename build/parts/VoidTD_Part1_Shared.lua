@@ -85,6 +85,9 @@ Config.Settings = {
 	StarterUnits = { "VoidSoldier", "ShadowArcher", "LostMage" },
 	DailyGems = 150,              -- бесплатные кристаллы в магазине раз в 20 часов
 	DailyCooldown = 20 * 3600,
+	FreezeImmunity = 3,           -- после остановки времени враг 3 с не может быть остановлен снова
+	-- В Studio эти юниты выдаются в инвентарь для проверки (в опубликованной игре — нет)
+	StudioGrantUnits = { "CursedClockmaker" },
 	ShopTestMode = true,          -- в Studio покупка с ProductId = 0 выдаёт кристаллы бесплатно (для теста)
 	DataStoreName = "VoidTD_Data_v1",
 	SyncRate = 0.1,               -- как часто сервер рассылает позиции врагов
@@ -126,6 +129,19 @@ Config.Cases = {
 		Cost1 = 80, Cost10 = 720,
 		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
 		Units = { "RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer" },
+	},
+	-- HALLOWEEN CASE: пока выключен (Enabled = false) — в нём есть только Проклятый часовщик,
+	-- остальные хэллоуинские юниты, Король фонарей, Ночной сторож и руны ещё не добавлены.
+	-- Валюта — Halloween Coins. UnitRates — шанс конкретного юнита в процентах (поверх шансов редкостей).
+	Halloween = {
+		Name = "HALLOWEEN CASE", Color = Color3.fromRGB(255, 130, 30),
+		Description = "Хэллоуин. Проклятый часовщик: 0.2%",
+		Enabled = false,
+		Currency = "HalloweenCoins",
+		Cost1 = 500, Cost10 = 5000,
+		Rates = {},
+		UnitRates = { CursedClockmaker = 0.2 },
+		Units = { "CursedClockmaker" },
 	},
 	BloodMoon = {
 		Name = "BLOOD MOON", Color = Color3.fromRGB(210, 30, 50),
@@ -243,6 +259,8 @@ Config.UnitOrder = {
 	"RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer",
 	-- Blood Moon Case
 	"BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse",
+	-- Halloween Case
+	"CursedClockmaker",
 }
 
 Config.Units = {
@@ -560,6 +578,30 @@ Config.Units = {
 				BloodMoon = { Cooldown = 9,  Radius = 20, Mult = 3, Bleed = 240, BleedTime = 4 } },
 		},
 		AbilityExtraRange = 8,
+	},
+	--------------------------------------------------------------------
+	-- HALLOWEEN CASE
+	--------------------------------------------------------------------
+	CursedClockmaker = {
+		Name = "CURSED CLOCKMAKER", Rarity = "Secret", Event = "Halloween", AttackType = "Chrono", Case = "Halloween",
+		Description = "SECRET 🎃 Проклятый часовщик. Хроносекира выпускает зубчатый диск: он летит по прямой и режет до 5 врагов. Три способности времени.",
+		Ability = "ПОЛОМКА ВРЕМЕНИ • УСКОРЕНИЕ ВРЕМЕНИ • ВРЕМЕННАЯ БУРЯ",
+		Anim = "ChronoSlash", HitDelay = 0.35, ProjectileSpeed = 70, Scale = 1.45, DefaultTarget = "First",
+		DiscWidth = 3, DiscTargets = 5, ImpactColor = Color3.fromRGB(255, 160, 50), PlaceFX = "Clock",
+		PreviewAbilities = { { "TimeBreak", "ПОЛОМКА" }, { "TimeHaste", "УСКОРЕНИЕ" }, { "TimeStorm", "БУРЯ" } },
+		-- 1. Поломка времени: каждая 8-я обычная атака, не чаще раза в 18 с
+		TimeBreak = { EveryNth = 8, MinInterval = 18, Radius = 9, MaxFreeze = 4, Freeze = 1.5, BossFreeze = 0.5, MaxRewind = 3, Rewind = 2 },
+		-- 2. Ускорение времени: через 30 с после установки и далее каждые 30 с (сила и длительность — по уровням)
+		TimeHaste = { FirstDelay = 30, Interval = 30, Radius = 14 },
+		-- 3. Временная буря: через 90 с после установки, 15 с AOE, перезарядка 90 с после окончания
+		TimeStorm = { FirstDelay = 90, Duration = 15, Cooldown = 90, Radius = 5, Extra = 4, Mult = 0.5 },
+		Levels = {
+			{ Damage = 240,  Range = 17, Cooldown = 1.6,  Cost = 9500,  Haste = 0.06, HasteTime = 2 },
+			{ Damage = 340,  Range = 17, Cooldown = 1.5,  Cost = 6500,  Haste = 0.07, HasteTime = 2.5 },
+			{ Damage = 480,  Range = 18, Cooldown = 1.45, Cost = 9500,  Haste = 0.08, HasteTime = 3 },
+			{ Damage = 680,  Range = 19, Cooldown = 1.35, Cost = 13500, Haste = 0.09, HasteTime = 3.5 },
+			{ Damage = 980,  Range = 20, Cooldown = 1.25, Cost = 20000, Haste = 0.10, HasteTime = 4 },
+		},
 	},
 }
 
@@ -2783,6 +2825,255 @@ local function VoidKnight(lv)
 	return r:Finish(1.1, { RS = { 20, 0, 0 } })
 end
 
+------------------------------------------------------------------------
+-- HALLOWEEN: ПРОКЛЯТЫЙ ЧАСОВЩИК (SECRET)
+-- Голова — старинные механические часы, стрелки и шестерёнки на моторах Clock*/Gear*
+-- (крутятся в Renderer, быстрее во время способностей). Оружие — Хроносекира.
+------------------------------------------------------------------------
+local CLK = {
+	Black = rgb(20, 18, 24),
+	Suit = rgb(34, 30, 40),
+	Gold = rgb(214, 168, 72),
+	GoldDark = rgb(150, 112, 50),
+	Bronze = rgb(160, 106, 52),
+	Silver = rgb(172, 174, 188),
+	Steel = rgb(58, 54, 64),
+	Dial = rgb(14, 12, 18),
+	Orange = rgb(255, 140, 40),
+	OrangeDim = rgb(140, 70, 24),
+}
+
+-- Восьмиугольник из 4 брусков в плоскости XY узла cf (a — расстояние от центра до грани)
+local function octa(r, limb, a, depth, cf, color, mat)
+	local parts = {}
+	for k = 0, 3 do
+		parts[#parts + 1] = r:Box(limb, V(2 * a, 0.8284 * a, depth), cf * ANG(0, 0, k * PI / 4), color, mat or M.Metal)
+	end
+	return parts
+end
+
+-- Шестерёнка в плоскости XY. С именем — на своём моторе (крутится вокруг оси Z узла).
+local function gear(r, limb, name, pivot, a, depth, color, hubColor, rate, mat)
+	local host, base = limb, pivot
+	if name then
+		host = r:Joint(name, limb, V(0.1, 0.1, 0.1), pivot, CF(), color)
+		host.Transparency = 1
+		base = CF()
+		r.SpinRates[name] = rate or 1
+	end
+	octa(r, host, a, depth, base, color, mat)
+	for k = 0, 7 do
+		local ang = k * PI / 4
+		r:Box(host, V(a * 0.36, a * 0.34, depth), base * CF(math.cos(ang) * a * 1.08, math.sin(ang) * a * 1.08, 0) * ANG(0, 0, ang), color, mat or M.Metal)
+	end
+	local hub = r:Box(host, V(a * 0.42, a * 0.42, depth + 0.04), base * ANG(0, 0, PI / 4), hubColor or CLK.Black, (hubColor == CLK.Orange) and M.Neon or M.Metal)
+	return host, hub
+end
+
+-- Циферблат: рама, чёрный диск, деления, стрелки на моторах <prefix>Hour / <prefix>Minute
+local function clockFace(r, limb, cf, a, frame, prefix, handColor, glowHands)
+	octa(r, limb, a, 0.5, cf, frame)
+	octa(r, limb, a * 0.84, 0.54, cf, CLK.Dial, M.Plastic)
+	for k = 0, 11 do
+		local ang = k * PI / 6
+		local big = k % 3 == 0
+		r:Box(limb, V(a * 0.07, a * (big and 0.2 or 0.12), 0.04), cf * CF(math.cos(ang) * a * 0.68, math.sin(ang) * a * 0.68, -0.28) * ANG(0, 0, ang + PI / 2), handColor, M.Metal)
+	end
+	local hands = {}
+	for i, h in ipairs({ { "Hour", 0.45, 0.11, 0.22 }, { "Minute", 0.68, 0.07, 1.6 } }) do
+		local name = prefix .. h[1]
+		local hub = r:Joint(name, limb, V(0.1, 0.1, 0.1), cf * CF(0, 0, -0.3 - i * 0.02), CF(), handColor)
+		hub.Transparency = 1
+		r.SpinRates[name] = h[4]
+		local f = glowHands and r.Neon or r.Box
+		hands[i] = f(r, hub, V(a * h[3], a * h[2], 0.04), CF(0, a * h[2] * 0.42, 0), glowHands and CLK.Orange or handColor)
+	end
+	r:Box(limb, V(a * 0.16, a * 0.16, 0.08), cf * CF(0, 0, -0.36) * ANG(0, 0, PI / 4), CLK.Gold, M.Metal)
+	return hands
+end
+
+-- Хроносекира: длинная тёмная рукоять, два полукруглых зубчатых лезвия, центральная шестерня
+local function chronoaxe(r, A, lv)
+	local z = -0.5
+	local bottom, top = -2.5, 2.3
+	r:Box(A, V(0.22, top - bottom, 0.22), CF(0, (top + bottom) / 2, z), CLK.Steel, M.Metal)
+	for _, y in ipairs({ -1.6, -0.2, 1.2 }) do
+		Kit.bevel(r, A, V(0.34, 0.16, 0.34), CF(0, y, z), CLK.Bronze, false)
+	end
+	Kit.spike(r, A, V(0, bottom + 0.05, z), V(0, bottom - 0.5, z), 0.3, CLK.Bronze, M.Metal)
+	local c = V(0, top + 0.2, z)
+	local R = ({ 0.95, 1.15, 1.15, 1.3, 1.45 })[lv]
+	local blade = lv >= 5 and CLK.Black or CLK.Steel
+	local rimColor = lv >= 4 and CLK.Orange or CLK.OrangeDim
+	for _, side in ipairs({ -1, 1 }) do
+		local prev
+		for k = 0, 6 do
+			local phi = rad(-78 + k * 26)
+			local dir = V(0, math.sin(phi), side * math.cos(phi))
+			Kit.bar(r, A, c + dir * 0.3, c + dir * R, V2(0.1, 2 * R * math.sin(rad(13)) + 0.1), blade, M.Metal)
+			Kit.spike(r, A, c + dir * (R - 0.02), c + dir * (R + 0.22), 0.2, CLK.Gold, M.Metal, true, 0.1)
+			local rim = c + dir * (R * 0.9)
+			if prev then
+				local g = Kit.bar(r, A, prev, rim, V2(0.12, 0.07), rimColor, M.Neon)
+				g:SetAttribute("AxeGlow", true)
+			end
+			prev = rim
+		end
+		-- бронзовая накладка у основания лезвия
+		Kit.bevel(r, A, V(0.14, 0.5, 0.35), CF(c + V(0, 0, side * 0.42)), CLK.Bronze, false)
+	end
+	-- центральная шестерня (вращается) и малые механизмы
+	local _, hub = gear(r, A, "GearAxe", CF(c) * ANG(0, PI / 2, 0), 0.38, 0.16, lv >= 3 and CLK.Gold or CLK.Bronze, CLK.Orange, 2.2)
+	hub:SetAttribute("AxeGlow", true)
+	gear(r, A, "GearAxeS1", CF(c + V(0, 0.5, -0.3)) * ANG(0, PI / 2, 0), 0.15, 0.12, CLK.Bronze, CLK.Black, -3.5)
+	gear(r, A, "GearAxeS2", CF(c + V(0, -0.5, 0.3)) * ANG(0, PI / 2, 0), 0.15, 0.12, CLK.Bronze, CLK.Black, 3.5)
+	r:Sparkles(hub, CLK.Orange, { Rate = lv >= 4 and 8 or 4, Size = 0.18 })
+	r:WeaponTrail(A, c + V(0, 0, -0.4), c + V(0, 0, -R), CLK.Orange)
+	return muzzle(r, A, CF(c))
+end
+
+-- Маленькие часы (для орбиты вокруг персонажа)
+local function miniClock(r, limb, cf, a)
+	octa(r, limb, a, 0.12, cf, CLK.Gold)
+	octa(r, limb, a * 0.8, 0.14, cf, CLK.Dial, M.Plastic)
+	r:Box(limb, V(a * 0.12, a * 0.6, 0.04), cf * CF(0, a * 0.25, -0.09), CLK.Gold, M.Metal)
+	r:Box(limb, V(a * 0.5, a * 0.1, 0.04), cf * CF(a * 0.2, 0, -0.1), CLK.Gold, M.Metal)
+end
+
+local function CursedClockmaker(lv)
+	local edge = CLK.GoldDark
+	local r = Rig.new({ Name = "CursedClockmaker", HeadSize = V(1.2, 1.2, 1.2), Torso = CLK.Black, Arm = CLK.Black, Leg = CLK.Black, Head = CLK.Black })
+	r.SpinRates = {}
+	for _, L in ipairs({ r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+		L.Transparency = 1
+	end
+	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+	local gearColor = lv >= 3 and CLK.Gold or (lv >= 2 and CLK.Silver or CLK.Bronze)
+	local frame = lv >= 3 and CLK.Gold or CLK.Bronze
+
+	-- R6-ТЕЛО: чёрный костюм с золотым кантом
+	Kit.bevel(r, T, V(2, 2, 1), CF(), CLK.Black, edge)
+	Kit.bevel(r, RA, V(1, 2, 1), CF(), CLK.Black, edge)
+	Kit.bevel(r, LA, V(1, 2, 1), CF(), CLK.Black, edge)
+	Kit.bevel(r, RL, V(1, 2, 1), CF(), CLK.Black, edge)
+	Kit.bevel(r, LL, V(1, 2, 1), CF(), CLK.Black, edge)
+	-- жилет, лацканы, пуговицы, брошь
+	Kit.bevel(r, T, V(1.5, 1.7, 1.08), CF(0, 0.1, 0), CLK.Suit, edge, M.Fabric)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bar(r, T, V(0.25 * s, 0.98, -0.56), V(0.62 * s, -0.4, -0.56), V2(0.12, 0.05), CLK.Gold, M.Metal)
+	end
+	for k = 0, 2 do
+		r:Box(T, V(0.12, 0.12, 0.06), CF(0, 0.45 - k * 0.38, -0.57) * ANG(0, 0, PI / 4), CLK.Gold, M.Metal)
+	end
+	Kit.gem(r, T, 0.26, CF(0, 0.82, -0.6), CLK.Orange, CLK.Gold)
+	-- золотые цепочки и карманные часы
+	Kit.bar(r, T, V(0, 0.07, -0.58), V(-0.45, -0.3, -0.58), V2(0.06, 0.06), CLK.Gold, M.Metal)
+	Kit.bar(r, T, V(-0.45, -0.3, -0.58), V(-0.75, -0.05, -0.58), V2(0.06, 0.06), CLK.Gold, M.Metal)
+	miniClock(r, T, CF(-0.78, -0.25, -0.58), 0.18)
+	-- пояс с пряжкой-шестерёнкой
+	Kit.bevel(r, T, V(2.1, 0.3, 1.12), CF(0, -0.82, 0), CLK.Black, edge)
+	gear(r, T, nil, CF(0, -0.82, -0.6), 0.16, 0.08, CLK.Gold, CLK.Orange)
+	-- полы длинного сюртука
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bevel(r, T, V(0.95, 1.6, 0.16), CF(0.52 * s, -1.75, 0.46), CLK.Suit, edge, M.Fabric)
+	end
+	Kit.tatter(r, T, -2.55, 0.46, 2.0, 4, CLK.Suit, M.Fabric, 5)
+
+	-- ГОЛОВА-ЧАСЫ
+	local a = lv >= 5 and 1.0 or 0.92
+	local headCF = CF(0, 0.35, 0)
+	clockFace(r, H, headCF, a, frame, "Clock", CLK.Gold, lv >= 4)
+	-- светящиеся механизмы на циферблате и по бокам
+	gear(r, H, "GearHeadA", headCF * CF(0, -a * 0.38, -0.29), a * 0.16, 0.04, CLK.Orange, CLK.Dial, 3, M.Neon)
+	for _, s in ipairs({ -1, 1 }) do
+		gear(r, H, s == 1 and "GearHeadR" or "GearHeadL", headCF * CF(a * 0.98 * s, a * 0.45, 0), a * 0.24, 0.2, gearColor, CLK.Orange, 1.4 * s)
+	end
+	-- заводная головка сверху
+	Kit.bevel(r, H, V(0.3, 0.3, 0.3), headCF * CF(0, a + 0.1, 0), frame, false)
+	Kit.bevel(r, H, V(0.44, 0.12, 0.44), headCF * CF(0, a + 0.3, 0), frame, false)
+
+	-- НАПЛЕЧНИКИ
+	if lv >= 3 then
+		Kit.pauldron(r, RA, 1, lv >= 5 and 1.2 or 1.05, CLK.Black, CLK.Gold, CLK.Orange, lv >= 5 and 2 or 1)
+		Kit.pauldron(r, LA, -1, lv >= 5 and 1.2 or 1.05, CLK.Black, CLK.Gold, CLK.Orange, lv >= 5 and 2 or 1)
+	else
+		for _, side in ipairs({ 1, -1 }) do
+			local A = side == 1 and RA or LA
+			Kit.bevel(r, A, V(1.3, 0.45, 1.25) * (lv >= 2 and 1.1 or 1), CF(0.12 * side, 0.9, 0) * ANG(0, 0, rad(-12 * side)), CLK.Steel, lv >= 2 and CLK.Silver or CLK.Bronze)
+			gear(r, A, nil, CF(0.62 * side, 0.85, 0) * ANG(0, PI / 2, 0), 0.2, 0.08, gearColor, CLK.Black)
+		end
+	end
+	-- рукава с золотыми манжетами, перчатки
+	for _, A in ipairs({ RA, LA }) do
+		Kit.bevel(r, A, V(1.16, 0.3, 1.16), CF(0, -0.55, 0), CLK.Gold, false)
+		Kit.bevel(r, A, V(1.04, 0.42, 1.04), CF(0, -0.82, 0), lv >= 2 and CLK.Steel or CLK.Bronze, edge)
+		if lv >= 2 then
+			Kit.bevel(r, A, V(1.12, 0.5, 1.12), CF(0, -0.2, 0), CLK.Steel, CLK.Silver)
+		end
+	end
+	-- ноги: брюки, наколенники (с 2 ур.), сапоги с золотом
+	for _, Lg in ipairs({ RL, LL }) do
+		if lv >= 2 then
+			Kit.bevel(r, Lg, V(0.8, 0.45, 0.26), CF(0, 0.0, -0.58), CLK.Steel, CLK.Silver)
+		end
+		Kit.bootA(r, Lg, CLK.Black, CLK.Gold, 1.12)
+	end
+
+	-- МЕХАНИЗМ НА СПИНЕ
+	gear(r, T, "GearBack", CF(0, 0.3, 0.7), 0.7, 0.2, gearColor, CLK.Orange, 0.8)
+	if lv >= 3 then
+		gear(r, T, "GearBack2", CF(0.75, -0.35, 0.82), 0.42, 0.18, CLK.Bronze, CLK.Black, -1.4)
+		gear(r, T, "GearBack3", CF(-0.7, -0.45, 0.82), 0.32, 0.18, CLK.Bronze, CLK.Black, 1.9)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(T, V(0.14, 1.4, 0.14), CF(0.55 * s, 0.4, 0.66), CLK.Bronze, M.Metal)
+		end
+	end
+	-- ПЛАЩ (роскошный с 4 ур.)
+	local cape = r:Cape(lv >= 4 and 2.3 or 2.0, lv >= 4 and 4.2 or 3.6, lv >= 4 and rgb(26, 16, 30) or CLK.Black, true)
+	if lv >= 4 then
+		Kit.gem(r, cape, 0.5, CF(0, 0.1, 0.08) * ANG(0, PI, 0), CLK.Orange, CLK.Gold)
+		r:Box(cape, V(2.34, 0.1, 0.14), CF(0, 0.9, 0), CLK.Gold, M.Metal)
+	end
+	-- ОГРОМНЫЕ ЧАСЫ ЗА СПИНОЙ (MAX)
+	if lv >= 5 then
+		clockFace(r, T, CF(0, 1.5, 1.15), 1.9, CLK.Gold, "ClockBig", CLK.Gold, true)
+	end
+	-- парящие золотые часы
+	local orb = r:Orbit("OrbitClocks", T, CF(0, 0.5, 0), 2.6, 0, 0.2, CLK.Gold)
+	local n = lv >= 5 and 5 or (lv >= 3 and 4 or 3)
+	for i = 0, n - 1 do
+		local ang = i / n * PI * 2
+		miniClock(r, orb, CF(math.cos(ang) * 2.6, math.sin(ang * 2) * 0.4, math.sin(ang) * 2.6) * ANG(0, -ang + PI / 2, 0), 0.3)
+	end
+	-- вращающиеся золотые кольца (с 4 ур.)
+	if lv >= 4 then
+		local ringHub = r:Orbit("OrbitGoldRing", T, CF(0, -0.2, 0), 2.1, 0, 0.2, CLK.Gold)
+		Kit.ring(r, ringHub, ANG(rad(90), 0, 0), 2.1, 16, 0.08, 0.14, CLK.Gold, M.Metal, function(k)
+			return k % 4 == 3
+		end)
+	end
+	-- шестерни бури (видны только во время «Временной бури»)
+	local storm = r:Orbit("OrbitStormGears", T, CF(0, 0.2, 0), 3.2, 0, 0.2, CLK.Gold)
+	local before = #r.Model:GetChildren()
+	for i = 0, 5 do
+		local ang = i / 6 * PI * 2
+		gear(r, storm, nil, CF(math.cos(ang) * 3.2, math.sin(ang * 3) * 0.5, math.sin(ang) * 3.2) * ANG(0, -ang, 0), 0.3, 0.1, CLK.Gold, CLK.Orange)
+	end
+	local all = r.Model:GetChildren()
+	for i = before + 1, #all do
+		local d = all[i]
+		if d:IsA("BasePart") then
+			d:SetAttribute("StormFX", d.Transparency)
+			d.Transparency = 1
+		end
+	end
+
+	-- ХРОНОСЕКИРА в правой руке
+	chronoaxe(r, RA, lv)
+	levelAura(r, lv, CLK.Orange)
+	return r:Finish(1.45, { RS = { 20, 0, 0 }, LS = { 10, 0, -5 } })
+end
+
 local Builders = {
 	VoidSoldier = VoidSoldier,
 	ShadowArcher = ShadowArcher,
@@ -2807,6 +3098,7 @@ local Builders = {
 	BloodfangWarlord = BloodfangWarlord,
 	LunarSeraph = LunarSeraph,
 	CrimsonEclipse = CrimsonEclipse,
+	CursedClockmaker = CursedClockmaker,
 }
 
 -- Построить модель юнита. Модель стоит в начале координат, ноги на высоте -HipHeight.
@@ -2816,7 +3108,7 @@ local UNIT_RARITY = {
 	AbyssReaper = "Epic", CorruptedSamurai = "Epic", VoidPuppeteer = "Epic", MoonWitch = "Epic",
 	EclipseGuardian = "Legendary", FallenAngel = "Legendary", Starbreaker = "Legendary", BloodfangWarlord = "Legendary",
 	VoidEmperor = "Mythic", AbyssOverlord = "Mythic", RiftMonarch = "Mythic", LunarSeraph = "Mythic",
-	RealityDestroyer = "Secret", CrimsonEclipse = "Secret",
+	RealityDestroyer = "Secret", CrimsonEclipse = "Secret", CursedClockmaker = "Secret",
 }
 local RARITY_AURA = {
 	Epic = { Color = ColorSequence.new(Color3.fromRGB(170, 80, 255)), Rate = 3, Size = 0.22 },

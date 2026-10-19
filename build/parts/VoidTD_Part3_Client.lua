@@ -1162,6 +1162,318 @@ function FX.PierceBeam(from, to)
 	FX.Sound("Laser", 1, 1.2, from)
 end
 
+
+------------------------------------------------------------------------
+-- ПРОКЛЯТЫЙ ЧАСОВЩИК: эффекты времени (золото, бронза, оранжевые искры)
+------------------------------------------------------------------------
+local CGOLD = Color3.fromRGB(230, 178, 74)
+local BRONZE = Color3.fromRGB(170, 112, 52)
+local ORANGE = Color3.fromRGB(255, 140, 40)
+local DIAL = Color3.fromRGB(16, 12, 20)
+FX.Colors.Orange = ORANGE
+
+-- Набор деталей, двигающихся как одно целое: { part, offset }
+local function rigidSet()
+	return { list = {} }
+end
+
+local function addRigid(set, props, offset)
+	local p = FX.Part(props)
+	set.list[#set.list + 1] = { p, offset or CF() }
+	return p
+end
+
+local function placeRigid(set, cf)
+	for _, it in ipairs(set.list) do
+		it[1].CFrame = cf * it[2]
+	end
+end
+
+local function fadeRigid(set, time)
+	for _, it in ipairs(set.list) do
+		tween(it[1], time, { Transparency = 1 })
+		cleanup(it[1], time + 0.05)
+	end
+end
+
+-- Шестерня в плоскости XY: восьмиугольник из 4 брусков + 8 зубьев + ступица
+local function addGear(set, a, depth, color, hubColor, base)
+	base = base or CF()
+	for k = 0, 3 do
+		addRigid(set, { Size = V(2 * a, 0.83 * a, depth), Color = color, Material = Enum.Material.Metal }, base * ANG(0, 0, k * math.pi / 4))
+	end
+	if not FX.Lite then
+		for k = 0, 7 do
+			local ang = k * math.pi / 4
+			addRigid(set, { Size = V(a * 0.36, a * 0.34, depth), Color = color, Material = Enum.Material.Metal }, base * CF(math.cos(ang) * a * 1.08, math.sin(ang) * a * 1.08, 0) * ANG(0, 0, ang))
+		end
+	end
+	addRigid(set, { Size = V(a * 0.45, a * 0.45, depth + 0.05), Color = hubColor or ORANGE }, base * ANG(0, 0, math.pi / 4))
+end
+
+-- Циферблат в плоскости XY (рама, тёмный диск, деления). Возвращает детали стрелок (двигаются отдельно).
+local function addDial(set, a, depth, transparency)
+	for k = 0, 3 do
+		addRigid(set, { Size = V(2 * a, 0.83 * a, depth), Color = CGOLD, Material = Enum.Material.Metal, Transparency = transparency or 0 }, ANG(0, 0, k * math.pi / 4))
+		addRigid(set, { Size = V(1.68 * a, 0.7 * a, depth + 0.04), Color = DIAL, Material = Enum.Material.SmoothPlastic, Transparency = transparency or 0 }, ANG(0, 0, k * math.pi / 4))
+	end
+	for k = 0, 11 do
+		local ang = k * math.pi / 6
+		addRigid(set, { Size = V(a * 0.06, a * (k % 3 == 0 and 0.2 or 0.11), depth + 0.08), Color = CGOLD }, CF(math.cos(ang) * a * 0.68, math.sin(ang) * a * 0.68, 0) * ANG(0, 0, ang + math.pi / 2))
+	end
+end
+
+-- Стрелки часов: две детали, поворачиваются вокруг центра циферблата (cf) на угол
+local function makeHands(a, color)
+	local h = FX.Part({ Size = V(a * 0.1, a * 0.45, 0.08), Color = color or CGOLD })
+	local m = FX.Part({ Size = V(a * 0.06, a * 0.7, 0.08), Color = color or CGOLD })
+	return h, m
+end
+
+local function placeHands(h, m, cf, ha, ma, a, depth)
+	h.CFrame = cf * ANG(0, 0, ha) * CF(0, a * 0.2, -depth / 2 - 0.08)
+	m.CFrame = cf * ANG(0, 0, ma) * CF(0, a * 0.32, -depth / 2 - 0.1)
+end
+
+local function camFacing(pos)
+	local cam = workspace.CurrentCamera
+	local c = cam and cam.CFrame.Position or (pos + V(0, 10, 20))
+	local flat = V(c.X, pos.Y, c.Z)
+	if (flat - pos).Magnitude < 0.1 then
+		return CF(pos)
+	end
+	-- лицевая сторона (-Z) смотрит на камеру
+	return CFrame.lookAt(pos, flat)
+end
+
+-- Разрез секунд: вращающийся зубчатый диск летит по прямой
+function FX.GearDisc(from, to, duration, lv, storm)
+	local set = rigidSet()
+	local a = 0.75 + (lv or 1) * 0.08
+	addGear(set, a, 0.18, storm and ORANGE or CGOLD, storm and Color3.fromRGB(255, 230, 160) or ORANGE)
+	local core = set.list[#set.list][1]
+	light(core, ORANGE, 8, storm and 3 or 1.5)
+	local dir = to - from
+	local flat = V(dir.X, 0, dir.Z)
+	local base = flat.Magnitude > 0.01 and CFrame.lookAt(V(), flat).Rotation or CF()
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		local alpha = math.clamp(el / math.max(duration, 0.05), 0, 1)
+		local pos = from:Lerp(to, alpha)
+		placeRigid(set, CF(pos) * base * ANG(rad(90), 0, 0) * ANG(0, 0, el * 16))
+		if alpha >= 1 then
+			conn:Disconnect()
+			fadeRigid(set, 0.2)
+		end
+	end)
+	FX.Sound("Slash", 0.8, 1.4, from)
+end
+
+-- Попадание диском: золотые искры, шестерёнки, призрачные стрелки, оранжевая вспышка
+function FX.ChronoHit(pos)
+	FX.Burst(pos, CGOLD, 5, 0.22, 6, 0.35)
+	FX.Burst(pos, BRONZE, 3, 0.3, 4, 0.45)
+	FX.Sphere(pos, 1.0, ORANGE, 0.18, nil, 0.3)
+	if not FX.Lite then
+		local cf = camFacing(pos + V(0, 1.2, 0))
+		local h, m = makeHands(1.2, Color3.fromRGB(255, 220, 150))
+		h.Transparency, m.Transparency = 0.3, 0.3
+		placeHands(h, m, cf, 0, 0, 1.2, 0)
+		tween(h, 0.4, { CFrame = cf * ANG(0, 0, -2.5) * CF(0, 0.24, -0.1), Transparency = 1 })
+		tween(m, 0.4, { CFrame = cf * ANG(0, 0, 2.8) * CF(0, 0.38, -0.12), Transparency = 1 })
+		cleanup(h, 0.45)
+		cleanup(m, 0.45)
+	end
+end
+
+-- Маленькие часы над точкой (на время dur): стрелки крутятся со скоростью speed
+local function tinyClock(pos, a, dur, speed)
+	local set = rigidSet()
+	addDial(set, a, 0.12)
+	local h, m = makeHands(a)
+	local cf = camFacing(pos)
+	placeRigid(set, cf)
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		placeHands(h, m, cf, -el * speed * 0.2, -el * speed, a, 0.12)
+		if el >= dur then
+			conn:Disconnect()
+			fadeRigid(set, 0.25)
+			for _, p in ipairs({ h, m }) do
+				tween(p, 0.25, { Transparency = 1 })
+				cleanup(p, 0.3)
+			end
+		end
+	end)
+end
+FX.TinyClock = tinyClock
+
+-- ПОЛОМКА ВРЕМЕНИ: огромный циферблат под врагами, стрелки резко останавливаются, всё замирает
+function FX.TimeBreak(pos, radius, dur)
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	FX.Sound("Magic", 1, 0.55, pos)
+	-- циферблат на дороге
+	local floor = rigidSet()
+	addDial(floor, radius, 0.12, 0.25)
+	placeRigid(floor, CF(g) * ANG(rad(-90), 0, 0))
+	local fh, fm = makeHands(radius)
+	-- огромные часы над дорогой
+	local sky = rigidSet()
+	local skyA = radius * 0.45
+	addDial(sky, skyA, 0.3)
+	local skyCF = camFacing(g + V(0, radius * 0.9 + 3, 0))
+	placeRigid(sky, skyCF)
+	local sh, sm = makeHands(skyA)
+	-- механические кольца и зависшие в воздухе частицы
+	local rings = {}
+	if not FX.Lite then
+		for i = 1, 2 do
+			local set = rigidSet()
+			local rr = radius * (0.7 + i * 0.12)
+			for k = 0, 15 do
+				if k % 4 ~= 3 then
+					local ang = k / 16 * math.pi * 2
+					addRigid(set, { Size = V(2 * math.pi * rr / 16 * 1.05, 0.12, 0.2), Color = CGOLD, Material = Enum.Material.Metal }, CF(math.cos(ang) * rr, 0, math.sin(ang) * rr) * ANG(0, -ang - math.pi / 2, 0))
+				end
+			end
+			rings[i] = { set, i * 0.9 }
+		end
+		for _ = 1, 10 do
+			local ang = rng:NextNumber(0, math.pi * 2)
+			local d = rng:NextNumber(0, radius * 0.9)
+			local p = FX.Part({ Size = V(0.25, 0.25, 0.25), CFrame = CF(g + V(math.cos(ang) * d, rng:NextNumber(0.6, 3), math.sin(ang) * d)) * ANG(1, 2, 0), Color = rng:NextNumber() < 0.5 and CGOLD or ORANGE, Transparency = 0.15 })
+			task.delay(dur, function()
+				tween(p, 0.35, { CFrame = p.CFrame + V(0, -1.5, 0), Transparency = 1 })
+			end)
+			cleanup(p, dur + 0.4)
+		end
+	end
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		-- первые 0.45 с стрелки бешено крутятся, затем резко останавливаются
+		local spin = math.min(el, 0.45)
+		local ha, ma = -spin * 14, -spin * 40
+		placeHands(fh, fm, CF(g) * ANG(rad(-90), 0, 0), ha, ma, radius, 0.12)
+		placeHands(sh, sm, skyCF, ha * 0.8, ma * 0.8, skyA, 0.3)
+		for _, rg in ipairs(rings) do
+			placeRigid(rg[1], CF(g + V(0, rg[2], 0)) * ANG(0, spin * 3 * (rg[2] > 1 and -1 or 1), 0))
+		end
+		if el >= dur then
+			conn:Disconnect()
+			-- время пошло: оранжевая вспышка и осколки шестерёнок
+			FX.Sound("Explosion", 0.6, 1.4, pos)
+			FX.Sphere(g + V(0, 1, 0), radius * 0.55, ORANGE, 0.35, nil, 0.3)
+			FX.Ring(g, radius * 1.1, ORANGE, 0.45, 0.3, radius * 0.5, 0.2)
+			FX.Burst(g + V(0, 1, 0), CGOLD, 12, 0.35, 10, 0.6)
+			FX.Burst(g + V(0, 1, 0), BRONZE, 8, 0.4, 7, 0.6)
+			fadeRigid(floor, 0.35)
+			fadeRigid(sky, 0.35)
+			for _, rg in ipairs(rings) do
+				fadeRigid(rg[1], 0.3)
+			end
+			for _, p in ipairs({ fh, fm, sh, sm }) do
+				tween(p, 0.3, { Transparency = 1 })
+				cleanup(p, 0.35)
+			end
+		end
+	end)
+end
+
+-- УСКОРЕНИЕ ВРЕМЕНИ: золотое кольцо от часовщика и маленькие часы над союзниками
+function FX.TimeHaste(pos, radius, allyPositions, dur)
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	FX.Sound("Upgrade", 0.9, 1.35, pos)
+	FX.Ring(g, radius, CGOLD, 0.8, 0.4, 1, 0.1)
+	task.delay(0.12, function()
+		FX.Ring(g + V(0, 0.1, 0), radius * 0.8, ORANGE, 0.7, 0.25, 1, 0.3)
+	end)
+	FX.Burst(g + V(0, 2, 0), CGOLD, 10, 0.3, 8, 0.6)
+	for _, ap in ipairs(allyPositions) do
+		tinyClock(ap + V(0, 7, 0), 0.7, dur, 18)
+		FX.Ring(ap + V(0, 0.3, 0), 2.5, CGOLD, 0.4, 0.2, 0.5, 0.2)
+	end
+end
+
+-- ВРЕМЕННАЯ БУРЯ: огромное механическое кольцо и удар по земле
+function FX.TimeStorm(pos, delay)
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	FX.Sound("Magic", 1, 0.45, pos)
+	local set = rigidSet()
+	local rr = 6.5
+	for k = 0, (FX.Lite and 7 or 15) do
+		local n = FX.Lite and 8 or 16
+		local ang = k / n * math.pi * 2
+		addRigid(set, { Size = V(2 * math.pi * rr / n * 1.02, 0.5, 0.3), Color = CGOLD, Material = Enum.Material.Metal }, CF(math.cos(ang) * rr, 0, math.sin(ang) * rr) * ANG(0, -ang - math.pi / 2, 0))
+		if k % 2 == 0 and not FX.Lite then
+			addRigid(set, { Size = V(0.4, 0.8, 0.4), Color = ORANGE }, CF(math.cos(ang) * rr, 0.5, math.sin(ang) * rr) * ANG(0, -ang, math.pi / 4))
+		end
+	end
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		local rise = math.min(el / (delay or 1.2), 1)
+		placeRigid(set, CF(g + V(0, 0.5 + rise * 2, 0)) * ANG(0, el * 2.5 * (0.3 + rise), 0))
+		if el >= (delay or 1.2) then
+			conn:Disconnect()
+			fadeRigid(set, 0.4)
+			FX.Shockwave(g, 9, 3, CGOLD, ORANGE)
+			FX.Sphere(g + V(0, 2, 0), 4, ORANGE, 0.45, nil, 0.25)
+		end
+	end)
+end
+
+-- Удар во время бури: механический взрыв, золотой круг на дороге, часы над целью
+function FX.ChronoBurst(pos, radius)
+	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	FX.Ring(g, radius, CGOLD, 0.45, 0.3, 0.5, 0.1)
+	FX.Ring(g + V(0, 0.05, 0), radius * 0.6, ORANGE, 0.35, 0.2, 0.3, 0.3)
+	FX.Burst(g + V(0, 1, 0), ORANGE, 8, 0.3, 9, 0.45)
+	FX.Burst(g + V(0, 1, 0), BRONZE, 5, 0.35, 6, 0.5)
+	if not FX.Lite then
+		tinyClock(g + V(0, 4, 0), 0.6, 0.6, 30)
+	end
+	FX.Sound("Explosion", 0.4, 1.6, pos)
+end
+
+-- Установка часовщика: циферблат под ним, стрелки идут назад, золотой механический портал
+function FX.ClockPortal(pos, dur)
+	dur = dur or 1.3
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	local set = rigidSet()
+	local a = 4.5
+	addDial(set, a, 0.12, 0.2)
+	placeRigid(set, CF(g) * ANG(rad(-90), 0, 0))
+	local h, m = makeHands(a)
+	local portal = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.3, 0.5, 0.5), CFrame = CF(g + V(0, 0.2, 0)) * ANG(0, 0, rad(90)), Color = CGOLD, Transparency = 0.2 })
+	tween(portal, dur * 0.6, { Size = V(0.3, a * 1.6, a * 1.6) })
+	light(portal, ORANGE, 14, 2, dur + 0.5)
+	FX.Sound("Portal", 0.9, 1.2, pos)
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		-- стрелки идут назад
+		placeHands(h, m, CF(g) * ANG(rad(-90), 0, 0), el * 4, el * 22, a, 0.12)
+		if el >= dur then
+			conn:Disconnect()
+			fadeRigid(set, 0.5)
+			for _, p in ipairs({ h, m, portal }) do
+				tween(p, 0.5, { Transparency = 1 })
+				cleanup(p, 0.55)
+			end
+			FX.Burst(g + V(0, 2, 0), CGOLD, 14, 0.35, 8, 0.6)
+			FX.Ring(g, 6, ORANGE, 0.5, 0.3, 2, 0.2)
+		end
+	end)
+end
+
 return FX
 ]======] }
 FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "Renderer" }, "ModuleScript", [======[
@@ -1448,6 +1760,48 @@ Anims.Hammer = Anims.Slam
 Anims.RiftStorm = Anims.Judgement
 Anims.RedSplash = Anims.HeavySlash
 Anims.Sickle = Anims.Slash
+
+-- ПРОКЛЯТЫЙ ЧАСОВЩИК
+-- Разрез секунд: замах Хроносекирой из-за плеча и мощный горизонтальный взмах
+Anims.ChronoSlash = function(h)
+	return {
+		{ 0, {} },
+		{ h * 0.75, { RS = { 160, 0, 35 }, LS = { 40, 0, -20 }, Root = { -4, -28, 0 } } },
+		{ h, { RS = { 70, 0, -70 }, LS = { 20, 0, -10 }, Root = { 6, 32, 0, -0.1 } } },
+		{ h + 0.25, { RS = { 45, 0, -40 }, Root = { 3, 18, 0 } } },
+		{ h + 0.6, {} },
+	}
+end
+-- Поломка времени: Хроносекира над головой, затем удар о землю
+Anims.TimeBreak = function()
+	return {
+		{ 0, {} },
+		{ 0.35, { RS = { 175, 0, 5 }, LS = { 165, 0, -5 }, Neck = { -15, 0, 0 }, Root = { -8, 0, 0, 0.3 } } },
+		{ 0.5, { RS = { 30, 0, 0 }, LS = { 30, 0, 0 }, Neck = { 15, 0, 0 }, Root = { 20, 0, 0, -0.45 } } },
+		{ 0.95, { RS = { 30, 0, 0 }, LS = { 30, 0, 0 }, Root = { 16, 0, 0, -0.4 } } },
+		{ 1.35, {} },
+	}
+end
+-- Ускорение времени: Хроносекира вертикально вверх
+Anims.TimeHaste = function()
+	return {
+		{ 0, {} },
+		{ 0.4, { RS = { 178, 0, 0 }, Neck = { -18, 0, 0 }, Root = { 0, 0, 0, 0.25 } } },
+		{ 1.1, { RS = { 178, 0, 0 }, Neck = { -18, 0, 0 }, Root = { 0, 0, 0, 0.25 } } },
+		{ 1.5, {} },
+	}
+end
+-- Временная буря: медленный подъём оружия, вспышка, удар о землю
+Anims.TimeStorm = function()
+	return {
+		{ 0, {} },
+		{ 0.9, { RS = { 172, 0, 10 }, LS = { 150, 0, -15 }, Neck = { -22, 0, 0 }, Root = { -8, 0, 0, 0.4 } } },
+		{ 1.15, { RS = { 176, 0, 10 }, LS = { 155, 0, -15 }, Neck = { -24, 0, 0 }, Root = { -9, 0, 0, 0.45 } } },
+		{ 1.3, { RS = { 25, 0, 0 }, LS = { 25, 0, 0 }, Neck = { 18, 0, 0 }, Root = { 22, 0, 0, -0.55 } } },
+		{ 1.8, { RS = { 25, 0, 0 }, LS = { 25, 0, 0 }, Root = { 15, 0, 0, -0.4 } } },
+		{ 2.2, {} },
+	}
+end
 Anims.Axe = Anims.HeavySlash
 Anims.Revolver = function(h)
 	return {
@@ -1461,6 +1815,7 @@ Anims.Revolver = function(h)
 end
 
 local FIDGETS = {
+	ChronoSlash = { "LookAround", "Flex", "Twirl" },
 	DualDagger = { "Twirl", "LookAround", "Flex" },
 	Crossbow = { "Reload", "LookAround" },
 	Puppet = { "Stretch", "LookAround" },
@@ -1540,6 +1895,18 @@ local function applyPose(rig, pose, t, phase)
 	local base = rig.Base
 	local s = rig.Scale or 1
 	local breathe = math.sin(t * 2 + phase)
+	-- стрелки и шестерёнки (Clock*/Gear*) крутятся; во время способностей и бури — быстрее
+	local spinDt = 0
+	if rig.SpinRates then
+		spinDt = math.clamp(t - (rig.SpinT or t), 0, 0.1)
+		rig.SpinT = t
+		rig.SpinAngle = rig.SpinAngle or {}
+		local boost = rig.Storm and 3 or 1
+		if os.clock() < (rig.SpinBoostUntil or 0) then
+			boost = math.max(boost, 6)
+		end
+		spinDt = spinDt * boost
+	end
 	for name, motor in pairs(rig.Motors) do
 		local b = base[name]
 		if b then
@@ -1569,6 +1936,10 @@ local function applyPose(rig, pose, t, phase)
 				cf = cf * ANG(rad(5 + math.sin(t * 1.7 + phase - 0.8) * 7 + gust * 28), 0, rad(math.sin(t * 1.1 + phase - 0.6) * 5))
 			elseif name:sub(1, 5) == "Orbit" then
 				cf = cf * ANG(0, t * 1.4 + phase, 0)
+			elseif rig.SpinRates and rig.SpinRates[name] then
+				local ang = (rig.SpinAngle[name] or 0) - rig.SpinRates[name] * spinDt
+				rig.SpinAngle[name] = ang
+				cf = cf * ANG(0, 0, ang)
 			end
 			motor.C0 = cf
 		end
@@ -2047,6 +2418,7 @@ function Renderer.OnSync(payload)
 			end
 			v.HP = list[i + 2]
 			v.Slowed = list[i + 3] == 1
+			v.Frozen = list[i + 3] == 2
 			v.LastSync = nowc
 		end
 	end
@@ -2089,7 +2461,7 @@ local function animateEnemy(view, t, dt, camDist)
 	local def = Config.Enemies[view.Type]
 	local aggro = view.Aggro or 1
 	local far = camDist > LOD_DISTANCE
-	local spd = view.Speed * (view.Slowed and 0.5 or 1)
+	local spd = view.Speed * (view.Frozen and 0 or (view.Slowed and 0.5 or 1))
 	-- частота шага привязана к скорости врага
 	local freq = spd / math.max(def.Scale or 1, 0.5) * 1.1 * (g.Speed or 1) * (1 + (aggro - 1) * 0.3)
 	view.W = (view.W or view.Phase) + dt * freq
@@ -2211,7 +2583,7 @@ local function updateEnemies(t, dt)
 	local cam = workspace.CurrentCamera
 	local camPos = cam and cam.CFrame.Position or V()
 	for _, v in pairs(enemyViews) do
-		local speed = v.Speed * (v.Slowed and 0.5 or 1)
+		local speed = v.Speed * (v.Frozen and 0 or (v.Slowed and 0.5 or 1))
 		local predicted = v.ServerDist + speed * math.min(nowc - v.LastSync, 0.35)
 		v.Dist = v.Dist + speed * dt
 		v.Dist = v.Dist + (predicted - v.Dist) * math.min(1, dt * 5)
@@ -2238,7 +2610,10 @@ local function updateEnemies(t, dt)
 		end
 		v.Rig.Root.CFrame = v.CF - V(0, rise, 0)
 		checkPhases(v, false)
-		animateEnemy(v, t, dt, (camPos - pos).Magnitude)
+		-- остановленные временем враги замирают в текущей позе
+		if not v.Frozen then
+			animateEnemy(v, t, dt, (camPos - pos).Magnitude)
+		end
 		if v.Fill then
 			v.Fill.Size = UDim2.fromScale(math.clamp(v.HP / v.MaxHP, 0, 1), 1)
 		end
@@ -2311,6 +2686,33 @@ local function buildUnitView(view)
 	gui.Parent = rig.Root
 end
 
+-- «Временная буря»: шестерни вокруг видны, Хроносекира светится ярче, механизмы крутятся быстрее
+local STORM_GLOW = Color3.fromRGB(255, 170, 60)
+local function setStorm(view, on)
+	local rig = view.Rig
+	if not rig then
+		return
+	end
+	rig.Storm = on
+	for _, d in ipairs(rig.Model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			local st = d:GetAttribute("StormFX")
+			if st then
+				if on then
+					d.Transparency = st
+				else
+					FX.Tween(d, 0.8, { Transparency = 1 })
+				end
+			elseif d:GetAttribute("AxeGlow") then
+				if not d:GetAttribute("BaseColor") then
+					d:SetAttribute("BaseColor", d.Color)
+				end
+				d.Color = on and STORM_GLOW or d:GetAttribute("BaseColor")
+			end
+		end
+	end
+end
+
 function Renderer.AddUnit(folder, isNew)
 	local uid = tonumber(folder.Name)
 	if not uid or unitViews[uid] then
@@ -2331,8 +2733,16 @@ function Renderer.AddUnit(folder, isNew)
 	end
 	unitViews[uid] = view
 	buildUnitView(view)
+	if folder:GetAttribute("Storm") then
+		setStorm(view, true)
+	end
 	view.NextFidget = os.clock() + 4 + math.random() * 8
-	if isNew then
+	local placeFx = Config.Units[view.UnitId].PlaceFX
+	if isNew and placeFx == "Clock" then
+		-- часовщик поднимается из золотого механического портала, стрелки идут назад
+		view.RiseT = os.clock()
+		FX.ClockPortal(view.Pos, 1.3)
+	elseif isNew then
 		view.DropT = os.clock()
 	else
 		FX.Place(view.Pos)
@@ -2343,12 +2753,17 @@ function Renderer.AddUnit(folder, isNew)
 			if newLevel ~= view.Level then
 				view.Level = newLevel
 				buildUnitView(view)
+				if folder:GetAttribute("Storm") then
+					setStorm(view, true)
+				end
 				FX.LevelUp(view.Pos, Config.Rarities[Config.Units[view.UnitId].Rarity].Color)
 				view.Anim = { Start = os.clock(), Frames = Anims.PowerUp() }
 				if Renderer.OnUnitChanged then
 					Renderer.OnUnitChanged(uid)
 				end
 			end
+		elseif attr == "Storm" then
+			setStorm(view, folder:GetAttribute("Storm") == true)
 		elseif Renderer.OnUnitChanged then
 			Renderer.OnUnitChanged(uid)
 		end
@@ -2401,6 +2816,14 @@ function Renderer.PreviewAttack(state, unitId, level)
 	playAnim(state, def.Anim, def.HitDelay or 0.2, st.Hits or 1, def.HitInterval)
 end
 
+-- Предпросмотр способности: только анимация и ускоренные механизмы, без игровых эффектов
+function Renderer.PreviewAbility(state, name)
+	if Anims[name] then
+		state.Anim = { Start = os.clock(), Frames = Anims[name]() }
+		state.Rig.SpinBoostUntil = os.clock() + 2.2
+	end
+end
+
 function Renderer.PreviewFidget(state, unitId)
 	local list = FIDGETS[Config.Units[unitId].Anim] or { "LookAround" }
 	local pick = list[math.random(1, #list)]
@@ -2421,6 +2844,12 @@ function Renderer.OnAttack(p)
 		view.TargetYaw = yawTo(view.Pos, tpos)
 	end
 
+	if type(p.AB) == "string" then
+		-- способность с собственной анимацией (например, способности часовщика)
+		playAnim(view, p.AB, h)
+		view.Rig.SpinBoostUntil = os.clock() + (p.AB == "TimeStorm" and 2.4 or 1.6)
+		return
+	end
 	if p.AB then
 		playAnim(view, "BlackHoleCast", h)
 		local crystal = view.Rig.Model:FindFirstChild("Crystal")
@@ -2440,7 +2869,18 @@ function Renderer.OnAttack(p)
 	end
 
 	local impactColor = def.ImpactColor or FX.Colors.Neon
-	if def.AttackType == "Projectile" then
+	if def.AttackType == "Chrono" then
+		-- зубчатый диск летит по прямой до конца дальности
+		at(h, function()
+			if not view.Rig or not view.Rig.Model.Parent or not p.E then
+				return
+			end
+			local from = muzzlePos(view)
+			local to = Vector3.new(p.E.X, from.Y - 1.5, p.E.Z)
+			local dist = (Vector3.new(to.X, 0, to.Z) - Vector3.new(view.Pos.X, 0, view.Pos.Z)).Magnitude
+			FX.GearDisc(from, to, dist / (p.SP or 70), lv, p.ST)
+		end)
+	elseif def.AttackType == "Projectile" then
 		for si, id in ipairs(p.T or { firstId }) do
 			local travel = (p.TRS and p.TRS[si]) or p.TR or 0.2
 			at(h + (si - 1) * (p.SG or 0.12), function()
@@ -2633,6 +3073,27 @@ function Renderer.OnImpact(p)
 		FX.BlackHole(p.P, p.R, p.DUR, lv, p.DL)
 	elseif k == "Summon" then
 		FX.Summon(p.P, p.R)
+	elseif k == "ChronoHit" then
+		FX.ChronoHit(p.P + V(0, 1.5, 0))
+	elseif k == "ChronoBurst" then
+		FX.ChronoBurst(p.P, p.R)
+	elseif k == "TimeBreak" then
+		FX.TimeBreak(p.P, p.R, p.DUR or 1.5)
+	elseif k == "TimeHaste" then
+		local list = {}
+		for _, uid in ipairs(p.A or {}) do
+			local v = unitViews[uid]
+			if v then
+				list[#list + 1] = v.Pos
+				-- у союзника тоже быстрее крутятся стрелки/механизмы, если они есть
+				if v.Rig then
+					v.Rig.SpinBoostUntil = os.clock() + (p.DUR or 2)
+				end
+			end
+		end
+		FX.TimeHaste(p.P, p.R, list, p.DUR or 2)
+	elseif k == "TimeStorm" then
+		FX.TimeStorm(p.P, p.DL or 1.3)
 	end
 end
 
@@ -2682,6 +3143,14 @@ local function updateUnits(t, dt)
 					v.DropT = nil
 					v.Anim = { Start = t, Frames = Anims.Land() }
 					FX.Place(v.Pos)
+				end
+			end
+			if v.RiseT then
+				local a = math.clamp((t - v.RiseT) / 1.3, 0, 1)
+				drop = -(1 - ease(a)) * (rig.HipHeight + 2.5)
+				if a >= 1 then
+					v.RiseT = nil
+					v.Anim = { Start = t, Frames = Anims.TimeHaste() }
 				end
 			end
 			rig.Root.CFrame = CF(v.Pos + V(0, rig.HipHeight + drop, 0)) * ANG(0, v.Yaw, 0)
@@ -2780,6 +3249,7 @@ local window -- корневая рамка (создаётся один раз)
 local refs = {}
 local state -- текущее открытие: { Id, Level, Rig, Yaw, Pitch, Dist, ... }
 local conns = {} -- соединения, живущие только пока окно открыто
+local previewFx -- эффекты способностей в предпросмотре (определены ниже)
 
 ------------------------------------------------------------------------
 -- 3D-сцена
@@ -3083,6 +3553,10 @@ local function build()
 			UnitViewer.PlayAnim(a[2])
 		end)
 	end
+	-- кнопки способностей (только у юнитов с PreviewAbilities)
+	refs.AbilityRow = K.new("Frame", { Parent = scene, Position = UDim2.fromOffset(10, 48), Size = UDim2.fromOffset(420, 32), BackgroundTransparency = 1, ZIndex = 24 }, {
+		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }),
+	})
 	K.button({ Parent = scene, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), Size = UDim2.fromOffset(40, 32), Text = "⟲", BackgroundColor3 = THEME.BG3, ZIndex = 25 }, function()
 		if state then
 			state.Yaw, state.Pitch, state.Zoom = math.rad(200), math.rad(12), 1
@@ -3204,6 +3678,65 @@ local function step(dt)
 end
 
 ------------------------------------------------------------------------
+-- ЭФФЕКТЫ СПОСОБНОСТЕЙ В ПРЕДПРОСМОТРЕ (детали внутри WorldModel, удаляются сами)
+------------------------------------------------------------------------
+local GOLD, ORANGE = Color3.fromRGB(230, 178, 74), Color3.fromRGB(255, 140, 40)
+
+local function fxPart(props, life)
+	local p = part(props)
+	task.delay(life, function()
+		if p.Parent then
+			p:Destroy()
+		end
+	end)
+	return p
+end
+
+local function previewRing(y, r0, r1, color, time, delay)
+	task.delay(delay or 0, function()
+		if not state or not refs.World then
+			return
+		end
+		local p = fxPart({ Shape = Enum.PartType.Cylinder, Size = V(0.15, r0 * 2, r0 * 2), CFrame = CF(0, y, 0) * ANG(0, 0, rad(90)), Color = color, Material = Enum.Material.Neon, Transparency = 0.2 }, time + 0.1)
+		K.tween(p, time, { Size = V(0.1, r1 * 2, r1 * 2), Transparency = 1 })
+	end)
+end
+
+-- показать/скрыть шестерни бури на копии модели
+local function previewStorm(on)
+	if not state or not state.Rig then
+		return
+	end
+	state.Rig.Storm = on
+	for _, d in ipairs(state.Rig.Model:GetDescendants()) do
+		if d:IsA("BasePart") and d:GetAttribute("StormFX") then
+			d.Transparency = on and d:GetAttribute("StormFX") or 1
+		end
+	end
+end
+
+previewFx = function(kind)
+	local s = state.Rig.Scale or 1
+	if kind == "TimeBreak" then
+		previewRing(0.05, 1, 6 * s, GOLD, 0.9, 0.5)
+		previewRing(0.1, 0.5, 4 * s, ORANGE, 0.6, 0.55)
+	elseif kind == "TimeHaste" then
+		previewRing(0.1, 1, 9 * s, GOLD, 1.0, 0.4)
+		previewRing(0.15, 1, 7 * s, ORANGE, 0.8, 0.5)
+	elseif kind == "TimeStorm" then
+		previewStorm(true)
+		previewRing(0.1, 1, 8 * s, GOLD, 0.9, 1.3)
+		previewRing(0.15, 0.5, 5 * s, ORANGE, 0.6, 1.35)
+		local rig = state.Rig
+		task.delay(4, function()
+			if state and state.Rig == rig then
+				previewStorm(false)
+			end
+		end)
+	end
+end
+
+------------------------------------------------------------------------
 -- API
 ------------------------------------------------------------------------
 function UnitViewer.Open(unitId, level)
@@ -3229,6 +3762,16 @@ function UnitViewer.Open(unitId, level)
 	buildModel(false)
 	refreshInfo()
 	applyRarityFx(true)
+	for _, c in ipairs(refs.AbilityRow:GetChildren()) do
+		if c:IsA("GuiButton") then
+			c:Destroy()
+		end
+	end
+	for i, ab in ipairs(Config.Units[unitId].PreviewAbilities or {}) do
+		K.button({ Parent = refs.AbilityRow, Size = UDim2.fromOffset(132, 30), Text = ab[2], LayoutOrder = i, BackgroundColor3 = Color3.fromRGB(90, 56, 20), StrokeColor = Color3.fromRGB(230, 170, 70), ZIndex = 25 }, function()
+			UnitViewer.PlayAnim(ab[1])
+		end)
+	end
 	-- соединения живут только пока окно открыто
 	for _, c in ipairs(conns) do
 		c:Disconnect()
@@ -3261,8 +3804,12 @@ function UnitViewer.PlayAnim(kind)
 		state.Anim = nil
 	elseif kind == "Attack" then
 		Renderer.PreviewAttack(state, state.Id, state.Level)
-	else
+	elseif kind == "Fidget" then
 		Renderer.PreviewFidget(state, state.Id)
+	else
+		-- способность: только анимация и эффекты в окне, на матч не влияет
+		Renderer.PreviewAbility(state, kind)
+		previewFx(kind)
 	end
 end
 

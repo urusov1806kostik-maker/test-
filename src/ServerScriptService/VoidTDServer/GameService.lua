@@ -445,6 +445,7 @@ function GameService.PlaceUnit(player, unitId, pos, rotation)
 		TargetMode = def.DefaultTarget or "First",
 		NextAttack = now() + 0.6,
 		NextAbility = now() + 1.5,
+		PlacedAt = now(),
 		Spent = cost,
 		DamageDealt = 0,
 		Alive = true,
@@ -462,6 +463,13 @@ function GameService.PlaceUnit(player, unitId, pos, rotation)
 	f:SetAttribute("Damage", 0)
 	f.Parent = UnitsFolder
 	u.Folder = f
+	-- таймеры способностей времени стартуют после установки
+	if def.TimeHaste then
+		u.NextHaste = u.PlacedAt + def.TimeHaste.FirstDelay
+	end
+	if def.TimeStorm then
+		u.NextStorm = u.PlacedAt + def.TimeStorm.FirstDelay
+	end
 	units[u.Uid] = u
 	return true, u.Uid
 end
@@ -677,6 +685,111 @@ local function distToSegment(p, a, b)
 	return math.sqrt((p.X - cx) ^ 2 + (p.Z - cz) ^ 2)
 end
 
+------------------------------------------------------------------------
+-- СПОСОБНОСТИ ВРЕМЕНИ (Проклятый часовщик)
+------------------------------------------------------------------------
+-- Остановка не суммируется: замороженного не морозим повторно, после заморозки — иммунитет
+local function freezeEnemy(e, duration, t)
+	e.FrozenUntil = t + duration
+	e.FreezeImmuneUntil = t + duration + (S.FreezeImmunity or 3)
+end
+
+local function castTimeBreak(u, stats)
+	local tb = u.Def.TimeBreak
+	local list = candidates(u, stats.Range + 2)
+	if #list == 0 then
+		return
+	end
+	local t = now()
+	local center = list[1].Pos
+	local normal, bosses = {}, {}
+	for _, e in pairs(enemies) do
+		if e.Alive and t >= (e.FreezeImmuneUntil or 0) and (e.FrozenUntil or 0) <= t then
+			local d = PathUtil.FlatDistance(e.Pos, center)
+			if d <= tb.Radius + (e.IsBoss and 1.5 or 0) then
+				e._dc = d
+				table.insert(e.IsBoss and bosses or normal, e)
+			end
+		end
+	end
+	table.sort(normal, function(a, b)
+		return a._dc < b._dc
+	end)
+	local frozen = {}
+	for i = 1, math.min(tb.MaxFreeze, #normal) do
+		freezeEnemy(normal[i], tb.Freeze, t)
+		frozen[i] = normal[i]
+	end
+	for _, b in ipairs(bosses) do
+		freezeEnemy(b, tb.BossFreeze, t)
+	end
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = { list[1].Id }, L = u.Level, D = 0.5, AB = "TimeBreak" })
+	Remotes.Impact:FireAllClients({ K = "TimeBreak", P = center, R = tb.Radius, DUR = tb.Freeze, U = u.Uid, L = u.Level })
+	-- после остановки до 3 обычных врагов отматываются назад по дороге (боссы — нет)
+	local myMatch = matchId
+	task.delay(tb.Freeze, function()
+		if matchId ~= myMatch then
+			return
+		end
+		for i = 1, math.min(tb.MaxRewind, #frozen) do
+			local e = frozen[i]
+			if e.Alive then
+				e.Dist = math.max(0, e.Dist - tb.Rewind)
+				e.Pos = enemyPos(e)
+			end
+		end
+	end)
+end
+
+local function castTimeHaste(u, stats)
+	local th = u.Def.TimeHaste
+	local t = now()
+	local allies = {}
+	for _, o in pairs(units) do
+		-- только свои юниты того же игрока, не сам часовщик
+		if o ~= u and o.Alive and o.Owner == u.Owner and PathUtil.FlatDistance(o.Pos, u.Pos) <= th.Radius then
+			-- одинаковые ускорения не суммируются: действует самое сильное
+			if (o.HasteUntil or 0) > t then
+				o.Haste = math.max(o.Haste or 0, stats.Haste)
+			else
+				o.Haste = stats.Haste
+			end
+			o.HasteUntil = math.max(o.HasteUntil or 0, t + stats.HasteTime)
+			allies[#allies + 1] = o.Uid
+		end
+	end
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = {}, L = u.Level, D = 0.4, AB = "TimeHaste" })
+	Remotes.Impact:FireAllClients({ K = "TimeHaste", P = u.Pos, R = th.Radius, A = allies, DUR = stats.HasteTime, U = u.Uid, L = u.Level })
+end
+
+local function startTimeStorm(u, t)
+	local ts = u.Def.TimeStorm
+	u.StormUntil = t + ts.Duration
+	u.NextStorm = u.StormUntil + ts.Cooldown
+	u.Folder:SetAttribute("Storm", true)
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = {}, L = u.Level, D = 1.2, AB = "TimeStorm" })
+	Remotes.Impact:FireAllClients({ K = "TimeStorm", P = u.Pos, R = 6, DL = 1.3, U = u.Uid, L = u.Level })
+end
+
+local function updateChrono(u, stats, t)
+	local def = u.Def
+	if def.TimeStorm then
+		if u.StormUntil and t >= u.StormUntil then
+			u.StormUntil = nil
+			u.Folder:SetAttribute("Storm", false)
+		end
+		if not u.StormUntil and t >= u.NextStorm then
+			startTimeStorm(u, t)
+			u.NextAttack = math.max(u.NextAttack, t + 1.4)
+		end
+	end
+	if def.TimeHaste and t >= u.NextHaste then
+		castTimeHaste(u, stats)
+		u.NextHaste = t + def.TimeHaste.Interval
+		u.NextAttack = math.max(u.NextAttack, t + 0.6)
+	end
+end
+
 local function attack(u, stats, list)
 	local def = u.Def
 	local myMatch = matchId
@@ -850,6 +963,84 @@ local function attack(u, stats, list)
 			strike(primary)
 			aoeHit(u, center, stats.AOERadius or 8, stats, "Splash", { Exclude = target, Mult = def.SplashMult or 0.5 })
 		end)
+	elseif atype == "Chrono" then
+		-- РАЗРЕЗ СЕКУНД: зубчатый диск летит по прямой и режет до DiscTargets врагов
+		local t0 = now()
+		local storm = u.StormUntil ~= nil and t0 < u.StormUntil
+		local dir = Vector3.new(target.Pos.X - u.Pos.X, 0, target.Pos.Z - u.Pos.Z)
+		if dir.Magnitude < 0.1 then
+			dir = Vector3.new(0, 0, -1)
+		end
+		dir = dir.Unit
+		local endPos = u.Pos + dir * (stats.Range + 3)
+		local speed = def.ProjectileSpeed or 70
+		local half = (def.DiscWidth or 3) / 2
+		local line = {}
+		for _, e in pairs(enemies) do
+			if e.Alive and e ~= target and distToSegment(e.Pos, u.Pos, endPos) <= half + (e.IsBoss and 1.2 or 0) then
+				e._along = (e.Pos.X - u.Pos.X) * dir.X + (e.Pos.Z - u.Pos.Z) * dir.Z
+				line[#line + 1] = e
+			end
+		end
+		table.sort(line, function(a, b)
+			return a._along < b._along
+		end)
+		local hits = { target }
+		local hitSet = { [target] = true }
+		for _, e in ipairs(line) do
+			if #hits >= (def.DiscTargets or 5) then
+				break
+			end
+			hits[#hits + 1] = e
+			hitSet[e] = true
+		end
+		fireAttack(u, { target.Id }, { D = hitDelay, E = endPos, SP = speed, ST = storm or nil })
+		for _, e in ipairs(hits) do
+			local along = math.max(0, (e.Pos.X - u.Pos.X) * dir.X + (e.Pos.Z - u.Pos.Z) * dir.Z)
+			later(hitDelay + along / speed, function()
+				if e.Alive then
+					Remotes.Impact:FireAllClients({ K = "ChronoHit", P = e.Pos, L = u.Level, U = u.Uid })
+					strike(e)
+				end
+			end)
+		end
+		-- ВРЕМЕННАЯ БУРЯ: основная цель 100% (диском), до 4 других врагов рядом с ней — по 50%.
+		-- Эти попадания не считаются обычными атаками.
+		if storm then
+			local ts = def.TimeStorm
+			local saved = target.Pos
+			later(hitDelay + PathUtil.FlatDistance(u.Pos, target.Pos) / speed + 0.02, function()
+				local center = target.Alive and target.Pos or saved
+				local extra = {}
+				for _, e in pairs(enemies) do
+					if e.Alive and not hitSet[e] then
+						local d = PathUtil.FlatDistance(e.Pos, center)
+						if d <= ts.Radius + (e.IsBoss and 1 or 0.3) then
+							e._dc = d
+							extra[#extra + 1] = e
+						end
+					end
+				end
+				table.sort(extra, function(a, b)
+					return a._dc < b._dc
+				end)
+				Remotes.Impact:FireAllClients({ K = "ChronoBurst", P = center, R = ts.Radius, L = u.Level, U = u.Uid })
+				for i = 1, math.min(ts.Extra, #extra) do
+					strike(extra[i], ts.Mult)
+				end
+			end)
+		end
+		-- ПОЛОМКА ВРЕМЕНИ: каждая 8-я обычная атака, но не чаще раза в 18 с
+		local tb = def.TimeBreak
+		u.ChronoCount = (u.ChronoCount or 0) + 1
+		if u.ChronoCount >= tb.EveryNth and t0 - (u.LastBreak or -1e9) >= tb.MinInterval then
+			u.ChronoCount = 0
+			u.LastBreak = t0
+			u.NextAttack = math.max(u.NextAttack or 0, t0 + 1.6)
+			later(hitDelay + 0.45, function()
+				castTimeBreak(u, stats)
+			end)
+		end
 	elseif atype == "Pierce" then
 		-- луч насквозь: все враги на линии от юнита через цель
 		local dir = Vector3.new(target.Pos.X - u.Pos.X, 0, target.Pos.Z - u.Pos.Z)
@@ -946,11 +1137,19 @@ local function updateUnits(t)
 				u.NextAttack = math.max(u.NextAttack, t + 1.0)
 			end
 		end
+		if u.Def.TimeHaste or u.Def.TimeStorm then
+			updateChrono(u, stats, t)
+		end
 		if t >= u.NextAttack then
 			local list = candidates(u, stats.Range)
 			if #list > 0 then
+				-- ускорение времени: союзник атакует чаще, урон за удар прежний
+				local cd = stats.Cooldown
+				if (u.HasteUntil or 0) > t then
+					cd = cd / (1 + (u.Haste or 0))
+				end
+				u.NextAttack = t + cd
 				attack(u, stats, list)
-				u.NextAttack = t + stats.Cooldown
 			end
 		end
 	end
@@ -963,7 +1162,9 @@ local function updateEnemies(t, dt)
 	local reached = {}
 	for _, e in pairs(enemies) do
 		local mult = 1
-		if e.SlowUntil > t then
+		if (e.FrozenUntil or 0) > t then
+			mult = 0
+		elseif e.SlowUntil > t then
 			mult = 1 - e.SlowAmount
 		else
 			e.SlowAmount = 0
@@ -1000,7 +1201,7 @@ local function sync(t)
 		list[#list + 1] = e.Id
 		list[#list + 1] = math.floor(e.Dist * 100) / 100
 		list[#list + 1] = math.max(0, e.Health)
-		list[#list + 1] = (e.SlowUntil > t) and 1 or 0
+		list[#list + 1] = ((e.FrozenUntil or 0) > t) and 2 or ((e.SlowUntil > t) and 1 or 0)
 	end
 	Remotes.Sync:FireAllClients({ T = t, E = list, DMG = damageBuffer, RM = removedBuffer })
 	damageBuffer = {}
@@ -1177,6 +1378,11 @@ function GameService.Init(remotes, state, unitsFolder, map)
 	setState("BossName", "")
 	resetMatch()
 	RunService.Heartbeat:Connect(step)
+end
+
+-- Доступ к внутреннему состоянию для автотестов (в игре не используется)
+function GameService.Debug()
+	return { Units = units, Enemies = enemies, Spawn = spawnEnemy, Now = now }
 end
 
 return GameService

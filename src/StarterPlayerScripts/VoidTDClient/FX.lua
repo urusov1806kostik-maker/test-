@@ -747,4 +747,316 @@ function FX.PierceBeam(from, to)
 	FX.Sound("Laser", 1, 1.2, from)
 end
 
+
+------------------------------------------------------------------------
+-- ПРОКЛЯТЫЙ ЧАСОВЩИК: эффекты времени (золото, бронза, оранжевые искры)
+------------------------------------------------------------------------
+local CGOLD = Color3.fromRGB(230, 178, 74)
+local BRONZE = Color3.fromRGB(170, 112, 52)
+local ORANGE = Color3.fromRGB(255, 140, 40)
+local DIAL = Color3.fromRGB(16, 12, 20)
+FX.Colors.Orange = ORANGE
+
+-- Набор деталей, двигающихся как одно целое: { part, offset }
+local function rigidSet()
+	return { list = {} }
+end
+
+local function addRigid(set, props, offset)
+	local p = FX.Part(props)
+	set.list[#set.list + 1] = { p, offset or CF() }
+	return p
+end
+
+local function placeRigid(set, cf)
+	for _, it in ipairs(set.list) do
+		it[1].CFrame = cf * it[2]
+	end
+end
+
+local function fadeRigid(set, time)
+	for _, it in ipairs(set.list) do
+		tween(it[1], time, { Transparency = 1 })
+		cleanup(it[1], time + 0.05)
+	end
+end
+
+-- Шестерня в плоскости XY: восьмиугольник из 4 брусков + 8 зубьев + ступица
+local function addGear(set, a, depth, color, hubColor, base)
+	base = base or CF()
+	for k = 0, 3 do
+		addRigid(set, { Size = V(2 * a, 0.83 * a, depth), Color = color, Material = Enum.Material.Metal }, base * ANG(0, 0, k * math.pi / 4))
+	end
+	if not FX.Lite then
+		for k = 0, 7 do
+			local ang = k * math.pi / 4
+			addRigid(set, { Size = V(a * 0.36, a * 0.34, depth), Color = color, Material = Enum.Material.Metal }, base * CF(math.cos(ang) * a * 1.08, math.sin(ang) * a * 1.08, 0) * ANG(0, 0, ang))
+		end
+	end
+	addRigid(set, { Size = V(a * 0.45, a * 0.45, depth + 0.05), Color = hubColor or ORANGE }, base * ANG(0, 0, math.pi / 4))
+end
+
+-- Циферблат в плоскости XY (рама, тёмный диск, деления). Возвращает детали стрелок (двигаются отдельно).
+local function addDial(set, a, depth, transparency)
+	for k = 0, 3 do
+		addRigid(set, { Size = V(2 * a, 0.83 * a, depth), Color = CGOLD, Material = Enum.Material.Metal, Transparency = transparency or 0 }, ANG(0, 0, k * math.pi / 4))
+		addRigid(set, { Size = V(1.68 * a, 0.7 * a, depth + 0.04), Color = DIAL, Material = Enum.Material.SmoothPlastic, Transparency = transparency or 0 }, ANG(0, 0, k * math.pi / 4))
+	end
+	for k = 0, 11 do
+		local ang = k * math.pi / 6
+		addRigid(set, { Size = V(a * 0.06, a * (k % 3 == 0 and 0.2 or 0.11), depth + 0.08), Color = CGOLD }, CF(math.cos(ang) * a * 0.68, math.sin(ang) * a * 0.68, 0) * ANG(0, 0, ang + math.pi / 2))
+	end
+end
+
+-- Стрелки часов: две детали, поворачиваются вокруг центра циферблата (cf) на угол
+local function makeHands(a, color)
+	local h = FX.Part({ Size = V(a * 0.1, a * 0.45, 0.08), Color = color or CGOLD })
+	local m = FX.Part({ Size = V(a * 0.06, a * 0.7, 0.08), Color = color or CGOLD })
+	return h, m
+end
+
+local function placeHands(h, m, cf, ha, ma, a, depth)
+	h.CFrame = cf * ANG(0, 0, ha) * CF(0, a * 0.2, -depth / 2 - 0.08)
+	m.CFrame = cf * ANG(0, 0, ma) * CF(0, a * 0.32, -depth / 2 - 0.1)
+end
+
+local function camFacing(pos)
+	local cam = workspace.CurrentCamera
+	local c = cam and cam.CFrame.Position or (pos + V(0, 10, 20))
+	local flat = V(c.X, pos.Y, c.Z)
+	if (flat - pos).Magnitude < 0.1 then
+		return CF(pos)
+	end
+	-- лицевая сторона (-Z) смотрит на камеру
+	return CFrame.lookAt(pos, flat)
+end
+
+-- Разрез секунд: вращающийся зубчатый диск летит по прямой
+function FX.GearDisc(from, to, duration, lv, storm)
+	local set = rigidSet()
+	local a = 0.75 + (lv or 1) * 0.08
+	addGear(set, a, 0.18, storm and ORANGE or CGOLD, storm and Color3.fromRGB(255, 230, 160) or ORANGE)
+	local core = set.list[#set.list][1]
+	light(core, ORANGE, 8, storm and 3 or 1.5)
+	local dir = to - from
+	local flat = V(dir.X, 0, dir.Z)
+	local base = flat.Magnitude > 0.01 and CFrame.lookAt(V(), flat).Rotation or CF()
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		local alpha = math.clamp(el / math.max(duration, 0.05), 0, 1)
+		local pos = from:Lerp(to, alpha)
+		placeRigid(set, CF(pos) * base * ANG(rad(90), 0, 0) * ANG(0, 0, el * 16))
+		if alpha >= 1 then
+			conn:Disconnect()
+			fadeRigid(set, 0.2)
+		end
+	end)
+	FX.Sound("Slash", 0.8, 1.4, from)
+end
+
+-- Попадание диском: золотые искры, шестерёнки, призрачные стрелки, оранжевая вспышка
+function FX.ChronoHit(pos)
+	FX.Burst(pos, CGOLD, 5, 0.22, 6, 0.35)
+	FX.Burst(pos, BRONZE, 3, 0.3, 4, 0.45)
+	FX.Sphere(pos, 1.0, ORANGE, 0.18, nil, 0.3)
+	if not FX.Lite then
+		local cf = camFacing(pos + V(0, 1.2, 0))
+		local h, m = makeHands(1.2, Color3.fromRGB(255, 220, 150))
+		h.Transparency, m.Transparency = 0.3, 0.3
+		placeHands(h, m, cf, 0, 0, 1.2, 0)
+		tween(h, 0.4, { CFrame = cf * ANG(0, 0, -2.5) * CF(0, 0.24, -0.1), Transparency = 1 })
+		tween(m, 0.4, { CFrame = cf * ANG(0, 0, 2.8) * CF(0, 0.38, -0.12), Transparency = 1 })
+		cleanup(h, 0.45)
+		cleanup(m, 0.45)
+	end
+end
+
+-- Маленькие часы над точкой (на время dur): стрелки крутятся со скоростью speed
+local function tinyClock(pos, a, dur, speed)
+	local set = rigidSet()
+	addDial(set, a, 0.12)
+	local h, m = makeHands(a)
+	local cf = camFacing(pos)
+	placeRigid(set, cf)
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		placeHands(h, m, cf, -el * speed * 0.2, -el * speed, a, 0.12)
+		if el >= dur then
+			conn:Disconnect()
+			fadeRigid(set, 0.25)
+			for _, p in ipairs({ h, m }) do
+				tween(p, 0.25, { Transparency = 1 })
+				cleanup(p, 0.3)
+			end
+		end
+	end)
+end
+FX.TinyClock = tinyClock
+
+-- ПОЛОМКА ВРЕМЕНИ: огромный циферблат под врагами, стрелки резко останавливаются, всё замирает
+function FX.TimeBreak(pos, radius, dur)
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	FX.Sound("Magic", 1, 0.55, pos)
+	-- циферблат на дороге
+	local floor = rigidSet()
+	addDial(floor, radius, 0.12, 0.25)
+	placeRigid(floor, CF(g) * ANG(rad(-90), 0, 0))
+	local fh, fm = makeHands(radius)
+	-- огромные часы над дорогой
+	local sky = rigidSet()
+	local skyA = radius * 0.45
+	addDial(sky, skyA, 0.3)
+	local skyCF = camFacing(g + V(0, radius * 0.9 + 3, 0))
+	placeRigid(sky, skyCF)
+	local sh, sm = makeHands(skyA)
+	-- механические кольца и зависшие в воздухе частицы
+	local rings = {}
+	if not FX.Lite then
+		for i = 1, 2 do
+			local set = rigidSet()
+			local rr = radius * (0.7 + i * 0.12)
+			for k = 0, 15 do
+				if k % 4 ~= 3 then
+					local ang = k / 16 * math.pi * 2
+					addRigid(set, { Size = V(2 * math.pi * rr / 16 * 1.05, 0.12, 0.2), Color = CGOLD, Material = Enum.Material.Metal }, CF(math.cos(ang) * rr, 0, math.sin(ang) * rr) * ANG(0, -ang - math.pi / 2, 0))
+				end
+			end
+			rings[i] = { set, i * 0.9 }
+		end
+		for _ = 1, 10 do
+			local ang = rng:NextNumber(0, math.pi * 2)
+			local d = rng:NextNumber(0, radius * 0.9)
+			local p = FX.Part({ Size = V(0.25, 0.25, 0.25), CFrame = CF(g + V(math.cos(ang) * d, rng:NextNumber(0.6, 3), math.sin(ang) * d)) * ANG(1, 2, 0), Color = rng:NextNumber() < 0.5 and CGOLD or ORANGE, Transparency = 0.15 })
+			task.delay(dur, function()
+				tween(p, 0.35, { CFrame = p.CFrame + V(0, -1.5, 0), Transparency = 1 })
+			end)
+			cleanup(p, dur + 0.4)
+		end
+	end
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		-- первые 0.45 с стрелки бешено крутятся, затем резко останавливаются
+		local spin = math.min(el, 0.45)
+		local ha, ma = -spin * 14, -spin * 40
+		placeHands(fh, fm, CF(g) * ANG(rad(-90), 0, 0), ha, ma, radius, 0.12)
+		placeHands(sh, sm, skyCF, ha * 0.8, ma * 0.8, skyA, 0.3)
+		for _, rg in ipairs(rings) do
+			placeRigid(rg[1], CF(g + V(0, rg[2], 0)) * ANG(0, spin * 3 * (rg[2] > 1 and -1 or 1), 0))
+		end
+		if el >= dur then
+			conn:Disconnect()
+			-- время пошло: оранжевая вспышка и осколки шестерёнок
+			FX.Sound("Explosion", 0.6, 1.4, pos)
+			FX.Sphere(g + V(0, 1, 0), radius * 0.55, ORANGE, 0.35, nil, 0.3)
+			FX.Ring(g, radius * 1.1, ORANGE, 0.45, 0.3, radius * 0.5, 0.2)
+			FX.Burst(g + V(0, 1, 0), CGOLD, 12, 0.35, 10, 0.6)
+			FX.Burst(g + V(0, 1, 0), BRONZE, 8, 0.4, 7, 0.6)
+			fadeRigid(floor, 0.35)
+			fadeRigid(sky, 0.35)
+			for _, rg in ipairs(rings) do
+				fadeRigid(rg[1], 0.3)
+			end
+			for _, p in ipairs({ fh, fm, sh, sm }) do
+				tween(p, 0.3, { Transparency = 1 })
+				cleanup(p, 0.35)
+			end
+		end
+	end)
+end
+
+-- УСКОРЕНИЕ ВРЕМЕНИ: золотое кольцо от часовщика и маленькие часы над союзниками
+function FX.TimeHaste(pos, radius, allyPositions, dur)
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	FX.Sound("Upgrade", 0.9, 1.35, pos)
+	FX.Ring(g, radius, CGOLD, 0.8, 0.4, 1, 0.1)
+	task.delay(0.12, function()
+		FX.Ring(g + V(0, 0.1, 0), radius * 0.8, ORANGE, 0.7, 0.25, 1, 0.3)
+	end)
+	FX.Burst(g + V(0, 2, 0), CGOLD, 10, 0.3, 8, 0.6)
+	for _, ap in ipairs(allyPositions) do
+		tinyClock(ap + V(0, 7, 0), 0.7, dur, 18)
+		FX.Ring(ap + V(0, 0.3, 0), 2.5, CGOLD, 0.4, 0.2, 0.5, 0.2)
+	end
+end
+
+-- ВРЕМЕННАЯ БУРЯ: огромное механическое кольцо и удар по земле
+function FX.TimeStorm(pos, delay)
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	FX.Sound("Magic", 1, 0.45, pos)
+	local set = rigidSet()
+	local rr = 6.5
+	for k = 0, (FX.Lite and 7 or 15) do
+		local n = FX.Lite and 8 or 16
+		local ang = k / n * math.pi * 2
+		addRigid(set, { Size = V(2 * math.pi * rr / n * 1.02, 0.5, 0.3), Color = CGOLD, Material = Enum.Material.Metal }, CF(math.cos(ang) * rr, 0, math.sin(ang) * rr) * ANG(0, -ang - math.pi / 2, 0))
+		if k % 2 == 0 and not FX.Lite then
+			addRigid(set, { Size = V(0.4, 0.8, 0.4), Color = ORANGE }, CF(math.cos(ang) * rr, 0.5, math.sin(ang) * rr) * ANG(0, -ang, math.pi / 4))
+		end
+	end
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		local rise = math.min(el / (delay or 1.2), 1)
+		placeRigid(set, CF(g + V(0, 0.5 + rise * 2, 0)) * ANG(0, el * 2.5 * (0.3 + rise), 0))
+		if el >= (delay or 1.2) then
+			conn:Disconnect()
+			fadeRigid(set, 0.4)
+			FX.Shockwave(g, 9, 3, CGOLD, ORANGE)
+			FX.Sphere(g + V(0, 2, 0), 4, ORANGE, 0.45, nil, 0.25)
+		end
+	end)
+end
+
+-- Удар во время бури: механический взрыв, золотой круг на дороге, часы над целью
+function FX.ChronoBurst(pos, radius)
+	local g = V(pos.X, pos.Y + 0.2, pos.Z)
+	FX.Ring(g, radius, CGOLD, 0.45, 0.3, 0.5, 0.1)
+	FX.Ring(g + V(0, 0.05, 0), radius * 0.6, ORANGE, 0.35, 0.2, 0.3, 0.3)
+	FX.Burst(g + V(0, 1, 0), ORANGE, 8, 0.3, 9, 0.45)
+	FX.Burst(g + V(0, 1, 0), BRONZE, 5, 0.35, 6, 0.5)
+	if not FX.Lite then
+		tinyClock(g + V(0, 4, 0), 0.6, 0.6, 30)
+	end
+	FX.Sound("Explosion", 0.4, 1.6, pos)
+end
+
+-- Установка часовщика: циферблат под ним, стрелки идут назад, золотой механический портал
+function FX.ClockPortal(pos, dur)
+	dur = dur or 1.3
+	local g = V(pos.X, pos.Y + 0.25, pos.Z)
+	local set = rigidSet()
+	local a = 4.5
+	addDial(set, a, 0.12, 0.2)
+	placeRigid(set, CF(g) * ANG(rad(-90), 0, 0))
+	local h, m = makeHands(a)
+	local portal = FX.Part({ Shape = Enum.PartType.Cylinder, Size = V(0.3, 0.5, 0.5), CFrame = CF(g + V(0, 0.2, 0)) * ANG(0, 0, rad(90)), Color = CGOLD, Transparency = 0.2 })
+	tween(portal, dur * 0.6, { Size = V(0.3, a * 1.6, a * 1.6) })
+	light(portal, ORANGE, 14, 2, dur + 0.5)
+	FX.Sound("Portal", 0.9, 1.2, pos)
+	local start = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local el = os.clock() - start
+		-- стрелки идут назад
+		placeHands(h, m, CF(g) * ANG(rad(-90), 0, 0), el * 4, el * 22, a, 0.12)
+		if el >= dur then
+			conn:Disconnect()
+			fadeRigid(set, 0.5)
+			for _, p in ipairs({ h, m, portal }) do
+				tween(p, 0.5, { Transparency = 1 })
+				cleanup(p, 0.55)
+			end
+			FX.Burst(g + V(0, 2, 0), CGOLD, 14, 0.35, 8, 0.6)
+			FX.Ring(g, 6, ORANGE, 0.5, 0.3, 2, 0.2)
+		end
+	end)
+end
+
 return FX

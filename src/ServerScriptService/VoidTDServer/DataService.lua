@@ -37,6 +37,7 @@ local function defaultProfile()
 		Settings = {},
 		LastDaily = 0,
 		Receipts = {},
+		HalloweenCoins = 0,
 	}
 	for i, id in ipairs(s.StarterUnits) do
 		p.Inventory[id] = 1
@@ -57,6 +58,7 @@ local function sanitize(p)
 	p.Settings = type(p.Settings) == "table" and p.Settings or {}
 	p.LastDaily = tonumber(p.LastDaily) or 0
 	p.Receipts = type(p.Receipts) == "table" and p.Receipts or {}
+	p.HalloweenCoins = tonumber(p.HalloweenCoins) or 0
 	-- убрать неизвестные юниты
 	for id in pairs(p.Inventory) do
 		if not Config.Units[id] then
@@ -87,6 +89,14 @@ function DataService.Load(player)
 		end
 	end
 	profile = sanitize(profile and deepCopy(profile) or nil)
+	-- проверка в Studio: секретные юниты из настроек сразу в инвентаре
+	if RunService:IsStudio() then
+		for _, id in ipairs(Config.Settings.StudioGrantUnits or {}) do
+			if Config.Units[id] and (profile.Inventory[id] or 0) == 0 then
+				profile.Inventory[id] = 1
+			end
+		end
+	end
 	DataService.Profiles[player] = profile
 	player:SetAttribute("Gems", profile.Gems)
 	return profile
@@ -157,6 +167,7 @@ function DataService.Snapshot(player)
 		Stats = deepCopy(p.Stats),
 		Settings = deepCopy(p.Settings or {}),
 		DailyReadyAt = (tonumber(p.LastDaily) or 0) + Config.Settings.DailyCooldown,
+		HalloweenCoins = p.HalloweenCoins or 0,
 	}
 end
 
@@ -175,17 +186,27 @@ local function unitsByRarity(case)
 	return map
 end
 
-local function rollRarity(case, pool)
+-- редкость есть в розыгрыше, если в ней есть юниты без отдельного шанса (UnitRates)
+local function rollable(pool, name, unitRates)
+	for _, id in ipairs(pool[name] or {}) do
+		if not (unitRates and unitRates[id]) then
+			return true
+		end
+	end
+	return false
+end
+
+local function rollRarity(case, pool, unitRates)
 	local total = 0
 	for _, name in ipairs(Config.RarityOrder) do
-		if pool[name] then
+		if rollable(pool, name, unitRates) then
 			total = total + (case.Rates[name] or 0)
 		end
 	end
 	local roll = rng:NextNumber() * total
 	local acc = 0
 	for _, name in ipairs(Config.RarityOrder) do
-		if pool[name] then
+		if rollable(pool, name, unitRates) then
 			acc = acc + (case.Rates[name] or 0)
 			if roll <= acc then
 				return name
@@ -204,26 +225,52 @@ function DataService.Summon(player, caseId, count)
 	if not case then
 		return false, "Неизвестный кейс"
 	end
+	if case.Enabled == false then
+		return false, "Кейс пока недоступен"
+	end
 	local s = Config.Settings
 	count = (count == 10) and 10 or 1
 	local cost = (count == 10) and case.Cost10 or case.Cost1
-	if p.Gems < cost then
-		return false, "Недостаточно кристаллов"
+	local currency = case.Currency or "Gems"
+	if (p[currency] or 0) < cost then
+		return false, currency == "Gems" and "Недостаточно кристаллов" or "Недостаточно Halloween Coins"
 	end
-	p.Gems = p.Gems - cost
-	player:SetAttribute("Gems", p.Gems)
+	p[currency] = p[currency] - cost
+	if currency == "Gems" then
+		player:SetAttribute("Gems", p.Gems)
+	end
 	local pool = unitsByRarity(case)
 	local results = {}
 	local bestOrder = 0
 	for i = 1, count do
-		local rarity = rollRarity(case, pool)
+		-- отдельный шанс конкретных юнитов (UnitRates, в процентах), иначе — по редкостям
+		local fixed
+		if case.UnitRates then
+			local roll, acc = rng:NextNumber() * 100, 0
+			for id, rate in pairs(case.UnitRates) do
+				acc = acc + rate
+				if roll < acc then
+					fixed = id
+					break
+				end
+			end
+		end
+		local rarity = fixed and Config.Units[fixed].Rarity or rollRarity(case, pool, case.UnitRates)
 		-- гарантия: в x10 минимум один Rare+
-		if count == 10 and i == 10 and bestOrder < 2 and pool.Rare then
+		if count == 10 and i == 10 and bestOrder < 2 and not fixed and rollable(pool, "Rare", case.UnitRates) then
 			rarity = "Rare"
 		end
 		bestOrder = math.max(bestOrder, Config.Rarities[rarity].Order)
-		local list = pool[rarity]
-		local id = list[rng:NextInteger(1, #list)]
+		local id = fixed
+		if not id then
+			local list = {}
+			for _, u in ipairs(pool[rarity]) do
+				if not (case.UnitRates and case.UnitRates[u]) then
+					list[#list + 1] = u
+				end
+			end
+			id = list[rng:NextInteger(1, #list)]
+		end
 		local isNew = (p.Inventory[id] or 0) == 0
 		p.Inventory[id] = (p.Inventory[id] or 0) + 1
 		results[i] = { Id = id, New = isNew }

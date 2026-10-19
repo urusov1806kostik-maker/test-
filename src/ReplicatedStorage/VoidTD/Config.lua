@@ -37,6 +37,9 @@ Config.Settings = {
 	StarterUnits = { "VoidSoldier", "ShadowArcher", "LostMage" },
 	DailyGems = 150,              -- бесплатные кристаллы в магазине раз в 20 часов
 	DailyCooldown = 20 * 3600,
+	FreezeImmunity = 3,           -- после остановки времени враг 3 с не может быть остановлен снова
+	-- В Studio эти юниты выдаются в инвентарь для проверки (в опубликованной игре — нет)
+	StudioGrantUnits = { "CursedClockmaker" },
 	ShopTestMode = true,          -- в Studio покупка с ProductId = 0 выдаёт кристаллы бесплатно (для теста)
 	DataStoreName = "VoidTD_Data_v1",
 	SyncRate = 0.1,               -- как часто сервер рассылает позиции врагов
@@ -78,6 +81,19 @@ Config.Cases = {
 		Cost1 = 80, Cost10 = 720,
 		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
 		Units = { "RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer" },
+	},
+	-- HALLOWEEN CASE: пока выключен (Enabled = false) — в нём есть только Проклятый часовщик,
+	-- остальные хэллоуинские юниты, Король фонарей, Ночной сторож и руны ещё не добавлены.
+	-- Валюта — Halloween Coins. UnitRates — шанс конкретного юнита в процентах (поверх шансов редкостей).
+	Halloween = {
+		Name = "HALLOWEEN CASE", Color = Color3.fromRGB(255, 130, 30),
+		Description = "Хэллоуин. Проклятый часовщик: 0.2%",
+		Enabled = false,
+		Currency = "HalloweenCoins",
+		Cost1 = 500, Cost10 = 5000,
+		Rates = {},
+		UnitRates = { CursedClockmaker = 0.2 },
+		Units = { "CursedClockmaker" },
 	},
 	BloodMoon = {
 		Name = "BLOOD MOON", Color = Color3.fromRGB(210, 30, 50),
@@ -195,6 +211,8 @@ Config.UnitOrder = {
 	"RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer",
 	-- Blood Moon Case
 	"BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse",
+	-- Halloween Case
+	"CursedClockmaker",
 }
 
 Config.Units = {
@@ -512,6 +530,30 @@ Config.Units = {
 				BloodMoon = { Cooldown = 9,  Radius = 20, Mult = 3, Bleed = 240, BleedTime = 4 } },
 		},
 		AbilityExtraRange = 8,
+	},
+	--------------------------------------------------------------------
+	-- HALLOWEEN CASE
+	--------------------------------------------------------------------
+	CursedClockmaker = {
+		Name = "CURSED CLOCKMAKER", Rarity = "Secret", Event = "Halloween", AttackType = "Chrono", Case = "Halloween",
+		Description = "SECRET 🎃 Проклятый часовщик. Хроносекира выпускает зубчатый диск: он летит по прямой и режет до 5 врагов. Три способности времени.",
+		Ability = "ПОЛОМКА ВРЕМЕНИ • УСКОРЕНИЕ ВРЕМЕНИ • ВРЕМЕННАЯ БУРЯ",
+		Anim = "ChronoSlash", HitDelay = 0.35, ProjectileSpeed = 70, Scale = 1.45, DefaultTarget = "First",
+		DiscWidth = 3, DiscTargets = 5, ImpactColor = Color3.fromRGB(255, 160, 50), PlaceFX = "Clock",
+		PreviewAbilities = { { "TimeBreak", "ПОЛОМКА" }, { "TimeHaste", "УСКОРЕНИЕ" }, { "TimeStorm", "БУРЯ" } },
+		-- 1. Поломка времени: каждая 8-я обычная атака, не чаще раза в 18 с
+		TimeBreak = { EveryNth = 8, MinInterval = 18, Radius = 9, MaxFreeze = 4, Freeze = 1.5, BossFreeze = 0.5, MaxRewind = 3, Rewind = 2 },
+		-- 2. Ускорение времени: через 30 с после установки и далее каждые 30 с (сила и длительность — по уровням)
+		TimeHaste = { FirstDelay = 30, Interval = 30, Radius = 14 },
+		-- 3. Временная буря: через 90 с после установки, 15 с AOE, перезарядка 90 с после окончания
+		TimeStorm = { FirstDelay = 90, Duration = 15, Cooldown = 90, Radius = 5, Extra = 4, Mult = 0.5 },
+		Levels = {
+			{ Damage = 240,  Range = 17, Cooldown = 1.6,  Cost = 9500,  Haste = 0.06, HasteTime = 2 },
+			{ Damage = 340,  Range = 17, Cooldown = 1.5,  Cost = 6500,  Haste = 0.07, HasteTime = 2.5 },
+			{ Damage = 480,  Range = 18, Cooldown = 1.45, Cost = 9500,  Haste = 0.08, HasteTime = 3 },
+			{ Damage = 680,  Range = 19, Cooldown = 1.35, Cost = 13500, Haste = 0.09, HasteTime = 3.5 },
+			{ Damage = 980,  Range = 20, Cooldown = 1.25, Cost = 20000, Haste = 0.10, HasteTime = 4 },
+		},
 	},
 }
 
