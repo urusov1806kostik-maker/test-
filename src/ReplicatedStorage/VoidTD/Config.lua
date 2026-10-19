@@ -427,8 +427,8 @@ Config.Units = {
 	-- BLOOD MOON CASE
 	--------------------------------------------------------------------
 	BloodAcolyte = {
-		Name = "Blood Acolyte", Rarity = "Common", AttackType = "Melee", Case = "BloodMoon",
-		Description = "Послушник с серпом. Удары вызывают кровотечение.",
+		Name = "Blood Initiate", Rarity = "Common", AttackType = "Melee", Case = "BloodMoon",
+		Description = "Послушник с кровавой глефой. Удары вызывают кровотечение.",
 		Anim = "Sickle", HitDelay = 0.2, Scale = 1.0, DefaultTarget = "First",
 		ImpactColor = Color3.fromRGB(220, 30, 50),
 		Levels = {
@@ -440,9 +440,9 @@ Config.Units = {
 		},
 	},
 	CrimsonGunslinger = {
-		Name = "Crimson Gunslinger", Rarity = "Rare", AttackType = "Projectile", Case = "BloodMoon",
-		Description = "Стрелок с двумя револьверами. Всегда стреляет дуплетом.",
-		Anim = "Revolver", HitDelay = 0.05, ProjectileSpeed = 200, Projectile = "Bullet", Scale = 1.0, DefaultTarget = "First",
+		Name = "Scarlet Hunter", Rarity = "Rare", AttackType = "Projectile", Case = "BloodMoon",
+		Description = "Охотник с кровавым луком. Всегда стреляет двумя стрелами.",
+		Anim = "Bow", HitDelay = 0.05, ProjectileSpeed = 200, Projectile = "Arrow", Scale = 1.0, DefaultTarget = "First",
 		ImpactColor = Color3.fromRGB(255, 70, 70),
 		Levels = {
 			{ Damage = 14, Range = 19, Cooldown = 0.80, Cost = 750,  Shots = 2 },
@@ -453,8 +453,8 @@ Config.Units = {
 		},
 	},
 	MoonWitch = {
-		Name = "Moon Witch", Rarity = "Epic", AttackType = "Chain", Case = "BloodMoon",
-		Description = "Лунная ведьма. Лунный серп отскакивает между врагами.",
+		Name = "Crimson Witch", Rarity = "Epic", AttackType = "Chain", Case = "BloodMoon",
+		Description = "Кровавая ведьма. Лунный серп отскакивает между врагами.",
 		Anim = "Cast", HitDelay = 0.3, ProjectileSpeed = 60, Projectile = "Moon", Scale = 1.05, DefaultTarget = "First",
 		BounceMult = 0.8, BounceRange = 12, ImpactColor = Color3.fromRGB(255, 120, 140),
 		Levels = {
@@ -466,8 +466,8 @@ Config.Units = {
 		},
 	},
 	BloodfangWarlord = {
-		Name = "Bloodfang Warlord", Rarity = "Legendary", AttackType = "AOE", ImpactKind = "Cleave", Case = "BloodMoon",
-		Description = "Военачальник с двуручным топором. Рассекающий удар по области + кровотечение.",
+		Name = "Blood Paladin", Rarity = "Legendary", AttackType = "AOE", ImpactKind = "Cleave", Case = "BloodMoon",
+		Description = "Кровавый паладин с топором и башенным щитом. Рассекающий удар по области + кровотечение.",
 		Ability = "BLOOD CLEAVE",
 		Anim = "Axe", HitDelay = 0.4, Scale = 1.3, DefaultTarget = "First",
 		ImpactColor = Color3.fromRGB(230, 30, 40),
@@ -480,8 +480,8 @@ Config.Units = {
 		},
 	},
 	LunarSeraph = {
-		Name = "Lunar Seraph", Rarity = "Mythic", AttackType = "Pierce", Case = "BloodMoon",
-		Description = "Лунный серафим. Луч пронзает всех врагов на линии.",
+		Name = "Moon Devourer", Rarity = "Mythic", AttackType = "Pierce", Case = "BloodMoon",
+		Description = "Пожиратель луны. Луч пронзает всех врагов на линии.",
 		Ability = "LUNAR LANCE",
 		Anim = "Beam", HitDelay = 0.4, Scale = 1.35, DefaultTarget = "First",
 		PierceWidth = 3.2, ImpactColor = Color3.fromRGB(255, 200, 220),
@@ -494,7 +494,7 @@ Config.Units = {
 		},
 	},
 	CrimsonEclipse = {
-		Name = "CRIMSON ECLIPSE", Rarity = "Secret", AttackType = "AOE", ImpactKind = "Reap", Case = "BloodMoon",
+		Name = "SCARLET ECLIPSE", Rarity = "Secret", AttackType = "AOE", ImpactKind = "Reap", Case = "BloodMoon",
 		Description = "SECRET. Удары косой по области + BLOOD MOON: падающая кровавая луна.",
 		Ability = "BLOOD MOON",
 		Anim = "Reap", HitDelay = 0.35, Scale = 1.5, DefaultTarget = "First",

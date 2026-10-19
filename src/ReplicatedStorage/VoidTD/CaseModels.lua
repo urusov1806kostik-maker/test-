@@ -139,6 +139,12 @@ function CaseModels.Build(caseId)
 	m.PrimaryPart = r.Body
 	m.WorldPivot = CF(0, 0, 0)
 	r.Model = m
+	-- приглушённый неон
+	for _, d in ipairs(m:GetDescendants()) do
+		if d:IsA("BasePart") and d.Material == Enum.Material.Neon then
+			d.Color = d.Color:Lerp(Color3.fromRGB(14, 10, 22), 0.3)
+		end
+	end
 	-- запоминаем исходные позиции для анимации
 	r.Base = {}
 	for _, d in ipairs(m:GetDescendants()) do

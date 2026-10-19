@@ -987,6 +987,7 @@ function EnemyModels.Build(enemyId)
 		error(rig)
 	end
 	rig.Model.Name = enemyId
+	Kit.Calm(rig.Model)
 	for _, d in ipairs(rig.Model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.CanQuery = false

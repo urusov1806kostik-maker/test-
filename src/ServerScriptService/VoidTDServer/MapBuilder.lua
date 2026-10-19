@@ -142,9 +142,9 @@ local function setupLighting()
 
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "VoidBloom"
-	bloom.Intensity = 0.9
-	bloom.Size = 28
-	bloom.Threshold = 1.1
+	bloom.Intensity = 0.35
+	bloom.Size = 18
+	bloom.Threshold = 1.4
 	bloom.Parent = Lighting
 
 	local cc = Instance.new("ColorCorrectionEffect")
@@ -810,6 +810,17 @@ local function lobbyPortal(parent, center, facing)
 	emitter(disc, C.Neon, { Rate = 30, Size = 0.7, SpeedMin = 2, SpeedMax = 5 })
 end
 
+-- Приглушённый неон по всей карте: светящиеся детали темнее, подсветка слабее
+local function calm(root)
+	for _, d in ipairs(root:GetDescendants()) do
+		if d:IsA("BasePart") and d.Material == Enum.Material.Neon then
+			d.Color = d.Color:Lerp(Color3.fromRGB(14, 10, 22), 0.3)
+		elseif d:IsA("PointLight") then
+			d.Brightness = d.Brightness * 0.65
+		end
+	end
+end
+
 function MapBuilder.BuildLobby()
 	local existing = workspace:FindFirstChild("VoidTDLobby")
 	if existing then
@@ -995,6 +1006,7 @@ function MapBuilder.BuildLobby()
 	cylinderY(m, "SpawnGlow", 4.6, 0.08, L.Spawn + V(0, 1.03, 0), C.Neon, Enum.Material.Neon, { CanCollide = false, Transparency = 0.5 })
 
 	m.WorldPivot = CF(c)
+	calm(m)
 	m.Parent = workspace
 	return m
 end
@@ -1022,6 +1034,7 @@ function MapBuilder.Build()
 	part(map, { Name = "BattlePad", Size = V(8, 1, 8), CFrame = CF(bs.X, GY + 0.5, bs.Z), Color = Color3.fromRGB(70, 40, 110), Material = Enum.Material.Slate })
 	part(map, { Name = "BattlePadGlow", Size = V(7, 0.05, 7), CFrame = CF(bs.X, GY + 1.03, bs.Z), Color = C.Neon, Material = Enum.Material.Neon, Transparency = 0.6, CanCollide = false })
 
+	calm(map)
 	map.Parent = workspace
 	MapBuilder.BuildLobby()
 	setupLighting()

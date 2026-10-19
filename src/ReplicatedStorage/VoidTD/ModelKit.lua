@@ -240,4 +240,19 @@ local function chain(r, limb, n, size, color, at)
 end
 Kit.chain = chain
 
+-- Приглушает неон: светящиеся детали темнее, подсветка и частицы слабее (меньше «кислотности»)
+local CALM_DARK = Color3.fromRGB(14, 10, 22)
+function Kit.Calm(root, amount)
+	amount = amount or 0.3
+	for _, d in ipairs(root:GetDescendants()) do
+		if d:IsA("BasePart") and d.Material == Enum.Material.Neon then
+			d.Color = d.Color:Lerp(CALM_DARK, amount)
+		elseif d:IsA("PointLight") then
+			d.Brightness = d.Brightness * 0.65
+		elseif d:IsA("ParticleEmitter") then
+			d.LightEmission = d.LightEmission * 0.6
+		end
+	end
+end
+
 return Kit

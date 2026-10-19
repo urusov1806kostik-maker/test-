@@ -539,7 +539,7 @@ local function levelAura(r, lv, color)
 	end
 	if lv >= 5 then
 		r:Add(r.Torso, "Part", V(0.08, 3.8, 3.8), CF(0, -2.96, 0) * ANG(0, 0, rad(90)), color, M.Neon,
-			{ Shape = Enum.PartType.Cylinder, Transparency = 0.55, Name = "AuraRing" })
+			{ Shape = Enum.PartType.Cylinder, Transparency = 0.78, Name = "AuraRing" })
 		r:Sparkles(r.Torso, color, { Rate = 10, Up = 3, Size = 0.3, LifeMin = 0.8, LifeMax = 1.4 })
 		r:Glow(r.Torso, color, 10, 1.2)
 	end
@@ -547,416 +547,1066 @@ end
 
 
 ------------------------------------------------------------------------
--- ДОПОЛНИТЕЛЬНЫЕ ДЕТАЛИ МОДЕЛЕЙ (ремни, сумки, эмблемы, кольца)
+-- R6-ФИГУРЫ В УГЛОВАТОМ СТИЛЕ (по референсу): тело — блоки R6 с фаской и светлым кантом,
+-- поверх — броня, капюшоны, шлемы, плащи и оружие из блоков, клиньев и кристаллов-ромбов.
 ------------------------------------------------------------------------
-local Details = {}
+local AC = Kit.Colors
+local PI = math.pi
+local GRIP = -1.05 -- точка хвата в кисти (локально в руке)
 
-function Details.VoidSoldier(r, lv)
-	local T, H, RL, LL = r.Torso, r.Head, r.RLeg, r.LLeg
-	r:Box(T, V(0.9, 1.05, 0.08), CF(0, -1.4, -0.54), P.Violet, M.Fabric) -- табард
-	r:Neon(T, V(0.3, 0.3, 0.06), CF(0, -1.3, -0.6) * ANG(0, 0, rad(45)), lv >= 2 and P.Neon or P.Purple, lv < 2 and { Material = M.Plastic } or nil)
-	r:Box(T, V(2.04, 0.4, 1.04), CF(0, -1.15, 0), P.Steel, M.Metal) -- кольчужная юбка
-	r:Seg(T, V(-0.85, 0.95, -0.72), V(0.75, -0.6, -0.72), 0.16, P.Maroon) -- ремень через плечо
-	r:Pouch(T, CF(0.72, -0.8, -0.62), P.Maroon)
-	r:Ball(H, 0.2, CF(-0.79, 0.25, -0.4), P.Steel, M.Metal)
-	r:Ball(H, 0.2, CF(0.79, 0.3, -0.4), P.Steel, M.Metal)
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(0.9, 0.28, 0.25), CF(0, -0.88, -0.68), P.Black, M.Metal) -- носки сапог
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+-- Базовая R6-фигура. pal: Torso, Arm, Leg, Skin, Edge
+local function figure(name, pal)
+	local r = Rig.new({ Name = name, HeadSize = V(1.2, 1.2, 1.2), Torso = pal.Torso, Arm = pal.Arm or pal.Torso, Leg = pal.Leg or pal.Torso, Head = pal.Skin or pal.Torso })
+	for _, L in ipairs({ r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+		L.Transparency = 1
 	end
-	if lv >= 3 then
-		r:Cyl(T, 0.16, 1.6, CF(0, 0.1, 0.62), P.Coal, M.Metal, "Z") -- круглый щит на спине
-		r:Cyl(T, 0.12, 1.75, CF(0, 0.1, 0.6), P.Steel, M.Metal, "Z")
-		r:Sphere(T, V(0.5, 0.5, 0.3), CF(0, 0.1, 0.72), P.Neon, M.Neon)
+	local e = pal.Edge or AC.Edge
+	Kit.bevel(r, r.Torso, V(2, 2, 1), CF(), pal.Torso, e)
+	Kit.bevel(r, r.RArm, V(1, 2, 1), CF(), pal.Arm or pal.Torso, e)
+	Kit.bevel(r, r.LArm, V(1, 2, 1), CF(), pal.Arm or pal.Torso, e)
+	Kit.bevel(r, r.RLeg, V(1, 2, 1), CF(), pal.Leg or pal.Torso, e)
+	Kit.bevel(r, r.LLeg, V(1, 2, 1), CF(), pal.Leg or pal.Torso, e)
+	r:Box(r.Head, V(1.2, 1.2, 1.2), CF(), pal.Skin or rgb(70, 62, 80), M.Plastic)
+	r.Pal = pal
+	return r
+end
+
+-- Глаза: светящиеся или тёмные щели
+local function eyes(r, color, glow, y)
+	for _, s in ipairs({ -1, 1 }) do
+		local f = glow and r.Neon or r.Box
+		f(r, r.Head, V(0.22, 0.12, 0.05), CF(0.24 * s, y or 0.08, -0.61), color)
 	end
 end
 
-function Details.ShadowArcher(r, lv)
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.06, 0.25, 1.06), CF(0, -0.85, 0), P.Maroon)
-	r:Cyl(T, 0.5, 0.18, CF(1.05, -0.85, -0.2), P.Black, M.Plastic, "Y") -- кинжал
-	r:Box(T, V(0.1, 0.7, 0.24), CF(1.05, -1.45, -0.2), P.Pale, M.Metal)
-	r:Pouch(T, CF(-0.65, -0.9, -0.6), P.Coal)
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.04, 0.12, 1.04), CF(0, -0.15, 0), P.DeepViolet, M.Fabric)
-		r:Box(Lg, V(1.04, 0.12, 1.04), CF(0, -0.45, 0), P.DeepViolet, M.Fabric)
-	end
-	r:Box(RA, V(1.04, 0.12, 1.04), CF(0, -0.95, 0), P.Maroon)
-	if lv >= 2 then
-		r:Neon(H, V(1.56, 0.08, 0.08), CF(0, 0.6, -0.75), P.Neon)
-		r:Neon(H, V(0.08, 1.2, 0.08), CF(-0.73, 0, -0.75), P.Neon)
-		r:Neon(H, V(0.08, 1.2, 0.08), CF(0.73, 0, -0.75), P.Neon)
-	end
-	-- развевающийся шарф
-	local scarf = r:Joint("Scarf", T, V(0.5, 1.5, 0.1), CF(-0.35, 0.95, 0.6), ANG(rad(18), 0, rad(8)) * CF(0, -0.75, 0.05), P.Maroon, M.Fabric)
-	r:Wedge(scarf, V(0.5, 0.4, 0.1), CF(0, -0.95, 0) * ANG(0, 0, math.pi), P.Maroon, M.Fabric)
-end
-
-function Details.LostMage(r, lv)
-	local T, RA = r.Torso, r.RArm
-	r:Pouch(T, CF(-0.7, -0.75, -0.66), P.Maroon)
-	r:Ball(T, 0.32, CF(0.55, -1.0, -0.7), P.NeonPink, M.Neon) -- зелья
-	r:Cyl(T, 0.18, 0.12, CF(0.55, -0.8, -0.7), P.Pale, M.Glass, "Y")
-	r:Ball(T, 0.28, CF(0.82, -1.0, -0.68), Color3.fromRGB(90, 200, 255), M.Neon)
-	r:Cyl(T, 0.16, 0.1, CF(0.82, -0.82, -0.68), P.Pale, M.Glass, "Y")
-	r:Box(T, V(0.28, 0.75, 0.6), CF(1.15, -0.9, 0), P.Maroon) -- книга
-	r:Box(T, V(0.3, 0.65, 0.5), CF(1.16, -0.9, 0), P.Pale)
-	r:Box(T, V(2.24, 0.15, 1.34), CF(0, -2.95, 0), lv >= 3 and P.Neon or P.Violet, lv >= 3 and M.Neon or M.Fabric) -- кайма мантии
-	if lv >= 2 then
-		local hub = r:Orbit("OrbitStaff", RA, CF(0, 2.75, -0.55), 0.95, 0, 0.22, P.NeonSoft)
-		for i = 0, (lv >= 4 and 3 or 2) - 1 do
-			local a = i / (lv >= 4 and 3 or 2) * math.pi * 2
-			r:Ball(hub, 0.3, CF(math.cos(a) * 0.95, 0, math.sin(a) * 0.95), P.NeonSoft, M.Neon)
-		end
-	end
-	if lv >= 3 then
-		for i = 0, 2 do
-			r:Neon(T, V(0.22, 0.22, 0.06), CF(-0.6 + i * 0.6, -1.9 - (i % 2) * 0.35, -0.67) * ANG(0, 0, rad(45)), P.Neon)
-		end
+-- Нагрудник, пояс с пряжкой, набедренники
+local function chest(r, color, edge, gemColor)
+	Kit.bevel(r, r.Torso, V(2.14, 1.05, 1.16), CF(0, 0.5, 0), color, edge)
+	if gemColor then
+		Kit.gem(r, r.Torso, 0.36, CF(0, 0.5, -0.62), gemColor, edge)
 	end
 end
 
-function Details.DarkGunner(r, lv)
-	local T, RL, LL = r.Torso, r.RLeg, r.LLeg
-	r:Seg(T, V(-0.9, 0.95, -0.66), V(0.85, -0.7, -0.66), V2(0.3, 0.1), P.Maroon) -- патронташ
-	for i = 1, 4 do
-		local a = V(-0.9, 0.95, -0.72):Lerp(V(0.85, -0.7, -0.72), i / 5)
-		r:Neon(T, V(0.16, 0.22, 0.08), CF(a), P.Neon)
-	end
-	r:Box(T, V(2.18, 0.25, 1.24), CF(0, -0.5, 0), P.Black)
-	r:Pouch(T, CF(-0.7, -0.7, -0.66), P.Coal)
-	r:Box(RL, V(0.3, 0.8, 0.5), CF(0.64, -0.05, 0), P.Coal) -- кобура
-	r:Cyl(RL, 0.3, 0.2, CF(0.64, -0.6, -0.1), P.Steel, M.Metal, "Y")
-	r:Box(RL, V(0.22, 0.35, 0.3), CF(0.64, 0.45, -0.05), P.Black)
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(0.8, 0.45, 0.25), CF(0, 0.1, -0.6), P.Steel, M.Metal)
-	end
-	r:Cyl(T, 1.4, 0.08, CF(0.6, 1.4, 1.0), P.Steel, M.Metal, "Y") -- антенна
-	local tip = r:Ball(T, 0.24, CF(0.6, 2.1, 1.0), lv >= 3 and P.NeonPink or P.Neon, M.Neon)
-	if lv >= 4 then
-		r:Glow(tip, P.NeonPink, 5, 1)
+local function belt(r, color, buckle, gemColor)
+	Kit.bevel(r, r.Torso, V(2.1, 0.3, 1.12), CF(0, -0.82, 0), color, false, M.Fabric)
+	Kit.bevel(r, r.Torso, V(0.42, 0.4, 0.12), CF(0, -0.82, -0.6), buckle, false)
+	if gemColor then
+		Kit.gem(r, r.Torso, 0.16, CF(0, -0.82, -0.68), gemColor)
 	end
 end
 
-function Details.AbyssReaper(r, lv)
-	local T = r.Torso
-	-- черепок на груди
-	r:Sphere(T, V(0.55, 0.5, 0.35), CF(0, 0.45, -0.7), P.Pale)
-	r:Ball(T, 0.14, CF(-0.12, 0.5, -0.86), P.Black)
-	r:Ball(T, 0.14, CF(0.12, 0.5, -0.86), P.Black)
-	-- фонарь душ
-	r:Seg(T, V(-1.0, -0.6, -0.3), V(-1.05, -0.9, -0.3), 0.08, P.Steel, M.Metal)
-	r:Cyl(T, 0.12, 0.5, CF(-1.1, -0.92, -0.3), P.Coal, M.Metal, "Y")
-	r:Cyl(T, 0.12, 0.5, CF(-1.1, -1.48, -0.3), P.Coal, M.Metal, "Y")
-	r:Cyl(T, 0.5, 0.42, CF(-1.1, -1.2, -0.3), P.Coal, M.Glass, "Y", { Transparency = 0.5 })
-	local soul = r:Ball(T, 0.32, CF(-1.1, -1.2, -0.3), P.NeonSoft, M.Neon)
-	r:Glow(soul, P.NeonSoft, 6, 1)
-	-- цепи
+local function tassets(r, color, edge)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bevel(r, r.Torso, V(0.85, 0.75, 0.2), CF(0.5 * s, -1.32, -0.56) * ANG(rad(-6), 0, 0), color, edge)
+	end
+end
+
+-- Длинная юбка-мантия с рваным краем (поверх ног)
+local function robe(r, color, trim, len)
+	len = len or 1.8
+	Kit.bevel(r, r.Torso, V(2.12, len, 1.14), CF(0, -1 - len / 2 + 0.1, 0), color, trim, M.Fabric)
+	Kit.tatter(r, r.Torso, -1 - len + 0.1, -0.57, 2.1, 5, color, M.Fabric, 3)
+	if trim then
+		r:Box(r.Torso, V(0.3, len, 0.05), CF(0, -1 - len / 2 + 0.1, -0.58), trim, M.Fabric)
+	end
+end
+
+-- Накидка на плечи
+local function mantle(r, color, edge)
+	Kit.bevel(r, r.Torso, V(2.35, 0.4, 1.3), CF(0, 0.88, 0), color, edge, M.Fabric)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bevel(r, s == 1 and r.RArm or r.LArm, V(1.18, 0.7, 1.18), CF(0.05 * s, 0.68, 0), color, edge, M.Fabric)
+	end
+end
+
+-- Капюшон: тёмное лицо, глаза светятся
+local function hood(r, color, edge, eyeColor, peak)
+	local H = r.Head
+	Kit.bevel(r, H, V(1.44, 0.28, 1.44), CF(0, 0.72, 0.03), color, edge, M.Fabric)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bevel(r, H, V(0.22, 1.32, 1.44), CF(0.72 * s, 0.06, 0.03), color, edge, M.Fabric)
+	end
+	Kit.bevel(r, H, V(1.44, 1.32, 0.22), CF(0, 0.06, 0.72), color, edge, M.Fabric)
+	r:Wedge(H, V(1.44, 0.32, 0.4), CF(0, 0.58, -0.62), color, M.Fabric)
+	if peak ~= false then
+		Kit.spike(r, H, V(0, 0.8, 0.45), V(0, 1.15, 1.0), 0.7, color, M.Fabric, true, 0.2)
+	end
+	r:Box(H, V(1.04, 1.02, 0.05), CF(0, -0.02, -0.61), rgb(12, 9, 18), M.Plastic)
+	eyes(r, eyeColor, true, 0.06)
+end
+
+-- Шлем рыцаря: блок с фаской и Т-визором
+local function helm(r, color, edge, visor, crest, tall)
+	local H = r.Head
+	Kit.bevel(r, H, V(1.32, tall and 1.45 or 1.32, 1.34), CF(0, tall and 0.1 or 0.03, 0), color, edge)
+	r:Neon(H, V(0.6, 0.09, 0.05), CF(0, 0.14, -0.68), visor)
+	r:Neon(H, V(0.09, 0.42, 0.05), CF(0, -0.08, -0.68), visor)
+	if crest then
+		Kit.spike(r, H, V(0, 0.6 + (tall and 0.1 or 0), -0.25), V(0, 1.25 + (tall and 0.15 or 0), 0.25), 0.75, crest, M.Metal, true, 0.12)
+	end
+end
+
+-- Остроконечная шляпа мага/ведьмы из уступов
+local function wizardHat(r, color, band, edge)
+	local H = r.Head
+	Kit.bevel(r, H, V(2.3, 0.14, 2.3), CF(0, 0.64, 0), color, edge, M.Fabric)
+	Kit.bevel(r, H, V(1.4, 0.24, 1.4), CF(0, 0.82, 0), band, false, M.Fabric)
+	Kit.bevel(r, H, V(1.3, 0.55, 1.3), CF(0, 1.18, 0), color, edge, M.Fabric)
+	Kit.bevel(r, H, V(0.95, 0.5, 0.95), CF(0.06, 1.6, 0.08) * ANG(rad(-8), 0, rad(-6)), color, edge, M.Fabric)
+	Kit.bevel(r, H, V(0.6, 0.45, 0.6), CF(0.18, 1.98, 0.22) * ANG(rad(-18), 0, rad(-14)), color, edge, M.Fabric)
+	Kit.spike(r, H, V(0.26, 2.15, 0.3), V(0.55, 2.55, 0.65), 0.5, color, M.Fabric)
+end
+
+-- Корона: четыре планки и зубцы с камнями
+local function crown(r, color, gemColor, h)
+	local H = r.Head
+	h = h or 0.75
 	for i = 0, 3 do
-		r:Box(T, V(0.18, 0.28, 0.08), CF(0.6, -1.0 - i * 0.3, -0.68) * ANG(0, 0, rad(i % 2 == 0 and 0 or 90)), P.Steel, M.Metal)
+		r:Box(H, V(1.42, 0.26, 0.12), CF(0, 0.72, 0) * ANG(0, i * PI / 2, 0) * CF(0, 0, -0.66), color, M.Metal)
 	end
-	if lv >= 3 then
-		local hub = r:Orbit("OrbitSouls", T, CF(0, 0.6, 0), 2.3, 0, 0.35, P.NeonSoft)
-		local n = lv >= 5 and 5 or 3
-		for i = 0, n - 1 do
-			local a = i / n * math.pi * 2
-			local c = CF(math.cos(a) * 2.3, math.sin(a * 2) * 0.2, math.sin(a) * 2.3)
-			r:Ball(hub, 0.42, c, P.NeonSoft, M.Neon, { Transparency = 0.2 })
-			r:Sphere(hub, V(0.25, 0.25, 0.7), c * CF(0, 0, 0.45), P.Neon, M.Neon, { Transparency = 0.5 }) -- хвост души
+	for i = 0, 7 do
+		local a = i / 8 * PI * 2
+		local p = V(math.sin(a) * 0.66, 0.8, -math.cos(a) * 0.66)
+		local hh = (i % 2 == 0) and h or h * 0.6
+		Kit.spike(r, H, p, p + V(0, hh, 0), 0.32, color, M.Metal, true, 0.1)
+	end
+	Kit.gem(r, H, 0.24, CF(0, 0.74, -0.73), gemColor)
+end
+
+-- Самурайский кабуто: купол, наплечная юбка-сикоро, маска, рога-кувагата
+local function kabuto(r, color, edge, horn, mask)
+	local H = r.Head
+	Kit.bevel(r, H, V(1.38, 0.62, 1.42), CF(0, 0.5, 0.02), color, edge)
+	for i = 0, 1 do
+		Kit.bevel(r, H, V(1.62 + i * 0.2, 0.26, 0.26), CF(0, 0.05 - i * 0.26, 0.74 + i * 0.08) * ANG(rad(25), 0, 0), color, edge)
+		for _, s in ipairs({ -1, 1 }) do
+			Kit.bevel(r, H, V(0.26, 0.26, 1.2 + i * 0.15), CF(s * (0.78 + i * 0.08), 0.05 - i * 0.26, 0.12) * ANG(0, 0, rad(-25 * s)), color, edge)
+		end
+	end
+	r:Box(H, V(0.96, 0.46, 0.08), CF(0, -0.3, -0.63), mask, M.Metal)
+	r:Neon(H, V(0.46, 0.05, 0.05), CF(0, -0.36, -0.68), horn)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.hornA(r, H, { V(0.2 * s, 0.6, -0.7), V(0.45 * s, 0.95, -0.85), V(0.7 * s, 1.45, -0.8), V(0.75 * s, 1.85, -0.65) }, 0.14, horn, M.Metal)
+	end
+	eyes(r, horn, true, 0.12)
+end
+
+-- Простой наплечник-плита
+local function plateShoulders(r, color, edge, s)
+	s = s or 1
+	for _, side in ipairs({ 1, -1 }) do
+		local A = side == 1 and r.RArm or r.LArm
+		Kit.bevel(r, A, V(1.3, 0.5, 1.25) * s, CF(0.12 * side, 0.9, 0) * ANG(0, 0, rad(-12 * side)), color, edge)
+	end
+end
+
+-- Наплечники-ступени (из ModelKit)
+local function bigShoulders(r, color, edge, glow, size, spikes)
+	Kit.pauldron(r, r.RArm, 1, size or 1, color, edge, glow, spikes or 1)
+	Kit.pauldron(r, r.LArm, -1, size or 1, color, edge, glow, spikes or 1)
+end
+
+-- Латные наручи и поножи
+local function bracers(r, color, edge)
+	for _, A in ipairs({ r.RArm, r.LArm }) do
+		Kit.bevel(r, A, V(1.14, 0.75, 1.14), CF(0, -0.55, 0), color, edge)
+	end
+end
+
+local function greaves(r, color, edge, boots)
+	for _, L in ipairs({ r.RLeg, r.LLeg }) do
+		Kit.bevel(r, L, V(1.12, 0.7, 1.14), CF(0, -0.35, 0), color, edge)
+		if boots then
+			Kit.bootA(r, L, color, edge, 1.12)
 		end
 	end
 end
 
-function Details.CorruptedSamurai(r, lv)
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.2, 0.32, 1.22), CF(0, -0.95, 0), P.Crimson, M.Fabric) -- оби
-	r:Box(T, V(0.6, 0.4, 0.3), CF(0.2, -0.95, 0.72), P.Crimson, M.Fabric)
-	r:Sphere(H, V(0.45, 0.55, 0.45), CF(0, 0.95, 0.6) * ANG(rad(-25), 0, 0), P.Black) -- пучок волос
-	for _, A in ipairs({ RA, LA }) do
-		r:Box(A, V(1.08, 0.55, 1.08), CF(0, -0.55, 0), P.Maroon, M.Fabric)
-		r:Box(A, V(1.1, 0.08, 1.1), CF(0, -0.3, 0), P.Gold, M.Metal)
-	end
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.04, 0.9, 0.2), CF(0, -0.4, -0.55), P.Black, M.Metal) -- сунэатэ
-		r:Box(Lg, V(1.06, 0.08, 0.22), CF(0, -0.05, -0.56), P.Gold, M.Metal)
-		r:Box(Lg, V(1.05, 0.12, 1.2), CF(0, -1.0, -0.05), P.Pale) -- сандалии
-	end
-	if lv >= 3 then
-		-- сасимоно (флаг на спине)
-		r:Cyl(T, 3.2, 0.12, CF(0.55, 1.6, 0.65), P.Black, M.Plastic, "Y")
-		r:Ball(T, 0.22, CF(0.55, 3.25, 0.65), P.Gold, M.Metal)
-		local flag = r:Box(T, V(0.06, 1.6, 0.9), CF(0.55, 2.4, 0.2), P.Crimson, M.Fabric)
-		r:Neon(flag, V(0.08, 0.6, 0.2), CF(0, 0.1, 0), P.Neon)
-	end
-end
-
-function Details.EclipseGuardian(r, lv)
-	local T, RA, LA = r.Torso, r.RArm, r.LArm
-	r:Box(T, V(2.64, 0.3, 1.54), CF(0, -0.8, 0), P.Coal, M.Metal)
-	for _, x in ipairs({ -0.7, 0, 0.7 }) do
-		r:Box(T, V(0.6, 0.8, 0.15), CF(x, -1.3, -0.78) * ANG(rad(-6), 0, 0), P.Black, M.Metal)
-	end
-	-- эмблема затмения
-	r:Add(T, "Part", V(0.1, 1.0, 1.0), CF(0, 0.75, -0.83) * ANG(0, rad(90), 0), P.Neon, M.Neon, { Shape = Enum.PartType.Cylinder })
-	r:Add(T, "Part", V(0.12, 0.75, 0.75), CF(0.08, 0.78, -0.85) * ANG(0, rad(90), 0), P.Black, M.Plastic, { Shape = Enum.PartType.Cylinder })
-	if lv >= 3 then
-		for _, A in ipairs({ RA, LA }) do
-			r:Neon(A, V(1.24, 0.12, 1.24), CF(0, -0.95, 0), P.Neon)
-		end
-	end
-	if lv >= 2 then
-		r:Orbit("OrbitEclipse", r.Head, CF(0, 0.2, 1.0) * ANG(rad(90), 0, 0), 1.3, 8, 0.25, P.Neon)
-	end
-end
-
-function Details.FallenAngel(r, lv)
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Seg(T, V(-0.9, 0.9, -0.6), V(0.8, -0.5, -0.6), 0.14, P.DarkGold, M.Metal)
-	r:Seg(T, V(0.9, 0.9, -0.6), V(-0.8, -0.5, -0.6), 0.14, P.DarkGold, M.Metal)
-	r:Box(T, V(2.24, 0.22, 1.28), CF(0, -0.85, 0), P.DarkGold, M.Metal)
-	r:Box(T, V(0.8, 1.2, 0.08), CF(0, -1.55, -0.66), P.White, M.Fabric)
-	for _, A in ipairs({ RA, LA }) do
-		r:Box(A, V(1.08, 0.4, 1.08), CF(0, -0.75, 0), P.Black, M.Metal)
-		r:Box(A, V(1.1, 0.08, 1.1), CF(0, -0.55, 0), P.DarkGold, M.Metal)
-	end
-	-- второй ряд перьев
-	for _, name in ipairs({ "WingR", "WingL" }) do
-		local wing = r.Model:FindFirstChild(name)
-		local side = name == "WingR" and 1 or -1
-		if wing then
-			for i = 1, 3 do
-				local x = (-0.9 + i * 0.6) * side * (wing.Size.X / 3)
-				r:Box(wing, V(0.45, 1.0 + i * 0.2, 0.15), CF(x, -0.5, -0.12) * ANG(0, 0, rad(-8 * side)), P.Coal)
+-- Крылья из перьев-пластин на моторах WingR/WingL
+local function wings(r, color, edge, glow, span)
+	span = span or 1
+	for _, side in ipairs({ 1, -1 }) do
+		local w = r:Joint(side == 1 and "WingR" or "WingL", r.Torso, V(0.3, 0.3, 0.3), CF(0.45 * side, 0.6, 0.6), CF(), color)
+		w.Transparency = 1
+		local lens = { 2.8, 2.5, 2.1, 1.7, 1.3 }
+		for i, L in ipairs(lens) do
+			local th = rad(28 + (i - 1) * 24)
+			L = L * span
+			local c = V(side * math.sin(th) * L / 2, math.cos(th) * L / 2, 0.15 + i * 0.03)
+			Kit.bevel(r, w, V(0.5, L, 0.16), CF(c) * ANG(0, 0, -side * th), color, edge, M.Plastic)
+			if glow and i <= 2 then
+				r:Neon(w, V(0.08, L * 0.8, 0.18), CF(c) * ANG(0, 0, -side * th) * CF(0.2 * side, 0, 0), glow)
 			end
 		end
 	end
-	if lv >= 4 then
-		local hub = r:Orbit("OrbitHalo", H, CF(0, 1.25, 0.15), 1.25, 0, 0.18, P.White)
-		for i = 0, 3 do
-			local a = i / 4 * math.pi * 2
-			r:Ball(hub, 0.24, CF(math.cos(a) * 1.25, 0, math.sin(a) * 1.25), P.White, M.Neon)
-		end
-	end
-	if lv >= 5 then
-		for _, Lg in ipairs({ RL, LL }) do
-			r:Neon(Lg, V(1.1, 0.1, 1.14), CF(0, -1.0, 0), P.NeonSoft)
-		end
-	end
-end
-
-function Details.VoidEmperor(r, lv)
-	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
-	r:Seg(T, V(-0.95, 0.95, -0.7), V(0.85, -0.75, -0.7), V2(0.35, 0.08), P.Crimson, M.Fabric) -- лента
-	r:Box(T, V(2.32, 0.25, 1.34), CF(0, -0.75, 0), P.Black)
-	r:Box(T, V(0.5, 0.4, 0.1), CF(0, -0.75, -0.7), P.Gold, M.Metal)
-	r:Neon(T, V(0.25, 0.25, 0.06), CF(0, 0.95, -0.72) * ANG(0, 0, rad(45)), P.NeonPink) -- кулон
-	for _, A in ipairs({ RA, LA }) do
-		r:Box(A, V(1.14, 0.25, 1.14), CF(0, -0.95, 0), P.Gold, M.Metal)
-	end
-	if lv >= 3 then
-		local hub = r:Orbit("OrbitCrown", H, CF(0, 1.6, 0), 1.5, 0, 0.28, P.NeonPink)
-		for i = 0, 4 do
-			local a = i / 5 * math.pi * 2
-			r:Wedge(hub, V(0.2, 0.5, 0.3), CF(math.cos(a) * 1.5, 0, math.sin(a) * 1.5) * ANG(0, -a, 0), P.NeonPink, M.Neon)
-		end
-	end
-end
-
-function Details.AbyssOverlord(r, lv)
-	local T, RL, LL = r.Torso, r.RLeg, r.LLeg
-	for i = 0, 2 do
-		r:Wedge(T, V(0.35, 0.9 - i * 0.15, 0.7), CF(0, 1.0 - i * 0.7, 1.05) * ANG(rad(-25), 0, 0), P.Steel, M.Metal) -- шипы на спине
-	end
-	for _, x in ipairs({ -0.35, -0.12, 0.12, 0.35 }) do
-		r:Cyl(T, 1.0, 0.09, CF(x, 0.35, -1.12), P.Steel, M.Metal, "Y") -- клетка кристалла
-	end
-	for i = -3, 3 do
-		r:Box(T, V(0.3, 0.2, 0.15), CF(i * 0.36, -0.9, -0.8) * ANG(0, 0, rad(i % 2 == 0 and 0 or 90)), P.Steel, M.Metal) -- цепь
-	end
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Seg(Lg, V(-0.3, 0.3, -0.64), V(0.2, -0.5, -0.64), 0.08, P.Neon, M.Neon)
-	end
-	if lv >= 2 then
-		r:Orbit("OrbitRocks", T, CF(0, 0.3, 0), 3.0, lv >= 4 and 6 or 4, 0.55, P.Rock or P.Coal, M.Slate)
-	end
 end
 
 ------------------------------------------------------------------------
--- 1. VOID SOLDIER (Common)
+-- ОРУЖИЕ (правая рука: клинок вперёд по -Z; древковое — вертикально перед кулаком)
 ------------------------------------------------------------------------
+local function muzzle(r, limb, cf)
+	local m = r:Box(limb, V(0.2, 0.2, 0.2), cf, P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
+	r.Muzzle = m
+	return m
+end
+
+local function blade(r, A, o)
+	local y = o.Y or GRIP
+	local len, w = o.Len or 3, o.W or 0.5
+	local z0 = -0.56
+	r:Box(A, V(0.22, 0.22, 0.85), CF(0, y, 0.1), o.Grip or AC.ClothDark, M.Fabric)
+	r:Box(A, V(0.3, 0.3, 0.25), CF(0, y, 0.6) * ANG(0, 0, rad(45)), o.Guard or AC.Armor, M.Metal)
+	Kit.bevel(r, A, V(0.28, o.GuardW or (w + 0.7), 0.28), CF(0, y, -0.42), o.Guard or AC.Armor, o.Edge)
+	r:Box(A, V(0.12, w, len), CF(0, y, z0 - len / 2), o.Blade or AC.ArmorMid, M.Metal)
+	if o.Glow then
+		r:Neon(A, V(0.14, 0.07, len * 0.96), CF(0, y + w / 2 - 0.03, z0 - len / 2), o.Glow)
+		r:Neon(A, V(0.14, 0.07, len * 0.96), CF(0, y - w / 2 + 0.03, z0 - len / 2), o.Glow)
+	end
+	if o.Core then
+		r:Neon(A, V(0.14, 0.08, len * 0.7), CF(0, y, z0 - len * 0.42), o.Core)
+	end
+	Kit.spike(r, A, V(0, y, z0 - len + 0.02), V(0, y, z0 - len - w * 1.2), w, o.Blade or AC.ArmorMid, M.Metal, true, 0.12)
+	r:WeaponTrail(A, V(0, y, z0 - 0.15), V(0, y, z0 - len - w), o.Trail or o.Glow or P.NeonSoft)
+	return muzzle(r, A, CF(0, y, z0 - len - w))
+end
+
+-- Вертикальное древко перед кулаком
+local function shaft(r, A, bottom, top, color, d)
+	d = d or 0.2
+	r:Box(A, V(d, top - bottom, d), CF(0, (top + bottom) / 2, -0.5), color or rgb(44, 32, 30), M.Wood)
+	return V(0, top, -0.5)
+end
+
+local function staff(r, A, o)
+	local top = shaft(r, A, -2.5, o.Top or 2.4, o.Wood, 0.2)
+	local c = top + V(0, 0.45, 0)
+	for k = 0, 3 do
+		local a = k / 4 * PI * 2 + PI / 4
+		Kit.spike(r, A, top + V(math.cos(a) * 0.15, -0.1, math.sin(a) * 0.15), c + V(math.cos(a) * 0.35, 0.35, math.sin(a) * 0.35), 0.16, o.Prong or AC.Armor, M.Metal, true, 0.08)
+	end
+	local g = r:Neon(A, V(0.45, 0.45, 0.45), CF(c) * ANG(rad(45), 0, rad(45)), o.Glow)
+	if o.Big then
+		r:Box(A, V(0.7, 0.7, 0.7), CF(c) * ANG(rad(45), 0, rad(45)), o.Glow, M.Glass, { Transparency = 0.6 })
+	end
+	muzzle(r, A, CF(c))
+	return g
+end
+
+local function scythe(r, A, o)
+	local top = shaft(r, A, -2.6, 2.6, o.Wood, 0.2)
+	local pts = { top + V(0, -0.05, 0.1), top + V(0, 0.25, -0.8), top + V(0, 0.05, -1.7), top + V(0, -0.4, -2.4) }
+	for i = 1, #pts - 1 do
+		Kit.bar(r, A, pts[i], pts[i + 1], V2(0.12, 0.42 - i * 0.07), o.Blade or AC.ArmorMid)
+		if o.Glow then
+			Kit.bar(r, A, pts[i] + V(0, -0.2 + i * 0.03, 0), pts[i + 1] + V(0, -0.17 + i * 0.03, 0), V2(0.14, 0.06), o.Glow, M.Neon)
+		end
+	end
+	Kit.spike(r, A, pts[4], pts[4] + V(0, -0.55, -0.4), 0.26, o.Blade or AC.ArmorMid, M.Metal, true, 0.12)
+	r:WeaponTrail(A, top + V(0, 0, -0.8), pts[4], o.Glow or P.NeonSoft)
+	return muzzle(r, A, CF(pts[4]))
+end
+
+local function spear(r, A, o)
+	local top = shaft(r, A, -2.4, o.Top or 2.6, o.Wood, 0.2)
+	Kit.bevel(r, A, V(0.34, 0.3, 0.34), CF(top), o.Metal or AC.Armor, o.Edge)
+	Kit.spike(r, A, top + V(0, 0.1, 0), top + V(0, 1.1, 0), 0.5, o.Head or AC.ArmorMid, M.Metal)
+	if o.Glow then
+		r:Neon(A, V(0.08, 0.6, 0.08), CF(top + V(0, 0.45, -0.13)), o.Glow)
+	end
+	if o.Axe then
+		Kit.bevel(r, A, V(0.12, 0.8, 0.7), CF(top + V(0, -0.2, -0.45)), o.Head or AC.ArmorMid, o.Edge)
+		Kit.spike(r, A, top + V(0, -0.2, -0.75), top + V(0, -0.2, -1.2), 0.8, o.Head or AC.ArmorMid, M.Metal, true, 0.12)
+	end
+	if o.Wing then
+		for _, s in ipairs({ -1, 1 }) do
+			Kit.spike(r, A, top + V(0.1 * s, 0, 0), top + V(0.55 * s, 0.35, 0), 0.22, o.Metal or AC.Armor, M.Metal, true, 0.08)
+		end
+	end
+	r:WeaponTrail(A, top, top + V(0, 1.1, 0), o.Glow or P.NeonSoft)
+	return muzzle(r, A, CF(top + V(0, 1.1, 0)))
+end
+
+local function hammer(r, A, o)
+	local top = shaft(r, A, -2.2, 2.0, o.Wood or AC.Armor, 0.24)
+	local c = top + V(0, 0.35, 0)
+	Kit.bevel(r, A, V(0.95, 0.95, 1.8), CF(c), o.Head, o.Edge)
+	for _, z in ipairs({ -0.65, 0.65 }) do
+		Kit.bevel(r, A, V(1.05, 1.05, 0.18), CF(c + V(0, 0, z)), o.Trim or o.Edge, false)
+	end
+	Kit.gem(r, A, 0.45, CF(c + V(-0.49, 0, 0)) * ANG(0, PI / 2, 0), o.Glow)
+	Kit.gem(r, A, 0.45, CF(c + V(0.49, 0, 0)) * ANG(0, -PI / 2, 0), o.Glow)
+	Kit.spike(r, A, c + V(0, 0.45, 0), c + V(0, 1.0, 0), 0.4, o.Trim or o.Head, M.Metal)
+	r:WeaponTrail(A, top, c + V(0, 0, -0.9), o.Glow)
+	return muzzle(r, A, CF(c))
+end
+
+local function axe(r, A, o)
+	local top = shaft(r, A, -2.2, 2.2, o.Wood, 0.22)
+	Kit.bevel(r, A, V(0.14, 1.3, 1.0), CF(top + V(0, -0.35, -0.55)), o.Head, o.Edge)
+	Kit.spike(r, A, top + V(0, -0.35, -1.0), top + V(0, -0.35, -1.6), 1.5, o.Head, M.Metal, true, 0.14)
+	if o.Glow then
+		r:Neon(A, V(0.16, 1.4, 0.08), CF(top + V(0, -0.35, -1.08)), o.Glow)
+	end
+	Kit.spike(r, A, top, top + V(0, 0.6, 0), 0.3, o.Head, M.Metal)
+	r:WeaponTrail(A, top + V(0, -0.35, -0.8), top + V(0, -0.35, -1.6), o.Glow or P.NeonSoft)
+	return muzzle(r, A, CF(top + V(0, -0.35, -1.5)))
+end
+
+-- Лук в левой руке (вертикально, тетива к стрелку)
+local function bow(r, A, o)
+	local y = GRIP
+	local g = V(0, y, -0.45)
+	r:Box(A, V(0.2, 0.5, 0.2), CF(g), o.Grip or AC.ClothDark, M.Fabric)
+	local tips = {}
+	for _, s in ipairs({ 1, -1 }) do
+		local m = g + V(0, 0.9 * s, -0.2)
+		local t = g + V(0, 1.75 * s, 0.25)
+		Kit.bar(r, A, g, m, V2(0.14, 0.2), o.Wood)
+		Kit.bar(r, A, m, t, V2(0.12, 0.16), o.Wood)
+		if o.Glow then
+			Kit.bar(r, A, g + V(0, 0.1 * s, -0.08), m + V(0, 0, -0.08), V2(0.15, 0.05), o.Glow, M.Neon)
+		end
+		Kit.spike(r, A, t, t + V(0, 0.3 * s, 0.15), 0.16, o.Tip or o.Wood, M.Metal, true, 0.08)
+		tips[#tips + 1] = t
+	end
+	r:Box(A, V(0.04, (tips[1] - tips[2]).Magnitude, 0.04), CF((tips[1] + tips[2]) / 2), o.String or rgb(220, 210, 230), M.Plastic)
+	return muzzle(r, A, CF(g + V(0, 0, -0.2)))
+end
+
+local function quiver(r, color, tips)
+	Kit.bevel(r, r.Torso, V(0.5, 1.6, 0.5), CF(0.45, 0.2, 0.75) * ANG(0, 0, rad(-25)), color, false, M.Fabric)
+	for k = -1, 1 do
+		Kit.spike(r, r.Torso, V(0.75 + k * 0.1, 1.05, 0.75 + k * 0.08), V(0.95 + k * 0.1, 1.45, 0.75 + k * 0.08), 0.18, tips, M.Plastic, true, 0.05)
+	end
+end
+
+-- Оружие для вытянутых вперёд рук: строится вдоль руки (локальная -Y), ствол смотрит вперёд,
+-- когда рука поднята (idle RS ~75°). F переводит «вперёд» оружия в «вниз» руки.
+local AIM = CF(0, GRIP, 0) * ANG(rad(-90), 0, 0)
+
+local function crossbow(r, A, o)
+	local F = AIM
+	Kit.bevel(r, A, V(0.32, 0.32, 1.9), F * CF(0, 0, -0.75), o.Stock, o.Edge)
+	local f = -1.55
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bar(r, A, F * V(0, 0.05, f), F * V(0.6 * s, 0.05, f + 0.15), V2(0.18, 0.14), o.Prong)
+		Kit.bar(r, A, F * V(0.6 * s, 0.05, f + 0.15), F * V(1.1 * s, 0.05, f + 0.4), V2(0.14, 0.12), o.Prong)
+		Kit.spike(r, A, F * V(1.1 * s, 0.05, f + 0.4), F * V(1.35 * s, 0.05, f + 0.25), 0.2, o.Glow, M.Neon, true, 0.08)
+	end
+	r:Box(A, V(2.2, 0.03, 0.03), F * CF(0, 0.05, f + 0.4), rgb(200, 220, 255), M.Plastic)
+	r:Neon(A, V(0.1, 0.1, 1.2), F * CF(0, 0.22, -1.1), o.Glow)
+	Kit.spike(r, A, F * V(0, 0.22, -1.7), F * V(0, 0.22, -2.1), 0.22, o.Glow, M.Neon)
+	return muzzle(r, A, F * CF(0, 0.22, -2.1))
+end
+
+local function rifle(r, A, o)
+	local F = AIM
+	Kit.bevel(r, A, V(0.42, 0.55, 1.9), F * CF(0, 0.05, -0.75), o.Body, o.Edge)
+	Kit.bevel(r, A, V(0.32, 0.5, 0.75), F * CF(0, -0.05, 0.45), o.Body, o.Edge)
+	r:Box(A, V(0.24, 0.24, 1.5), F * CF(0, 0.15, -2.4), o.Barrel or AC.ArmorMid, M.Metal)
+	Kit.bevel(r, A, V(0.2, 0.2, 0.8), F * CF(0, 0.45, -0.7), o.Body, o.Edge)
+	r:Neon(A, V(0.08, 0.08, 0.08), F * CF(0, 0.45, -1.12), o.Glow)
+	for k = 0, 2 do
+		r:Neon(A, V(0.32, 0.32, 0.08), F * CF(0, 0.15, -1.9 - k * 0.38), o.Glow)
+	end
+	r:Box(A, V(0.3, 0.6, 0.2), F * CF(0, -0.45, -0.6), o.Body, M.Metal)
+	return muzzle(r, A, F * CF(0, 0.15, -3.2))
+end
+
+local function dagger(r, A, glow, len, color)
+	return blade(r, A, { Len = len or 1.2, W = 0.32, GuardW = 0.7, Blade = color or AC.ArmorMid, Glow = glow, Guard = AC.Armor })
+end
+
+local function shield(r, A, o)
+	local x = -0.68
+	Kit.bevel(r, A, V(0.24, o.H or 2.0, o.W or 1.4), CF(x, -0.5, -0.1), o.Color, o.Edge)
+	Kit.spike(r, A, V(x, -0.5 - (o.H or 2.0) / 2 + 0.02, -0.1), V(x, -0.5 - (o.H or 2.0) / 2 - 0.6, -0.1), o.W or 1.4, o.Color, M.Metal, true, 0.24)
+	if o.Rim then
+		r:Box(A, V(0.26, (o.H or 2.0) * 0.8, 0.12), CF(x - 0.01, -0.5, -0.1), o.Rim, M.Metal)
+		r:Box(A, V(0.26, 0.12, (o.W or 1.4) * 0.8), CF(x - 0.01, -0.3, -0.1), o.Rim, M.Metal)
+	end
+	if o.Gem then
+		Kit.gem(r, A, 0.45, CF(x - 0.14, -0.3, -0.1) * ANG(0, PI / 2, 0), o.Gem, o.Edge)
+	end
+end
+
+-- Плащ с эмблемой
+local function capeWith(r, w, len, color, emblem)
+	local cape = r:Cape(w, len, color, true)
+	if emblem then
+		Kit.gem(r, cape, 0.5, CF(0, 0.1, 0.08) * ANG(0, PI, 0), emblem)
+	end
+	return cape
+end
+
+------------------------------------------------------------------------
+-- VOID CASE
+------------------------------------------------------------------------
+local VOID = P.Neon
+
 local function VoidSoldier(lv)
-	local r = Rig.new({ Name = "VoidSoldier", Torso = P.Steel, Arm = P.Dark, Leg = P.Coal, Head = P.Coal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- нагрудник и пояс
-	r:Box(T, V(2.1, 1.25, 0.25), CF(0, 0.3, -0.56), P.Dark, M.Metal)
-	r:Box(T, V(2.06, 0.32, 1.1), CF(0, -0.78, 0), P.Violet)
-	r:Neon(T, V(0.36, 0.3, 0.08), CF(0, -0.78, -0.58), P.Neon)
-	-- шлем (чуть кривой)
-	r:Box(H, V(1.46, 0.72, 1.46), CF(0, 0.36, 0) * ANG(0, 0, rad(-3)), P.Black, M.Metal)
-	r:Box(H, V(1.44, 0.75, 0.26), CF(0, -0.25, 0.62), P.Black, M.Metal)
-	r:Box(H, V(0.24, 1.12, 1.4), CF(-0.66, -0.1, 0.02), P.Black, M.Metal)
-	r:Box(H, V(0.24, 0.96, 1.36), CF(0.66, -0.02, 0.02), P.Black, M.Metal)
-	r:Box(H, V(0.22, 0.5, 0.18), CF(0, -0.15, -0.66), P.Black, M.Metal) -- наносник
-	r:Wedge(H, V(0.18, 0.42, 0.95), CF(0.18, 0.92, 0.12), lv >= 3 and P.Purple or P.Steel)
-	r:Eyes(P.Neon, { Y = 0.05, Spacing = 0.33, Size = V(0.26, 0.12, 0.06) })
-	-- сапоги / перчатки
-	r:Box(RL, V(1.06, 0.55, 1.15), CF(0, -0.75, -0.06), P.Black)
-	r:Box(LL, V(1.06, 0.55, 1.15), CF(0, -0.75, -0.06), P.Black)
-	r:Box(RA, V(1.08, 0.5, 1.08), CF(0, -0.78, 0), P.Black)
-	r:Box(LA, V(1.08, 0.5, 1.08), CF(0, -0.78, 0), P.Black)
-	-- меч
-	r:Sword(RA, {
-		Length = 2.8 + (lv >= 4 and 0.6 or 0),
-		Width = 0.4,
-		Blade = P.Purple,
-		Edge = lv >= 2 and P.Neon or nil,
-		Core = lv >= 4 and P.NeonSoft or nil,
-		Guard = P.Black,
-	})
+	local r = figure("VoidSoldier", { Torso = AC.Armor, Arm = AC.Armor, Leg = rgb(28, 26, 34), Edge = AC.Edge })
+	chest(r, AC.ArmorMid, AC.Edge, lv >= 3 and VOID or nil)
+	belt(r, rgb(40, 30, 38), AC.Edge, lv >= 2 and VOID or nil)
+	tassets(r, AC.ArmorMid, AC.Edge)
+	helm(r, AC.Armor, AC.Edge, VOID, lv >= 3 and AC.Armor or nil)
 	if lv >= 2 then
-		r:Pauldron(RA, 1, 0.85, P.Black, P.Steel)
+		plateShoulders(r, AC.ArmorMid, AC.Edge, lv >= 4 and 1.15 or 1)
 	end
-	if lv >= 3 then
-		r:Pauldron(LA, -1, 0.8, P.Steel, P.Black)
-		r:Box(RL, V(1.04, 0.45, 0.2), CF(0, 0.15, -0.55), P.Dark, M.Metal)
-		r:Box(LL, V(1.04, 0.45, 0.2), CF(0, 0.15, -0.55), P.Dark, M.Metal)
-	end
+	bracers(r, AC.ArmorMid, AC.Edge)
+	greaves(r, AC.ArmorMid, AC.Edge, true)
+	blade(r, r.RArm, { Len = 2.6 + (lv >= 4 and 0.4 or 0), W = 0.45, Blade = lv >= 5 and AC.Cloth or AC.ArmorMid, Glow = lv >= 3 and VOID or nil, Edge = AC.Edge })
+	shield(r, r.LArm, { Color = lv >= 3 and AC.Cloth or AC.ArmorMid, Edge = AC.Edge, H = lv >= 3 and 2.2 or 1.7, W = lv >= 3 and 1.5 or 1.25, Rim = lv >= 2 and AC.Edge or nil, Gem = lv >= 3 and VOID or nil })
 	if lv >= 4 then
-		r:Cape(1.8, 2.2, P.DeepViolet, true)
+		r:Box(r.Torso, V(0.9, 1.1, 0.06), CF(0, -1.5, -0.6), AC.Cloth, M.Fabric)
+		Kit.tatter(r, r.Torso, -2.05, -0.6, 0.9, 3, AC.Cloth, M.Fabric, 2)
 	end
 	if lv >= 5 then
-		r:Neon(T, V(0.55, 0.55, 0.08), CF(0, 0.35, -0.7) * ANG(0, 0, rad(45)), P.Neon)
-		r:Neon(H, V(1.48, 0.08, 0.06), CF(0, 0.55, -0.74), P.Neon)
-	end
-	if not UnitModels.Lite then
-		Details.VoidSoldier(r, lv)
+		for _, s in ipairs({ -1, 1 }) do
+			Kit.hornA(r, r.Head, { V(0.6 * s, 0.35, 0), V(0.9 * s, 0.6, 0.05), V(0.95 * s, 1.1, -0.05) }, 0.2, AC.Armor, M.Metal)
+		end
+		capeWith(r, 1.9, 2.8, AC.ClothDark, VOID)
 	end
 	levelAura(r, lv)
 	return r:Finish(1, { RS = { 15, 0, 0 } })
 end
 
-------------------------------------------------------------------------
--- 2. SHADOW ARCHER (Common)
-------------------------------------------------------------------------
 local function ShadowArcher(lv)
-	local r = Rig.new({ Name = "ShadowArcher", Torso = P.Coal, Arm = P.Coal, Leg = P.Black, Head = P.Black, HeadSize = V(1.25, 1.25, 1.25) })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	local hood = lv >= 3 and P.Violet or P.DeepViolet
-	-- капюшон: верх, бока, спина и висящий хвост
-	r:Box(H, V(1.55, 0.26, 1.5), CF(0, 0.74, 0.02), hood, M.Fabric)
-	r:Box(H, V(0.22, 1.42, 1.5), CF(-0.74, 0.02, 0.02), hood, M.Fabric)
-	r:Box(H, V(0.22, 1.36, 1.46), CF(0.74, 0.05, 0.02), hood, M.Fabric)
-	r:Box(H, V(1.55, 1.42, 0.22), CF(0, 0.02, 0.72), hood, M.Fabric)
-	r:Wedge(H, V(0.9, 0.9, 1.2), CF(0.1, 0.62, 0.95) * ANG(rad(-25), 0, rad(4)), hood, M.Fabric)
-	r:Box(H, V(1.3, 0.45, 0.1), CF(0, -0.38, -0.64), P.Black, M.Fabric) -- маска-повязка
-	r:Eyes(P.Neon, { Y = 0.12, Spacing = 0.28, Size = V(0.24, 0.1, 0.06), Tilt = 8 })
-	-- плащ на плечах, ремень, колчан
-	r:Box(T, V(2.2, 0.5, 1.2), CF(0, 0.8, 0), hood, M.Fabric)
-	r:Seg(T, V(-0.9, 0.9, -0.56), V(0.9, -0.9, -0.56), V2(0.25, 0.08), P.Maroon)
-	local quiver = r:Cyl(T, 1.9, 0.65, CF(0.4, 0.2, 0.85) * ANG(0, 0, rad(-20)), P.Maroon, M.Fabric, "Y")
-	r:Cyl(T, 0.12, 0.7, CF(0.4, 0.2, 0.85) * ANG(0, 0, rad(-20)) * CF(0, 0.85, 0), P.DarkGold, M.Metal, "Y")
-	for i = 0, 2 do
-		local base = CF(0.62 + i * 0.12, 1.3 - i * 0.05, 0.85 + (i - 1) * 0.1) * ANG(0, 0, rad(-20))
-		r:Cyl(T, 0.5, 0.08, base, P.Coal, M.Plastic, "Y")
-		r:Wedge(T, V(0.06, 0.25, 0.2), base * CF(0, 0.3, 0), P.Neon, M.Neon) -- оперение
-	end
-	-- лук в левой руке (вертикален в позе прицеливания)
-	local s = lv >= 3 and 1.25 or 1
-	local bowColor = lv >= 2 and P.Coal or P.Dark
-	r:Cyl(LA, 0.6, 0.3, CF(0, -1.15, 0), P.Maroon, M.Fabric, "Z")
-	r:Rod(LA, V(0, -1.3, -0.25), V(0, -1.0, -1.7 * s), 0.24, bowColor)
-	r:Rod(LA, V(0, -1.3, 0.25), V(0, -1.0, 1.7 * s), 0.24, bowColor)
-	r:Rod(LA, V(0, -1.0, -1.7 * s), V(0, -0.65, -2.0 * s), 0.18, bowColor)
-	r:Rod(LA, V(0, -1.0, 1.7 * s), V(0, -0.65, 2.0 * s), 0.18, bowColor)
-	r:Ball(LA, 0.26, CF(0, -1.0, -1.7 * s), bowColor)
-	r:Ball(LA, 0.26, CF(0, -1.0, 1.7 * s), bowColor)
-	r:Neon(LA, V(0.05, 0.05, 4.0 * s), CF(0, -0.62, 0), lv >= 4 and P.Neon or P.White)
-	if lv >= 3 then
-		r:Ball(LA, 0.32, CF(0, -0.62, -2.05 * s), P.Neon, M.Neon)
-		r:Ball(LA, 0.32, CF(0, -0.62, 2.05 * s), P.Neon, M.Neon)
-	end
-	local muzzle = r:Box(LA, V(0.2, 0.2, 0.2), CF(0, -1.5, 0), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r.Muzzle = muzzle
-	-- ноги
-	r:Box(RL, V(1.05, 0.5, 1.1), CF(0, -0.78, -0.05), P.Maroon)
-	r:Box(LL, V(1.05, 0.5, 1.1), CF(0, -0.78, -0.05), P.Maroon)
+	local r = figure("ShadowArcher", { Torso = rgb(30, 26, 36), Arm = rgb(30, 26, 36), Leg = rgb(24, 22, 30), Edge = rgb(90, 84, 104) })
+	hood(r, AC.ClothDark, AC.Edge, VOID)
+	Kit.bevel(r, r.Torso, V(2.12, 1.2, 1.12), CF(0, 0.35, 0), rgb(40, 32, 44), AC.Edge, M.Fabric)
+	Kit.bar(r, r.Torso, V(-0.9, 0.95, -0.58), V(0.9, -0.6, -0.58), V2(0.2, 0.06), rgb(70, 50, 40))
+	belt(r, rgb(50, 36, 30), AC.Edge)
+	quiver(r, rgb(50, 36, 30), lv >= 3 and VOID or AC.Edge)
 	if lv >= 2 then
-		r:Box(RA, V(1.06, 0.7, 1.06), CF(0, -0.55, 0), P.DeepViolet, M.Fabric)
-		r:Box(LA, V(1.06, 0.7, 1.06), CF(0, -0.55, 0), P.DeepViolet, M.Fabric)
+		Kit.bevel(r, r.LArm, V(1.2, 0.5, 1.2), CF(-0.1, 0.9, 0) * ANG(0, 0, rad(12)), AC.ArmorMid, AC.Edge)
 	end
+	bracers(r, rgb(50, 36, 30), AC.Edge)
+	greaves(r, rgb(34, 30, 40), AC.Edge, true)
+	bow(r, r.LArm, { Wood = lv >= 4 and AC.Armor or rgb(56, 40, 34), Glow = lv >= 3 and VOID or nil, Tip = AC.Edge })
 	if lv >= 4 then
-		r:Cape(2.0, 2.6, hood, true)
+		capeWith(r, 1.9, 3.0, AC.ClothDark, nil)
 	end
 	if lv >= 5 then
-		r:Horn(H, 1, V(0.45, 0.8, 0.1), 0.6, P.Black)
-		r:Horn(H, -1, V(-0.45, 0.8, 0.1), 0.6, P.Black)
-		r:Glow(quiver, P.Neon, 6, 1)
-	end
-	r:Hands(P.Coal, M.Fabric)
-	if not UnitModels.Lite then
-		Details.ShadowArcher(r, lv)
+		r:Box(r.Head, V(1.06, 0.4, 0.08), CF(0, -0.3, -0.64), AC.Armor, M.Metal)
+		mantle(r, AC.Cloth, AC.Edge)
 	end
 	levelAura(r, lv)
 	return r:Finish(1, { LS = { 20, 0, 0 } })
 end
 
-------------------------------------------------------------------------
--- 3. LOST MAGE (Common)
-------------------------------------------------------------------------
 local function LostMage(lv)
-	local r = Rig.new({ Name = "LostMage", Torso = P.DeepViolet, Arm = P.DeepViolet, Leg = P.Black, Head = P.Pale, RoundHead = true })
-	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
-	-- мантия до земли
-	r:Box(T, V(2.2, 2.1, 1.3), CF(0, -2.0, 0), P.DeepViolet, M.Fabric)
-	r:Wedge(T, V(2.2, 0.5, 0.4), CF(0, -2.8, -0.8) * ANG(0, math.pi, 0), P.DeepViolet, M.Fabric)
-	r:Box(T, V(0.4, 3.1, 0.1), CF(0, -1.4, -0.66), lv >= 2 and P.Purple or P.Violet, M.Fabric)
-	r:Box(T, V(2.1, 0.25, 1.1), CF(0, -0.7, 0), P.Maroon)
-	-- рукава
-	r:Box(RA, V(1.2, 0.8, 1.2), CF(0, -0.6, 0), P.Violet, M.Fabric)
-	r:Box(LA, V(1.2, 0.8, 1.2), CF(0, -0.6, 0), P.Violet, M.Fabric)
-	-- шляпа (кривая, классическая)
-	r:Cyl(H, 0.16, 2.3, CF(0, 0.7, 0) * ANG(rad(-4), 0, rad(3)), P.Coal, M.Fabric, "Y") -- круглые поля
-	r:Cyl(H, 0.6, 1.35, CF(0, 1.05, 0.05) * ANG(rad(-6), 0, rad(4)), P.Coal, M.Fabric, "Y")
-	r:Cyl(H, 0.6, 1.0, CF(0.08, 1.58, 0.22) * ANG(rad(-14), 0, rad(9)), P.Coal, M.Fabric, "Y")
-	r:Cyl(H, 0.55, 0.66, CF(0.22, 2.04, 0.48) * ANG(rad(-24), 0, rad(16)), P.Coal, M.Fabric, "Y")
-	r:Cyl(H, 0.45, 0.36, CF(0.4, 2.38, 0.78) * ANG(rad(-38), 0, rad(24)), P.Coal, M.Fabric, "Y")
-	r:Ball(H, 0.3, CF(0.52, 2.62, 1.0), lv >= 3 and P.Neon or P.Coal, lv >= 3 and M.Neon or M.Fabric)
-	r:Cyl(H, 0.16, 1.4, CF(0, 0.85, 0.02) * ANG(rad(-5), 0, rad(3)), lv >= 5 and P.Neon or P.Violet, lv >= 5 and M.Neon or M.Fabric, "Y")
-	r:Box(H, V(1.36, 0.42, 0.2), CF(0, -0.42, -0.6), P.Pale) -- борода-шарф
-	r:Eyes(P.Neon, { Y = 0.12, Spacing = 0.3, Size = V(0.22, 0.22, 0.06) })
-	-- посох (вертикальный в правой руке)
-	local staffColor = lv >= 3 and P.Maroon or P.Coal
-	r:Cyl(RA, 5, 0.26, CF(0, -0.5, -0.55), staffColor, M.Plastic, "Y")
-	r:Cyl(RA, 0.3, 0.44, CF(0, 1.9, -0.55), P.Steel, M.Metal, "Y")
-	r:Ball(RA, 0.34, CF(0, -3.0, -0.55), P.Steel, M.Metal)
-	local cs = lv >= 3 and 0.75 or 0.5
-	local crystal = r:Neon(RA, V(cs, cs * 1.4, cs), CF(0, 2.35 + cs * 0.3, -0.55) * ANG(0, rad(45), rad(12)), P.Neon)
-	crystal.Name = "Crystal"
-	r:Glow(crystal, P.Neon, 7, 1.4)
-	local muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, 2.6 + cs * 0.3, -0.55), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r.Muzzle = muzzle
+	local r = figure("LostMage", { Torso = AC.ClothDark, Arm = AC.ClothDark, Leg = AC.ClothDark, Skin = rgb(64, 56, 72), Edge = AC.Edge })
+	r:Box(r.Head, V(1.04, 1.0, 0.05), CF(0, -0.05, -0.61), rgb(14, 10, 20), M.Plastic)
+	eyes(r, VOID, true, 0.05)
+	wizardHat(r, lv >= 4 and AC.Cloth or AC.ClothDark, lv >= 3 and rgb(150, 110, 60) or rgb(60, 44, 70), AC.Edge)
+	robe(r, AC.ClothDark, lv >= 2 and AC.Cloth or nil, 1.8)
+	belt(r, rgb(50, 36, 30), AC.Edge, lv >= 3 and VOID or nil)
 	if lv >= 2 then
-		r:Rod(RA, V(-0.2, 1.8, -0.55), V(-0.5, 2.4, -0.55), 0.14, staffColor)
-		r:Rod(RA, V(0.2, 1.8, -0.55), V(0.45, 2.5, -0.55), 0.14, staffColor)
+		mantle(r, AC.Cloth, AC.Edge)
 	end
-	if lv >= 3 then
-		r:Box(T, V(2.25, 0.6, 1.3), CF(0, 0.75, 0), P.Violet, M.Fabric)
-	end
-	if lv >= 4 then
-		r:Ball(LA, 0.55, CF(0, -1.6, -0.3), P.NeonSoft, M.Neon)
-		r:Cape(1.9, 3.2, P.Coal, true)
-	end
-	r:Face({ Mood = "old", EyeY = 0.12, BrowColor = P.White, Mouth = false })
-	r:Hands(P.Pale)
-	r:WeaponTrail(RA, V(0, 2.0, -0.55), V(0, 3.0, -0.55), P.Neon)
-	if not UnitModels.Lite then
-		Details.LostMage(r, lv)
+	-- книга на поясе
+	Kit.bevel(r, r.Torso, V(0.2, 0.6, 0.5), CF(-1.08, -0.9, -0.1), rgb(70, 40, 30), AC.Edge)
+	staff(r, r.RArm, { Glow = VOID, Top = 2.2 + (lv >= 4 and 0.4 or 0), Big = lv >= 4 })
+	if lv >= 5 then
+		r:Orbit("OrbitStaff", r.Torso, CF(0, 0.4, 0), 2.0, 4, 0.3, P.NeonSoft)
+		capeWith(r, 1.9, 2.8, AC.Cloth, VOID)
 	end
 	levelAura(r, lv)
 	return r:Finish(1, { RS = { 10, 0, 0 }, LS = { 8, 0, 0 } })
 end
 
+local function DarkGunner(lv)
+	local r = figure("DarkGunner", { Torso = rgb(30, 28, 36), Arm = rgb(30, 28, 36), Leg = rgb(26, 24, 30), Edge = rgb(96, 92, 112) })
+	-- шлем-кепи с очками
+	Kit.bevel(r, r.Head, V(1.3, 0.55, 1.32), CF(0, 0.42, 0.02), AC.ArmorMid, AC.Edge)
+	Kit.bevel(r, r.Head, V(1.32, 0.12, 0.5), CF(0, 0.2, -0.82), AC.ArmorMid, AC.Edge)
+	r:Box(r.Head, V(1.2, 0.28, 0.08), CF(0, 0.06, -0.62), rgb(14, 10, 20), M.Plastic)
+	for _, s in ipairs({ -1, 1 }) do
+		r:Neon(r.Head, V(0.34, 0.18, 0.06), CF(0.27 * s, 0.06, -0.66), VOID)
+	end
+	r:Box(r.Head, V(1.1, 0.4, 0.08), CF(0, -0.32, -0.62), AC.Armor, M.Metal)
+	-- бронежилет, подсумки, полы плаща
+	chest(r, AC.ArmorMid, AC.Edge, lv >= 3 and VOID or nil)
+	for k = -1, 1, 2 do
+		Kit.bevel(r, r.Torso, V(0.42, 0.4, 0.2), CF(0.6 * k, -0.35, -0.6), rgb(50, 40, 36), false, M.Fabric)
+	end
+	belt(r, rgb(46, 36, 32), AC.Edge)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bevel(r, r.Torso, V(0.95, 1.4, 0.18), CF(0.55 * s, -1.55, 0.45), AC.ClothDark, false, M.Fabric)
+	end
+	if lv >= 2 then
+		plateShoulders(r, AC.ArmorMid, AC.Edge)
+	end
+	bracers(r, AC.ArmorMid, AC.Edge)
+	greaves(r, rgb(40, 36, 46), AC.Edge, true)
+	rifle(r, r.RArm, { Body = lv >= 4 and AC.Cloth or AC.ArmorMid, Edge = AC.Edge, Glow = VOID, Barrel = AC.Armor })
+	if lv >= 4 then
+		Kit.bevel(r, r.Torso, V(1.4, 1.3, 0.5), CF(0, 0.2, 0.78), AC.ArmorMid, AC.Edge)
+		r:Neon(r.Torso, V(0.9, 0.12, 0.06), CF(0, 0.5, 1.04), VOID)
+	end
+	if lv >= 5 then
+		capeWith(r, 1.8, 2.6, AC.ClothDark, VOID)
+	end
+	levelAura(r, lv)
+	return r:Finish(1.05, { RS = { 75, 0, 0 }, LS = { 70, 0, -25 }, Neck = { 0, 0, 0 } })
+end
+
+local function AbyssReaper(lv)
+	local cloth = rgb(26, 20, 32)
+	local r = figure("AbyssReaper", { Torso = cloth, Arm = cloth, Leg = cloth, Skin = rgb(200, 190, 175), Edge = rgb(80, 70, 96) })
+	hood(r, cloth, rgb(80, 70, 96), VOID, true)
+	-- костяная маска-череп
+	r:Box(r.Head, V(0.9, 0.85, 0.06), CF(0, -0.05, -0.63), rgb(200, 190, 175), M.Plastic)
+	for _, s in ipairs({ -1, 1 }) do
+		r:Box(r.Head, V(0.24, 0.22, 0.04), CF(0.2 * s, 0.07, -0.66), rgb(10, 8, 14))
+		r:Neon(r.Head, V(0.1, 0.1, 0.04), CF(0.2 * s, 0.07, -0.68), VOID)
+	end
+	for k = -1, 1 do
+		r:Box(r.Head, V(0.08, 0.16, 0.04), CF(k * 0.14, -0.35, -0.66), rgb(10, 8, 14))
+	end
+	robe(r, cloth, rgb(80, 70, 96), 2.0)
+	mantle(r, rgb(36, 28, 44), rgb(80, 70, 96))
+	belt(r, rgb(40, 30, 38), AC.Edge, VOID)
+	if lv >= 2 then
+		for _, side in ipairs({ 1, -1 }) do
+			local A = side == 1 and r.RArm or r.LArm
+			Kit.bevel(r, A, V(1.25, 0.45, 1.2), CF(0.15 * side, 1.12, 0) * ANG(0, 0, rad(-14 * side)), rgb(200, 190, 175), rgb(120, 110, 100), M.Plastic)
+			Kit.spike(r, A, V(0.4 * side, 1.3, 0), V(0.8 * side, 1.85, 0), 0.3, rgb(200, 190, 175), M.Plastic, true, 0.1)
+		end
+	end
+	if lv >= 3 then
+		Kit.chain(r, r.Torso, 4, 0.26, nil, CF(0.7, -1.0, -0.6))
+	end
+	scythe(r, r.RArm, { Blade = lv >= 5 and AC.Cloth or AC.ArmorMid, Glow = lv >= 3 and VOID or nil, Wood = rgb(36, 28, 32) })
+	if lv >= 4 then
+		capeWith(r, 2.0, 3.4, cloth, nil)
+	end
+	if lv >= 5 then
+		r:Orbit("OrbitSouls", r.Torso, CF(0, 0.6, 0), 2.3, 4, 0.32, P.NeonSoft, M.Neon, 0.25)
+	end
+	levelAura(r, lv)
+	return r:Finish(1.15, { RS = { 8, 0, 0 } })
+end
+
+local function CorruptedSamurai(lv)
+	local red, black, gold = rgb(130, 22, 30), rgb(26, 20, 24), rgb(190, 150, 70)
+	local edge = rgb(150, 110, 110)
+	local r = figure("CorruptedSamurai", { Torso = black, Arm = black, Leg = black, Edge = edge })
+	kabuto(r, black, edge, lv >= 3 and gold or rgb(150, 120, 80), red)
+	-- до: пластины-ламели
+	for i = 0, 2 do
+		Kit.bevel(r, r.Torso, V(2.14, 0.34, 1.16), CF(0, 0.75 - i * 0.36, 0), i % 2 == 0 and red or black, edge)
+	end
+	belt(r, rgb(60, 30, 30), gold)
+	-- кусадзури: юбка из пластин
+	for i, x in ipairs({ -0.62, 0, 0.62 }) do
+		for k = 0, 1 do
+			Kit.bevel(r, r.Torso, V(0.62, 0.36, 0.18), CF(x, -1.2 - k * 0.36, -0.58 - k * 0.04) * ANG(rad(-6), 0, 0), (i + k) % 2 == 0 and red or black, edge)
+		end
+	end
+	-- содэ: наплечники из пластин
+	for _, side in ipairs({ 1, -1 }) do
+		local A = side == 1 and r.RArm or r.LArm
+		for k = 0, lv >= 2 and 2 or 1 do
+			Kit.bevel(r, A, V(0.25, 0.38, 1.3), CF(0.62 * side, 0.82 - k * 0.38, 0) * ANG(0, 0, rad(-12 * side)), k % 2 == 0 and red or black, edge)
+		end
+	end
+	bracers(r, red, edge)
+	greaves(r, black, edge, true)
+	-- катана и ножны
+	blade(r, r.RArm, { Len = 3.4 + (lv >= 4 and 0.4 or 0), W = 0.24, GuardW = 0.55, Blade = rgb(180, 180, 195), Glow = lv >= 3 and rgb(255, 50, 60) or nil, Guard = gold, Grip = red })
+	Kit.bevel(r, r.Torso, V(0.2, 0.22, 2.6), CF(-0.9, -0.85, -0.2) * ANG(rad(-20), rad(10), 0), black, edge)
+	if lv >= 4 then
+		capeWith(r, 1.9, 3.0, red, nil)
+	end
+	if lv >= 5 then
+		Kit.crack(r, r.Torso, { V(-0.8, 0.95, -0.59), V(-0.4, 0.5, -0.59), V(-0.6, 0.1, -0.59) }, 0.06, rgb(255, 50, 60))
+	end
+	levelAura(r, lv, rgb(255, 50, 60))
+	return r:Finish(1.1, { RS = { 25, 0, 0 }, LS = { 10, 0, 0 } })
+end
+
+local function EclipseGuardian(lv)
+	local gold, goldD, white, black = rgb(200, 158, 70), rgb(140, 104, 44), rgb(220, 214, 226), rgb(30, 26, 34)
+	local edge = rgb(250, 225, 160)
+	local r = figure("EclipseGuardian", { Torso = black, Arm = gold, Leg = black, Edge = edge })
+	helm(r, gold, edge, rgb(255, 220, 140), nil, true)
+	for _, s in ipairs({ -1, 1 }) do
+		-- крылья на шлеме
+		for k = 0, 2 do
+			Kit.bevel(r, r.Head, V(0.12, 0.7 - k * 0.15, 0.22), CF(0.72 * s, 0.4 + k * 0.25, 0.1 + k * 0.15) * ANG(rad(-30 - k * 10), 0, rad(-20 * s)), gold, edge)
+		end
+	end
+	chest(r, gold, edge, nil)
+	-- эмблема затмения: тёмный ромб в золотой оправе
+	Kit.gem(r, r.Torso, 0.55, CF(0, 0.5, -0.62), black, gold)
+	r:Neon(r.Torso, V(0.15, 0.15, 0.06), CF(0, 0.5, -0.72) * ANG(0, 0, rad(45)), rgb(255, 220, 140))
+	belt(r, goldD, gold)
+	-- белый табард
+	r:Box(r.Torso, V(1.0, 1.5, 0.06), CF(0, -1.6, -0.6), white, M.Fabric)
+	Kit.tatter(r, r.Torso, -2.35, -0.6, 1.0, 3, white, M.Fabric, 4)
+	bigShoulders(r, gold, edge, lv >= 3 and rgb(255, 220, 140) or nil, lv >= 4 and 1.15 or 1, lv >= 5 and 2 or 1)
+	bracers(r, goldD, edge)
+	greaves(r, gold, edge, true)
+	spear(r, r.RArm, { Top = 2.8, Head = gold, Metal = goldD, Edge = edge, Glow = lv >= 3 and rgb(255, 220, 140) or nil, Axe = lv >= 2, Wing = lv >= 4, Wood = black })
+	if lv >= 4 then
+		capeWith(r, 2.1, 3.4, white, gold)
+	end
+	levelAura(r, lv, rgb(255, 210, 110))
+	return r:Finish(1.3, { RS = { 30, 0, 0 } })
+end
+
+local function FallenAngel(lv)
+	local silver, white, edge = rgb(170, 168, 186), rgb(232, 228, 238), rgb(255, 255, 255)
+	local r = figure("FallenAngel", { Torso = silver, Arm = silver, Leg = rgb(60, 56, 72), Skin = rgb(226, 214, 208), Edge = edge })
+	-- лицо и белые волосы
+	eyes(r, VOID, true, 0.06)
+	Kit.bevel(r, r.Head, V(1.32, 0.35, 1.34), CF(0, 0.62, 0.02), white, false, M.Plastic)
+	Kit.bevel(r, r.Head, V(1.32, 1.1, 0.3), CF(0, 0.1, 0.55), white, false, M.Plastic)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.bevel(r, r.Head, V(0.18, 1.0, 0.9), CF(0.62 * s, 0.1, 0.2), white, false, M.Plastic)
+		Kit.spike(r, r.Head, V(0.5 * s, -0.4, 0.5), V(0.6 * s, -1.2, 0.65), 0.35, white, M.Plastic, true, 0.12)
+	end
+	chest(r, white, edge, VOID)
+	belt(r, rgb(70, 60, 90), edge, VOID)
+	robe(r, rgb(60, 50, 84), white, 1.6)
+	bigShoulders(r, white, edge, lv >= 3 and VOID or nil, lv >= 4 and 1.1 or 1, 1)
+	bracers(r, white, edge)
+	wings(r, lv >= 5 and rgb(200, 190, 230) or white, edge, lv >= 3 and VOID or nil, 0.9 + lv * 0.06)
+	staff(r, r.RArm, { Glow = VOID, Prong = white, Wood = silver, Top = 2.6, Big = lv >= 4 })
+	if lv >= 5 then
+		-- сломанный нимб
+		r:Orbit("OrbitHalo", r.Head, CF(0, 1.1, 0.1), 0.85, 6, 0.2, rgb(240, 230, 255))
+	end
+	levelAura(r, lv)
+	return r:Finish(1.25, { RS = { 10, 0, 0 } })
+end
+
+local function VoidEmperor(lv)
+	local royal, gold, black = rgb(66, 30, 110), rgb(196, 150, 64), rgb(26, 22, 34)
+	local edge = rgb(150, 120, 200)
+	local r = figure("VoidEmperor", { Torso = black, Arm = royal, Leg = black, Skin = rgb(54, 48, 64), Edge = edge })
+	r:Box(r.Head, V(1.04, 0.9, 0.05), CF(0, -0.05, -0.61), rgb(12, 9, 18), M.Plastic)
+	eyes(r, VOID, true, 0.04)
+	crown(r, gold, VOID, 0.8 + lv * 0.08)
+	chest(r, royal, gold, VOID)
+	belt(r, rgb(50, 36, 30), gold, VOID)
+	robe(r, royal, gold, 1.9)
+	bigShoulders(r, black, gold, VOID, 1.1 + (lv >= 4 and 0.1 or 0), lv >= 3 and 2 or 1)
+	bracers(r, black, gold)
+	capeWith(r, 2.4, 4.0, royal, gold)
+	-- скипетр
+	staff(r, r.RArm, { Glow = VOID, Prong = gold, Wood = gold, Top = 2.6, Big = true })
+	if lv >= 4 then
+		r:Orbit("OrbitCrown", r.Head, CF(0, 1.5, 0), 1.4, 5, 0.26, P.NeonSoft)
+	end
+	levelAura(r, lv)
+	return r:Finish(1.4, { RS = { 15, 0, 0 } })
+end
+
+local function AbyssOverlord(lv)
+	local black, mid, edge = rgb(26, 22, 32), rgb(44, 38, 56), rgb(130, 110, 160)
+	local r = figure("AbyssOverlord", { Torso = black, Arm = black, Leg = black, Edge = edge })
+	helm(r, black, edge, VOID, nil, true)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.hornA(r, r.Head, { V(0.62 * s, 0.35, 0), V(1.1 * s, 0.6, 0.05), V(1.3 * s, 1.2, 0), V(1.1 * s, 1.9 + lv * 0.1, -0.15) }, 0.3, mid, M.Metal)
+	end
+	chest(r, mid, edge, VOID)
+	Kit.crack(r, r.Torso, { V(-0.85, 0.95, -0.59), V(-0.45, 0.45, -0.6), V(-0.7, -0.05, -0.59) }, 0.06)
+	Kit.crack(r, r.Torso, { V(0.7, 0.9, -0.59), V(0.85, 0.35, -0.59) }, 0.05)
+	belt(r, black, edge, VOID)
+	tassets(r, mid, edge)
+	bigShoulders(r, black, edge, VOID, 1.2 + (lv >= 4 and 0.1 or 0), lv >= 3 and 3 or 2)
+	bracers(r, mid, edge)
+	greaves(r, mid, edge, true)
+	blade(r, r.RArm, { Len = 4.2 + lv * 0.15, W = 0.85, GuardW = 1.8, Blade = black, Glow = VOID, Core = lv >= 3 and P.NeonSoft or nil, Guard = mid, Edge = edge })
+	capeWith(r, 2.3, 3.6, rgb(40, 18, 64), VOID)
+	if lv >= 4 then
+		r:Orbit("OrbitRocks", r.Torso, CF(0, 0.3, 0), 3.0, lv >= 5 and 6 or 4, 0.5, mid, M.Slate)
+	end
+	levelAura(r, lv)
+	return r:Finish(1.55, { RS = { 12, 0, 8 }, LS = { 12, 0, -8 } })
+end
+
 ------------------------------------------------------------------------
--- 4. VOID KNIGHT (Rare)
+-- SHATTERED REALITY CASE
+------------------------------------------------------------------------
+local BLUE, BLUE_SOFT = rgb(90, 150, 255), rgb(170, 210, 255)
+local NAVY, NAVY_D = rgb(30, 40, 84), rgb(18, 22, 46)
+local SH_EDGE = rgb(110, 130, 176)
+
+local function RiftScout(lv)
+	local r = figure("RiftScout", { Torso = NAVY_D, Arm = NAVY_D, Leg = rgb(22, 24, 36), Edge = SH_EDGE })
+	hood(r, NAVY, SH_EDGE, BLUE)
+	-- шарф
+	Kit.bevel(r, r.Torso, V(1.6, 0.35, 1.2), CF(0, 0.92, 0), BLUE:Lerp(NAVY, 0.6), false, M.Fabric)
+	Kit.bevel(r, r.Torso, V(1.9, 0.9, 1.1), CF(0, 0.4, 0), rgb(36, 40, 60), SH_EDGE, M.Fabric)
+	belt(r, rgb(40, 34, 40), SH_EDGE, lv >= 3 and BLUE or nil)
+	if lv >= 2 then
+		Kit.bevel(r, r.RArm, V(1.2, 0.45, 1.2), CF(0.1, 0.9, 0) * ANG(0, 0, rad(-12)), NAVY, SH_EDGE)
+	end
+	bracers(r, NAVY, SH_EDGE)
+	greaves(r, NAVY, SH_EDGE, true)
+	dagger(r, r.RArm, lv >= 2 and BLUE or nil, 1.2 + (lv >= 4 and 0.3 or 0), BLUE_SOFT:Lerp(AC.ArmorMid, 0.6))
+	-- кинжал в левой руке (без Muzzle)
+	local A = r.LArm
+	r:Box(A, V(0.2, 0.2, 0.7), CF(0, GRIP, 0.05), AC.ClothDark, M.Fabric)
+	r:Box(A, V(0.12, 0.3, 1.1), CF(0, GRIP, -0.9), BLUE_SOFT:Lerp(AC.ArmorMid, 0.6), M.Metal)
+	if lv >= 2 then
+		r:Neon(A, V(0.14, 0.06, 1.05), CF(0, GRIP + 0.12, -0.9), BLUE)
+	end
+	Kit.spike(r, A, V(0, GRIP, -1.44), V(0, GRIP, -1.85), 0.3, BLUE_SOFT:Lerp(AC.ArmorMid, 0.6), M.Metal, true, 0.12)
+	if lv >= 4 then
+		capeWith(r, 1.7, 2.6, NAVY, nil)
+	end
+	if lv >= 5 then
+		r:Orbit("OrbitShards", r.Torso, CF(0, 0.3, 0), 1.9, 3, 0.25, BLUE)
+	end
+	levelAura(r, lv, BLUE)
+	return r:Finish(1, { RS = { 25, 0, 10 }, LS = { 25, 0, -10 } })
+end
+
+local function CrystalHunter(lv)
+	local r = figure("CrystalHunter", { Torso = rgb(26, 26, 36), Arm = rgb(26, 26, 36), Leg = rgb(22, 22, 30), Edge = SH_EDGE })
+	helm(r, rgb(30, 32, 46), SH_EDGE, BLUE, nil)
+	chest(r, rgb(40, 44, 62), SH_EDGE, BLUE)
+	belt(r, rgb(40, 34, 40), SH_EDGE)
+	plateShoulders(r, rgb(40, 44, 62), SH_EDGE)
+	-- кристаллы на плечах и спине
+	for _, side in ipairs({ 1, -1 }) do
+		local A = side == 1 and r.RArm or r.LArm
+		for k = 0, (lv >= 3 and 2 or 1) do
+			Kit.spike(r, A, V(0.3 * side, 1.1, -0.3 + k * 0.4), V((0.65 + k * 0.1) * side, 1.75 + k * 0.1, -0.35 + k * 0.5), 0.3, BLUE, M.Neon)
+		end
+	end
+	if lv >= 2 then
+		for k = -1, 1 do
+			Kit.spike(r, r.Torso, V(k * 0.5, 0.6, 0.5), V(k * 0.7, 1.4 - math.abs(k) * 0.3, 1.0), 0.35, BLUE, M.Neon)
+		end
+	end
+	bracers(r, rgb(40, 44, 62), SH_EDGE)
+	greaves(r, rgb(40, 44, 62), SH_EDGE, true)
+	crossbow(r, r.RArm, { Stock = rgb(40, 44, 62), Edge = SH_EDGE, Prong = rgb(30, 32, 46), Glow = BLUE })
+	if lv >= 4 then
+		capeWith(r, 1.8, 2.8, NAVY, BLUE)
+	end
+	if lv >= 5 then
+		r:Orbit("OrbitCrystals", r.Torso, CF(0, 0.5, 0), 2.0, 4, 0.3, BLUE)
+	end
+	levelAura(r, lv, BLUE)
+	return r:Finish(1, { RS = { 75, 0, 0 }, LS = { 65, 0, -25 } })
+end
+
+local function VoidPuppeteer(lv)
+	local cloth = rgb(34, 22, 52)
+	local r = figure("VoidPuppeteer", { Torso = cloth, Arm = cloth, Leg = cloth, Skin = rgb(220, 214, 226), Edge = AC.Edge })
+	hood(r, rgb(46, 28, 72), AC.Edge, VOID, true)
+	-- белая маска-улыбка
+	r:Box(r.Head, V(0.86, 0.86, 0.06), CF(0, -0.04, -0.64), rgb(226, 220, 232), M.Plastic)
+	for _, s in ipairs({ -1, 1 }) do
+		r:Neon(r.Head, V(0.18, 0.08, 0.04), CF(0.2 * s, 0.1, -0.68) * ANG(0, 0, rad(-14 * s)), VOID)
+	end
+	r:Box(r.Head, V(0.4, 0.06, 0.04), CF(0, -0.25, -0.68), rgb(20, 14, 26))
+	robe(r, cloth, AC.Edge, 1.8)
+	mantle(r, rgb(46, 28, 72), AC.Edge)
+	belt(r, rgb(50, 36, 30), AC.Edge, VOID)
+	-- сферы-ромбы в руках и нити
+	for _, side in ipairs({ 1, -1 }) do
+		local A = side == 1 and r.RArm or r.LArm
+		r:Neon(A, V(0.45, 0.45, 0.45), CF(0, -1.45, -0.2) * ANG(rad(45), 0, rad(45)), VOID)
+		if side == 1 then
+			muzzle(r, A, CF(0, -1.45, -0.2))
+		end
+		for k = -1, 1 do
+			r:Neon(A, V(0.03, 1.3, 0.03), CF(k * 0.18, -2.1, -0.2), P.NeonSoft)
+		end
+	end
+	-- куклы на орбите
+	local n = lv >= 4 and 3 or 2
+	local hub = r:Orbit("OrbitPuppets", r.Torso, CF(0, -0.2, 0), 2.4, 0, 0.2, VOID)
+	for i = 0, n - 1 do
+		local a = i / n * PI * 2
+		local p = V(math.cos(a) * 2.4, 0, math.sin(a) * 2.4)
+		r:Box(hub, V(0.5, 0.55, 0.3), CF(p), rgb(120, 90, 70), M.Wood)
+		r:Box(hub, V(0.36, 0.36, 0.36), CF(p + V(0, 0.48, 0)), rgb(226, 220, 232), M.Plastic)
+		r:Box(hub, V(0.16, 0.45, 0.16), CF(p + V(-0.18, -0.48, 0)), rgb(120, 90, 70), M.Wood)
+		r:Box(hub, V(0.16, 0.45, 0.16), CF(p + V(0.18, -0.48, 0)), rgb(120, 90, 70), M.Wood)
+		r:Neon(hub, V(0.03, 1.2, 0.03), CF(p + V(0, 1.2, 0)), P.NeonSoft)
+	end
+	if lv >= 3 then
+		capeWith(r, 2.0, 3.2, rgb(46, 28, 72), VOID)
+	end
+	levelAura(r, lv)
+	return r:Finish(1.05, { RS = { 40, 0, 20 }, LS = { 40, 0, -20 } })
+end
+
+local function Starbreaker(lv)
+	local gold, white, edge = rgb(200, 160, 74), rgb(226, 222, 234), rgb(255, 235, 180)
+	local r = figure("Starbreaker", { Torso = white, Arm = gold, Leg = white, Edge = edge })
+	helm(r, gold, edge, BLUE, gold, true)
+	chest(r, gold, edge, BLUE)
+	-- звёздная эмблема
+	for k = 0, 3 do
+		Kit.spike(r, r.Torso, V(0, 0.5, -0.66), V(0, 0.5, -0.66) + V(math.cos(k * PI / 2), math.sin(k * PI / 2), 0) * 0.45, 0.2, rgb(255, 240, 200), M.Metal, true, 0.06)
+	end
+	belt(r, rgb(60, 50, 40), gold, BLUE)
+	tassets(r, gold, edge)
+	bigShoulders(r, white, edge, BLUE, lv >= 4 and 1.2 or 1.05, lv >= 3 and 2 or 1)
+	bracers(r, gold, edge)
+	greaves(r, gold, edge, true)
+	hammer(r, r.RArm, { Head = white, Edge = edge, Trim = gold, Glow = BLUE, Wood = rgb(60, 50, 40) })
+	capeWith(r, 2.1, 3.3, NAVY, lv >= 3 and BLUE or nil)
+	if lv >= 5 then
+		r:Orbit("OrbitStars", r.Head, CF(0, 1.3, 0), 1.6, 5, 0.3, rgb(255, 225, 140))
+	end
+	levelAura(r, lv, rgb(255, 210, 110))
+	return r:Finish(1.3, { RS = { 30, 0, 0 }, LS = { 20, 0, 0 } })
+end
+
+local function RiftMonarch(lv)
+	local royal, black, edge = rgb(46, 40, 110), rgb(22, 22, 40), rgb(140, 150, 220)
+	local r = figure("RiftMonarch", { Torso = black, Arm = royal, Leg = black, Edge = edge })
+	helm(r, royal, edge, BLUE, nil, true)
+	crown(r, rgb(200, 210, 255), BLUE, 0.6 + lv * 0.06)
+	chest(r, royal, edge, BLUE)
+	belt(r, black, edge, VOID)
+	robe(r, royal, edge, 1.7)
+	bigShoulders(r, black, edge, BLUE, 1.2, lv >= 3 and 2 or 1)
+	bracers(r, royal, edge)
+	capeWith(r, 2.3, 3.8, rgb(36, 30, 90), VOID)
+	staff(r, r.RArm, { Glow = BLUE, Prong = edge, Wood = black, Top = 2.6, Big = true })
+	-- кольца-порталы за спиной
+	for i, color in ipairs({ BLUE, VOID }) do
+		if i == 1 or lv >= 3 then
+			local radius = 1.0 + i * 0.35
+			local hub = r:Orbit("OrbitRift" .. i, r.Torso, CF(0, 0.6, 1.6) * ANG(rad(90), 0, 0), radius, 0, 0.2, color)
+			Kit.ring(r, hub, ANG(rad(90), 0, 0), radius, 14, 0.1, 0.1, color, M.Neon, function(k)
+				return k % 5 == 4
+			end)
+		end
+	end
+	levelAura(r, lv, BLUE)
+	return r:Finish(1.4, { RS = { 12, 0, 0 } })
+end
+
+local function RealityDestroyer(lv)
+	local RED, black, mid, edge = rgb(255, 40, 50), rgb(24, 18, 22), rgb(44, 30, 36), rgb(160, 100, 110)
+	local r = figure("RealityDestroyer", { Torso = black, Arm = black, Leg = black, Edge = edge })
+	helm(r, black, edge, RED, nil, true)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.hornA(r, r.Head, { V(0.6 * s, 0.4, 0), V(1.0 * s, 0.7, 0), V(1.1 * s, 1.3, -0.05), V(0.9 * s, 1.8 + lv * 0.08, -0.2) }, 0.26, mid, M.Metal)
+	end
+	chest(r, mid, edge, RED)
+	Kit.crack(r, r.Torso, { V(-0.85, 0.95, -0.59), V(-0.45, 0.45, -0.6), V(-0.7, -0.05, -0.59) }, 0.06, RED)
+	Kit.crack(r, r.Torso, { V(0.7, 0.9, -0.59), V(0.85, 0.35, -0.59) }, 0.05, RED)
+	belt(r, black, edge, RED)
+	tassets(r, mid, edge)
+	bigShoulders(r, black, edge, RED, 1.2 + (lv >= 4 and 0.1 or 0), lv >= 3 and 3 or 2)
+	bracers(r, mid, edge)
+	greaves(r, mid, edge, true)
+	blade(r, r.RArm, { Len = 4.0 + lv * 0.15, W = 0.75, GuardW = 1.7, Blade = black, Glow = RED, Core = lv >= 3 and rgb(255, 150, 150) or nil, Guard = mid, Edge = edge, Trail = RED })
+	capeWith(r, 2.3, 3.6, rgb(90, 10, 20), RED)
+	if lv >= 4 then
+		r:Orbit("OrbitShards", r.Torso, CF(0, 0.6, 0), 2.6, lv >= 5 and 6 or 4, 0.3, RED)
+	end
+	levelAura(r, lv, RED)
+	return r:Finish(1.5, { RS = { 25, 0, 0 } })
+end
+
+------------------------------------------------------------------------
+-- BLOOD MOON CASE
+------------------------------------------------------------------------
+local BLOOD, BLOOD_SOFT = rgb(235, 40, 56), rgb(255, 130, 140)
+local CRIMSON, CRIMSON_D = rgb(96, 14, 24), rgb(52, 9, 16)
+local BL_EDGE = rgb(160, 110, 116)
+local BL_DARK = rgb(28, 20, 24)
+
+local function BloodAcolyte(lv)
+	local r = figure("BloodAcolyte", { Torso = CRIMSON_D, Arm = CRIMSON_D, Leg = BL_DARK, Edge = BL_EDGE })
+	hood(r, CRIMSON, BL_EDGE, BLOOD)
+	robe(r, CRIMSON_D, lv >= 3 and CRIMSON or nil, 1.6)
+	belt(r, rgb(40, 26, 26), BL_EDGE, lv >= 2 and BLOOD or nil)
+	if lv >= 2 then
+		mantle(r, CRIMSON, BL_EDGE)
+	end
+	bracers(r, BL_DARK, BL_EDGE)
+	-- глефа с серповидным лезвием
+	local top = shaft(r, r.RArm, -2.4, 2.2, rgb(40, 26, 26), 0.2)
+	local pts = { top, top + V(0, 0.45, -0.5), top + V(0, 0.3, -1.1), top + V(0, -0.15, -1.4) }
+	for i = 1, 3 do
+		Kit.bar(r, r.RArm, pts[i], pts[i + 1], V2(0.12, 0.34 - i * 0.06), lv >= 5 and CRIMSON or AC.ArmorMid)
+	end
+	if lv >= 3 then
+		Kit.bar(r, r.RArm, pts[2] + V(0, -0.15, 0), pts[3] + V(0, -0.12, 0), V2(0.14, 0.05), BLOOD, M.Neon)
+	end
+	Kit.spike(r, r.RArm, top + V(0, 0.1, 0), top + V(0, 0.8, 0), 0.3, AC.ArmorMid, M.Metal)
+	r:WeaponTrail(r.RArm, top + V(0, 0.3, -0.5), pts[4], BLOOD)
+	muzzle(r, r.RArm, CF(pts[4]))
+	if lv >= 4 then
+		capeWith(r, 1.9, 3.0, CRIMSON, nil)
+	end
+	if lv >= 5 then
+		r:Orbit("OrbitBlood", r.Torso, CF(0, 0.5, 0), 1.8, 3, 0.3, BLOOD)
+	end
+	levelAura(r, lv, BLOOD)
+	return r:Finish(1, { RS = { 20, 0, 0 } })
+end
+
+-- Scarlet Hunter (CrimsonGunslinger): красный охотник с луком
+local function CrimsonGunslinger(lv)
+	local r = figure("CrimsonGunslinger", { Torso = BL_DARK, Arm = BL_DARK, Leg = BL_DARK, Edge = BL_EDGE })
+	hood(r, CRIMSON, BL_EDGE, BLOOD)
+	Kit.bevel(r, r.Torso, V(2.12, 1.2, 1.12), CF(0, 0.35, 0), rgb(50, 26, 30), BL_EDGE, M.Fabric)
+	Kit.bar(r, r.Torso, V(-0.9, 0.95, -0.58), V(0.9, -0.6, -0.58), V2(0.2, 0.06), rgb(70, 40, 34))
+	belt(r, rgb(50, 30, 28), BL_EDGE, lv >= 3 and BLOOD or nil)
+	quiver(r, rgb(60, 30, 28), BLOOD)
+	mantle(r, CRIMSON, BL_EDGE)
+	bracers(r, rgb(60, 30, 28), BL_EDGE)
+	greaves(r, BL_DARK, BL_EDGE, true)
+	bow(r, r.LArm, { Wood = lv >= 4 and CRIMSON_D or rgb(60, 34, 30), Glow = lv >= 2 and BLOOD or nil, Tip = BL_EDGE })
+	if lv >= 4 then
+		capeWith(r, 1.9, 3.0, CRIMSON, nil)
+	end
+	if lv >= 5 then
+		r:Box(r.Head, V(1.06, 0.4, 0.08), CF(0, -0.3, -0.64), BL_DARK, M.Metal)
+	end
+	levelAura(r, lv, BLOOD)
+	return r:Finish(1, { LS = { 20, 0, 0 } })
+end
+
+-- Crimson Witch (MoonWitch): ведьма в остроконечной шляпе с посохом-полумесяцем
+local function MoonWitch(lv)
+	local r = figure("MoonWitch", { Torso = CRIMSON_D, Arm = CRIMSON_D, Leg = BL_DARK, Skin = rgb(220, 196, 190), Edge = BL_EDGE })
+	eyes(r, BLOOD, true, 0.06)
+	-- волосы
+	Kit.bevel(r, r.Head, V(1.3, 1.1, 0.3), CF(0, -0.1, 0.52), rgb(30, 18, 22), false, M.Plastic)
+	wizardHat(r, BL_DARK, CRIMSON, BL_EDGE)
+	robe(r, CRIMSON_D, CRIMSON, 1.8)
+	belt(r, rgb(40, 24, 26), BL_EDGE, BLOOD)
+	if lv >= 2 then
+		mantle(r, CRIMSON, BL_EDGE)
+	end
+	-- посох с полумесяцем
+	local top = shaft(r, r.RArm, -2.4, 2.3, rgb(40, 24, 26), 0.2)
+	local c = top + V(0, 0.6, 0)
+	for k = 0, 4 do
+		local a1, a2 = rad(200 + k * 28), rad(200 + (k + 1) * 28)
+		Kit.bar(r, r.RArm, c + V(0, math.sin(a1) * 0.55, math.cos(a1) * 0.55), c + V(0, math.sin(a2) * 0.55, math.cos(a2) * 0.55), V2(0.12, 0.14), BLOOD, M.Neon)
+	end
+	r:Neon(r.RArm, V(0.3, 0.3, 0.3), CF(c) * ANG(rad(45), 0, rad(45)), BLOOD_SOFT)
+	muzzle(r, r.RArm, CF(c))
+	if lv >= 4 then
+		capeWith(r, 1.9, 3.0, CRIMSON, BLOOD)
+	end
+	if lv >= 5 then
+		r:Orbit("OrbitMoon", r.Torso, CF(0, 1.4, 0), 1.9, 3, 0.3, BLOOD_SOFT)
+	end
+	levelAura(r, lv, BLOOD)
+	return r:Finish(1.05, { RS = { 10, 0, 0 }, LS = { 10, 0, -10 } })
+end
+
+-- Blood Paladin (BloodfangWarlord): красная броня, башенный щит, топор
+local function BloodfangWarlord(lv)
+	local r = figure("BloodfangWarlord", { Torso = BL_DARK, Arm = CRIMSON, Leg = BL_DARK, Edge = BL_EDGE })
+	helm(r, CRIMSON, BL_EDGE, BLOOD, BL_DARK, true)
+	if lv >= 3 then
+		for _, s in ipairs({ -1, 1 }) do
+			Kit.hornA(r, r.Head, { V(0.6 * s, 0.45, 0), V(0.9 * s, 0.7, 0), V(0.95 * s, 1.2, -0.1) }, 0.22, BL_DARK, M.Metal)
+		end
+	end
+	chest(r, CRIMSON, BL_EDGE, BLOOD)
+	belt(r, rgb(40, 24, 26), BL_EDGE, BLOOD)
+	tassets(r, CRIMSON, BL_EDGE)
+	bigShoulders(r, CRIMSON, BL_EDGE, lv >= 3 and BLOOD or nil, lv >= 4 and 1.2 or 1.05, lv >= 4 and 2 or 1)
+	bracers(r, BL_DARK, BL_EDGE)
+	greaves(r, CRIMSON, BL_EDGE, true)
+	axe(r, r.RArm, { Head = AC.ArmorMid, Edge = BL_EDGE, Glow = BLOOD, Wood = rgb(40, 24, 26) })
+	shield(r, r.LArm, { Color = CRIMSON, Edge = BL_EDGE, H = 2.8, W = 1.7, Rim = BL_DARK, Gem = BLOOD })
+	capeWith(r, 2.1, 3.3, CRIMSON_D, lv >= 3 and BLOOD or nil)
+	levelAura(r, lv, BLOOD)
+	return r:Finish(1.3, { RS = { 30, 0, 0 } })
+end
+
+-- Moon Devourer (LunarSeraph): рогатая тёмная броня, парные клинки-полумесяцы, кровавая луна за спиной
+local function LunarSeraph(lv)
+	local r = figure("LunarSeraph", { Torso = BL_DARK, Arm = BL_DARK, Leg = BL_DARK, Edge = BL_EDGE })
+	helm(r, BL_DARK, BL_EDGE, BLOOD, nil, true)
+	for _, s in ipairs({ -1, 1 }) do
+		Kit.hornA(r, r.Head, { V(0.62 * s, 0.4, 0), V(1.1 * s, 0.75, 0.1), V(1.25 * s, 1.4, 0.05), V(1.0 * s, 2.0 + lv * 0.08, -0.15) }, 0.28, CRIMSON_D, M.Metal)
+	end
+	chest(r, CRIMSON_D, BL_EDGE, BLOOD)
+	Kit.crack(r, r.Torso, { V(-0.8, 0.95, -0.59), V(-0.4, 0.5, -0.6), V(-0.65, 0.05, -0.59) }, 0.05, BLOOD)
+	belt(r, BL_DARK, BL_EDGE, BLOOD)
+	tassets(r, CRIMSON_D, BL_EDGE)
+	bigShoulders(r, BL_DARK, BL_EDGE, BLOOD, 1.2, lv >= 3 and 3 or 2)
+	bracers(r, CRIMSON_D, BL_EDGE)
+	greaves(r, CRIMSON_D, BL_EDGE, true)
+	-- клинки-полумесяцы в обеих руках
+	for _, A in ipairs({ r.RArm, r.LArm }) do
+		r:Box(A, V(0.22, 0.22, 0.7), CF(0, GRIP, 0.05), BL_DARK, M.Fabric)
+		local c = V(0, GRIP, -0.9)
+		for k = 0, 4 do
+			local a1, a2 = rad(-80 + k * 32), rad(-80 + (k + 1) * 32)
+			Kit.bar(r, A, c + V(0, math.sin(a1) * 0.9, -math.cos(a1) * 0.5), c + V(0, math.sin(a2) * 0.9, -math.cos(a2) * 0.5), V2(0.12, 0.2), AC.ArmorMid)
+			Kit.bar(r, A, c + V(0, math.sin(a1) * 1.0, -math.cos(a1) * 0.6), c + V(0, math.sin(a2) * 1.0, -math.cos(a2) * 0.6), V2(0.13, 0.05), BLOOD, M.Neon)
+		end
+	end
+	muzzle(r, r.RArm, CF(0, GRIP, -1.5))
+	-- кровавая луна за спиной
+	local moon = r:Joint("MoonBack", r.Torso, V(0.2, 0.2, 0.2), CF(0, 1.2, 1.2), CF(), BLOOD)
+	moon.Transparency = 1
+	Kit.ring(r, moon, CF(), 1.5 + lv * 0.08, 16, 0.18, 0.14, BLOOD, M.Neon, function(k)
+		return k >= 11
+	end)
+	capeWith(r, 2.2, 3.5, CRIMSON_D, BLOOD)
+	levelAura(r, lv, BLOOD)
+	return r:Finish(1.35, { RS = { 10, 0, 0 } })
+end
+
+-- Scarlet Eclipse (CrimsonEclipse): капюшон, кольцо затмения за головой, двойная коса-глефа
+local function CrimsonEclipse(lv)
+	local r = figure("CrimsonEclipse", { Torso = BL_DARK, Arm = BL_DARK, Leg = BL_DARK, Edge = BL_EDGE })
+	hood(r, CRIMSON_D, BL_EDGE, BLOOD, true)
+	r:Box(r.Head, V(0.9, 0.4, 0.06), CF(0, -0.28, -0.64), BL_DARK, M.Metal)
+	chest(r, CRIMSON_D, BL_EDGE, BLOOD)
+	belt(r, BL_DARK, BL_EDGE, BLOOD)
+	robe(r, BL_DARK, CRIMSON, 2.0)
+	bigShoulders(r, CRIMSON_D, BL_EDGE, BLOOD, 1.15, lv >= 3 and 3 or 2)
+	bracers(r, CRIMSON_D, BL_EDGE)
+	-- кольцо затмения: тёмный круг в кровавом ободе
+	local ecl = r:Joint("SpinEclipse", r.Head, V(0.2, 0.2, 0.2), CF(0, 0.3, 0.95), CF(), BLOOD)
+	ecl.Transparency = 1
+	Kit.ring(r, ecl, CF(), 1.25, 16, 0.2, 0.12, BLOOD, M.Neon)
+	r:Box(ecl, V(1.7, 1.7, 0.08), CF(0, 0, 0.06) * ANG(0, 0, rad(45)), rgb(10, 6, 8), M.Plastic)
+	-- двойная глефа
+	local A = r.RArm
+	local top = shaft(r, A, -2.2, 2.2, BL_DARK, 0.2)
+	local bottom = V(0, -2.2, -0.5)
+	for _, base in ipairs({ top, bottom }) do
+		local dir = base.Y > 0 and 1 or -1
+		local pts = { base, base + V(0, 0.4 * dir, -0.6), base + V(0, 0.2 * dir, -1.4), base + V(0, -0.3 * dir, -1.9) }
+		for i = 1, 3 do
+			Kit.bar(r, A, pts[i], pts[i + 1], V2(0.12, 0.4 - i * 0.07), CRIMSON_D)
+			Kit.bar(r, A, pts[i] + V(0, -0.15 * dir, 0), pts[i + 1] + V(0, -0.12 * dir, 0), V2(0.14, 0.05), BLOOD, M.Neon)
+		end
+	end
+	r:WeaponTrail(A, top + V(0, 0.3, -0.6), top + V(0, -0.3, -1.9), BLOOD)
+	muzzle(r, A, CF(top + V(0, -0.3, -1.9)))
+	capeWith(r, 2.2, 3.6, CRIMSON_D, BLOOD)
+	if lv >= 4 then
+		r:Orbit("OrbitBlood", r.Torso, CF(0, 0.5, 0), 2.4, lv >= 5 and 6 or 4, 0.3, BLOOD)
+	end
+	levelAura(r, lv, BLOOD)
+	return r:Finish(1.5, { RS = { 8, 0, 0 } })
+end
+
+------------------------------------------------------------------------
+-- VOID KNIGHT (по концепту)
 ------------------------------------------------------------------------
 -- Угловатый клинок Пустоты: тёмный клинок с неоновыми кромками, гарда с рогами и самоцветом
 local function voidBlade(r, A, lv)
@@ -1092,1124 +1742,6 @@ local function VoidKnight(lv)
 	return r:Finish(1.1, { RS = { 20, 0, 0 } })
 end
 
-------------------------------------------------------------------------
--- 5. DARK GUNNER (Rare)
-------------------------------------------------------------------------
-local function DarkGunner(lv)
-	local r = Rig.new({ Name = "DarkGunner", Torso = P.Black, Arm = P.Coal, Leg = P.Black, Head = P.Skin, RoundHead = true })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- броня
-	r:Box(T, V(2.15, 1.4, 1.2), CF(0, 0.3, 0), P.Coal, M.Metal)
-	r:Neon(T, V(0.1, 1.2, 0.08), CF(-0.5, 0.3, -0.62), P.Neon)
-	r:Neon(T, V(0.1, 0.8, 0.08), CF(0.6, 0.5, -0.62), P.Neon)
-	-- рюкзак-батарея
-	r:Box(T, V(1.6, 1.8, 0.7), CF(0, 0.1, 0.85), P.Dark, M.Metal)
-	local cell = r:Cyl(T, 1.2, 0.45, CF(0.4, 0.1, 1.2), P.Neon, M.Neon, "Y")
-	r:Cyl(T, 1.2, 0.45, CF(-0.4, 0.1, 1.2), lv >= 3 and P.Neon or P.Purple, lv >= 3 and M.Neon or M.Plastic, "Y")
-	for _, x in ipairs({ -0.4, 0.4 }) do
-		r:Cyl(T, 0.12, 0.52, CF(x, 0.72, 1.2), P.Steel, M.Metal, "Y")
-		r:Cyl(T, 0.12, 0.52, CF(x, -0.52, 1.2), P.Steel, M.Metal, "Y")
-	end
-	-- шапка-берет и визор
-	r:Cyl(H, 0.4, 1.5, CF(0.05, 0.68, 0.05) * ANG(0, 0, rad(-8)), P.Coal, M.Fabric, "Y") -- берет
-	r:Sphere(H, V(1.1, 0.4, 1.0), CF(-0.25, 0.9, 0) * ANG(0, 0, rad(-14)), P.Coal, M.Fabric)
-	r:Box(H, V(0.3, 0.3, 0.12), CF(-0.35, 0.72, -0.72), P.Neon, M.Neon) -- кокарда
-	r:Box(H, V(1.4, 0.32, 0.25), CF(0, 0.12, -0.68), P.Black, M.Metal)
-	r:Neon(H, V(1.2, 0.16, 0.06), CF(0, 0.12, -0.82), P.Neon)
-	r:Box(H, V(1.36, 0.45, 0.12), CF(0, -0.38, -0.62), P.Black, M.Fabric) -- маска
-	-- сапоги
-	r:Box(RL, V(1.08, 0.7, 1.15), CF(0, -0.7, -0.05), P.Coal, M.Metal)
-	r:Box(LL, V(1.08, 0.7, 1.15), CF(0, -0.7, -0.05), P.Coal, M.Metal)
-	-- большое энергетическое оружие (ствол по -Y руки)
-	local gs = lv >= 4 and 1.2 or 1
-	r:Box(RA, V(0.6, 1.9, 0.75) * gs, CF(0, -1.85, -0.15), P.Black, M.Metal)
-	r:Box(RA, V(0.5, 0.6, 1.3), CF(0, -1.2, 0.35), P.Coal, M.Metal) -- приклад
-	r:Neon(RA, V(0.64, 1.0, 0.12), CF(0, -1.9, -0.55), P.Neon)
-	r:Cyl(RA, 1.0, 0.38, CF(0, -3.2 * gs + 0.2, -0.15), P.Dark, M.Metal, "Y")
-	for i = 0, 2 do
-		r:Cyl(RA, 0.08, 0.46, CF(0, -2.85 * gs - i * 0.22 + 0.2, -0.15), P.Steel, M.Metal, "Y") -- рёбра охлаждения
-	end
-	if lv >= 3 then
-		r:Cyl(RA, 0.9, 0.3, CF(0, -3.1 * gs + 0.2, -0.55), P.Dark, M.Metal, "Y") -- второй ствол
-		r:Cyl(RA, 0.7, 0.26, CF(0, -1.75, -0.82), P.Steel, M.Metal, "Y") -- прицел
-		r:Cyl(RA, 0.06, 0.2, CF(0, -2.1, -0.82), P.NeonSoft, M.Neon, "Y")
-	end
-	local tip = r:Cyl(RA, 0.18, 0.44, CF(0, -3.75 * gs + 0.2, -0.15), P.NeonSoft, M.Neon, "Y")
-	tip.Name = "Muzzle"
-	r.Muzzle = tip
-	if lv >= 2 then
-		r:Pauldron(RA, 1, 0.8, P.Coal, P.Neon, 0, M.Neon)
-		r:Pauldron(LA, -1, 0.75, P.Coal)
-	end
-	if lv >= 4 then
-		r:Glow(cell, P.Neon, 8, 1.5)
-	end
-	if lv >= 5 then
-		r:Neon(RA, V(0.7, 0.12, 0.85), CF(0, -2.4, -0.15), P.NeonPink)
-		r:Box(T, V(0.6, 2.2, 0.15), CF(0.5, -0.3, 0.55) * ANG(0, 0, rad(10)), P.DeepViolet, M.Fabric)
-	end
-	r:Hands(P.Black)
-	if not UnitModels.Lite then
-		Details.DarkGunner(r, lv)
-	end
-	levelAura(r, lv)
-	return r:Finish(1.05, { RS = { 75, 0, 0 }, LS = { 70, 0, -25 }, Neck = { 0, 0, 0 } })
-end
-
-------------------------------------------------------------------------
--- 6. ABYSS REAPER (Epic)
-------------------------------------------------------------------------
-local function AbyssReaper(lv)
-	local r = Rig.new({ Name = "AbyssReaper", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black })
-	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
-	-- глубокий капюшон
-	r:Box(H, V(1.6, 0.3, 1.65), CF(0, 0.78, 0.05), P.Coal, M.Fabric)
-	r:Box(H, V(0.26, 1.55, 1.65), CF(-0.78, 0.0, 0.05), P.Coal, M.Fabric)
-	r:Box(H, V(0.26, 1.5, 1.6), CF(0.79, 0.02, 0.05), P.Coal, M.Fabric)
-	r:Box(H, V(1.6, 1.55, 0.26), CF(0, 0, 0.78), P.Coal, M.Fabric)
-	r:Wedge(H, V(1.2, 0.9, 0.9), CF(0, 0.85, -0.6) * ANG(0, math.pi, 0), P.Coal, M.Fabric)
-	r:Wedge(H, V(0.6, 1.2, 1.4), CF(-0.15, 0.6, 1.2) * ANG(rad(-35), 0, rad(-6)), P.Coal, M.Fabric)
-	r:Eyes(lv >= 4 and P.NeonPink or P.Neon, { Y = 0.0, Spacing = 0.28, Size = V(0.2, 0.2, 0.06), Inset = 0.25 })
-	-- рваная мантия
-	r:Box(T, V(2.25, 0.7, 1.3), CF(0, 0.75, 0), P.Coal, M.Fabric)
-	r:Box(T, V(2.2, 1.6, 1.25), CF(0, -1.55, 0), P.Black, M.Fabric)
-	local lens = { 1.4, 0.9, 1.7, 1.1, 1.5 }
-	for i = 1, 5 do
-		local x = -1.0 + (i - 1) * 0.5
-		r:Wedge(T, V(0.45, lens[i], 0.3), CF(x, -2.35 - lens[i] / 2 + 0.2, -0.5) * ANG(0, math.pi, math.pi), P.Black, M.Fabric)
-		r:Wedge(T, V(0.45, lens[6 - i], 0.3), CF(x, -2.35 - lens[6 - i] / 2 + 0.2, 0.5) * ANG(0, 0, math.pi), P.Black, M.Fabric)
-	end
-	r:Box(RA, V(1.25, 1.0, 1.25), CF(0, -0.6, 0), P.Coal, M.Fabric)
-	r:Box(LA, V(1.25, 1.0, 1.25), CF(0, -0.6, 0), P.Coal, M.Fabric)
-	-- цепь на груди
-	r:Seg(T, V(-0.9, 0.8, -0.66), V(0.8, -0.6, -0.66), 0.14, P.Steel, M.Metal)
-	-- коса: древко вертикально в правой руке, лезвие наверху
-	local pole = lv >= 3 and P.Maroon or P.Coal
-	r:Cyl(RA, 6, 0.26, CF(0, 0.2, -0.55), pole, M.Plastic, "Y")
-	for i = 0, 2 do
-		r:Cyl(RA, 0.14, 0.32, CF(0, -1.5 + i * 1.6, -0.55), P.Steel, M.Metal, "Y") -- кольца на древке
-	end
-	local bl = lv >= 5 and 1.3 or 1
-	local top = V(0, 3.15, -0.55)
-	local bladePts = {
-		top,
-		top + V(0, 0.15, -1.0) * bl,
-		top + V(0, -0.1, -2.0) * bl,
-		top + V(0, -0.6, -2.8) * bl,
-		top + V(0, -1.3, -3.2) * bl,
-	}
-	r:Chain(RA, bladePts, 0.45, P.Steel, M.Metal, 0.85)
-	if lv >= 2 then
-		local edge = {}
-		for i, p in ipairs(bladePts) do
-			edge[i] = p + V(0, -0.22, 0)
-		end
-		r:Chain(RA, edge, 0.12, P.Neon, M.Neon, 1)
-	end
-	r:Ball(RA, 0.55, CF(top), P.Black, M.Metal)
-	local muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top + V(0, -0.6, -2.4) * bl), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r.Muzzle = muzzle
-	if lv >= 4 then
-		r:Sparkles(muzzle, P.Neon, { Rate = 14, Size = 0.35 })
-		r:Cape(2.2, 3.6, P.Black, true)
-	end
-	if lv >= 5 then
-		local back = {}
-		for i, p in ipairs(bladePts) do
-			back[i] = V(p.X, p.Y - 0.2, -0.55 + (-0.55 - p.Z) * 0.5)
-		end
-		r:Chain(RA, back, 0.3, P.Steel, M.Metal, 0.8)
-	end
-	r:Hands(P.Pale)
-	r:WeaponTrail(RA, top + V(0, -0.2, -0.6) * bl, top + V(0, -1.3, -3.2) * bl, P.Neon)
-	if not UnitModels.Lite then
-		Details.AbyssReaper(r, lv)
-	end
-	levelAura(r, lv)
-	return r:Finish(1.15, { RS = { 8, 0, 0 } })
-end
-
-------------------------------------------------------------------------
--- 7. CORRUPTED SAMURAI (Epic)
-------------------------------------------------------------------------
-local function CorruptedSamurai(lv)
-	local r = Rig.new({ Name = "CorruptedSamurai", Torso = P.Maroon, Arm = P.Black, Leg = P.Black, Head = P.Black })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- до (нагрудник) пластинами
-	for i = 0, 3 do
-		r:Box(T, V(2.15, 0.36, 1.18), CF(0, 0.75 - i * 0.42, 0), i % 2 == 0 and P.Black or P.Maroon, M.Metal)
-	end
-	-- кусадзури (юбка из пластин)
-	for i = -1, 1 do
-		r:Box(T, V(0.68, 1.0, 0.18), CF(i * 0.7, -1.3, -0.6) * ANG(rad(-12), 0, rad(i * 4)), P.Maroon, M.Metal)
-	end
-	r:Box(T, V(0.9, 1.0, 0.18), CF(-0.55, -1.3, 0.6) * ANG(rad(12), 0, 0), P.Maroon, M.Metal)
-	r:Box(T, V(0.9, 1.1, 0.18), CF(0.55, -1.35, 0.6) * ANG(rad(12), 0, 0), P.Black, M.Metal)
-	-- соде (наплечники) разного размера
-	r:Box(RA, V(1.4, 1.2, 1.3), CF(0.35, 0.55, 0) * ANG(0, 0, rad(-22)), P.Maroon, M.Metal)
-	r:Box(RA, V(1.42, 0.18, 1.32), CF(0.4, 0.25, 0) * ANG(0, 0, rad(-22)), P.Black, M.Metal)
-	r:Box(LA, V(1.25, 1.0, 1.2), CF(-0.3, 0.6, 0) * ANG(0, 0, rad(18)), P.Maroon, M.Metal)
-	-- кабуто
-	r:Sphere(H, V(1.6, 1.0, 1.6), CF(0, 0.6, 0), P.Black, M.Metal) -- купол кабуто
-	r:Cyl(H, 0.14, 2.2, CF(0, 0.3, 0.1) * ANG(rad(-8), 0, rad(2)), P.Maroon, M.Metal, "Y") -- широкие круглые поля
-	r:Ball(H, 0.3, CF(0, 1.12, 0), P.Gold, M.Metal)
-	r:Wedge(H, V(0.4, 0.8, 0.7), CF(-0.95, 0.0, 0.3) * ANG(0, rad(-90), rad(10)), P.Maroon, M.Metal)
-	r:Wedge(H, V(0.4, 0.7, 0.6), CF(0.95, 0.05, 0.3) * ANG(0, rad(90), rad(-8)), P.Maroon, M.Metal)
-	-- маэдатэ (полумесяц на шлеме)
-	r:Chain(H, { V(0, 0.75, -0.75), V(-0.45, 1.15, -0.8), V(-0.75, 1.75, -0.8) }, 0.16, P.Gold, M.Metal, 0.8, true)
-	r:Chain(H, { V(0, 0.75, -0.75), V(0.4, 1.1, -0.8), V(0.6, 1.55, -0.8) }, 0.16, P.Gold, M.Metal, 0.8, true)
-	r:Ball(H, 0.26, CF(0, 0.75, -0.77), P.Neon, M.Neon)
-	-- демоническая маска
-	r:Box(H, V(1.3, 0.85, 0.15), CF(0, -0.15, -0.7), P.Crimson)
-	r:Wedge(H, V(0.15, 0.4, 0.2), CF(-0.35, -0.6, -0.78) * ANG(0, 0, math.pi), P.White)
-	r:Wedge(H, V(0.15, 0.4, 0.2), CF(0.38, -0.62, -0.78) * ANG(0, 0, math.pi), P.White)
-	r:Eyes(P.Neon, { Y = 0.05, Spacing = 0.3, Size = V(0.3, 0.12, 0.06), Tilt = -14, Inset = -0.08 })
-	-- катана (тонкая и длинная, чуть изогнутая)
-	local len = 3.6 + (lv >= 4 and 0.5 or 0)
-	r:Cyl(RA, 1.1, 0.24, CF(0, -1.05, 0.05), P.Maroon, M.Fabric, "Z")
-	r:Cyl(RA, 0.12, 0.6, CF(0, -1.05, -0.55), P.Gold, M.Metal, "Z") -- круглая цуба
-	r:Seg(RA, V(0, -1.05, -0.6), V(0, -1.0, -0.6 - len * 0.55), V2(0.1, 0.3), P.Pale, M.Metal)
-	r:Seg(RA, V(0, -1.0, -0.6 - len * 0.55), V(0, -0.8, -0.6 - len), V2(0.1, 0.27), P.Pale, M.Metal)
-	r:Seg(RA, V(0, -0.88, -0.6), V(0, -0.65, -0.6 - len), V2(0.12, 0.07), lv >= 2 and P.Neon or P.White, M.Neon)
-	local muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -0.85, -0.6 - len), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r.Muzzle = muzzle
-	-- ножны на поясе
-	r:Rod(T, V(-1.05, -0.8, 0.4), V(-1.2, -1.2, -1.6), 0.28, P.Black) -- ножны
-	if lv >= 3 then
-		r:Horn(H, 1, V(0.55, 0.75, 0.1), 0.7, P.Crimson)
-		r:Horn(H, -1, V(-0.55, 0.75, 0.1), 0.6, P.Crimson)
-	end
-	if lv >= 4 then
-		r:Neon(T, V(0.1, 1.4, 0.06), CF(0.3, 0.2, -0.62) * ANG(0, 0, rad(20)), P.Neon)
-		r:Sparkles(muzzle, P.Neon, { Rate = 8 })
-	end
-	if lv >= 5 then
-		r:Cape(1.6, 3.0, P.Crimson, true)
-		r:Rod(T, V(1.05, -0.8, 0.4), V(1.2, -1.2, -1.6), 0.24, P.Maroon) -- вторая катана
-	end
-	r:Hands(P.Black)
-	r:WeaponTrail(RA, V(0, -0.95, -0.9), V(0, -0.8, -0.6 - len), lv >= 5 and P.NeonPink or P.Neon)
-	if not UnitModels.Lite then
-		Details.CorruptedSamurai(r, lv)
-	end
-	levelAura(r, lv, lv >= 5 and P.NeonPink or P.Neon)
-	return r:Finish(1.1, { RS = { 25, 0, 0 }, LS = { 10, 0, 0 } })
-end
-
-------------------------------------------------------------------------
--- 8. ECLIPSE GUARDIAN (Legendary) — AOE
-------------------------------------------------------------------------
-local function EclipseGuardian(lv)
-	local r = Rig.new({ Name = "EclipseGuardian", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.4, 1.4, 1.4), TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- массивная броня
-	r:Box(T, V(2.6, 2.0, 1.5), CF(0, 0.15, 0), P.Black, M.Metal)
-	r:Box(T, V(2.2, 0.6, 0.25), CF(0, 0.7, -0.8), P.Coal, M.Metal)
-	r:Wedge(T, V(2.6, 0.6, 0.5), CF(0, -0.95, -0.6) * ANG(0, math.pi, math.pi), P.Coal, M.Metal)
-	-- энергетические линии
-	r:Neon(T, V(0.12, 1.8, 0.06), CF(0, 0.1, -0.78), P.Neon)
-	r:Neon(T, V(1.8, 0.1, 0.06), CF(0, 0.35, -0.78), P.Neon)
-	r:Seg(T, V(-1.2, 0.9, -0.78), V(-0.3, -0.7, -0.78), 0.08, P.Neon, M.Neon)
-	r:Seg(T, V(1.2, 0.9, -0.78), V(0.35, -0.6, -0.78), 0.08, P.Neon, M.Neon)
-	-- шлем с рогами
-	r:Box(H, V(1.6, 1.6, 1.6), CF(0, 0.05, 0), P.Black, M.Metal)
-	r:Box(H, V(1.2, 0.14, 0.08), CF(0, 0.05, -0.81), P.Neon, M.Neon)
-	r:Box(H, V(0.3, 0.3, 1.7), CF(0, 0.85, 0), P.Coal, M.Metal)
-	r:Horn(H, 1, V(0.75, 0.45, 0), 1.3, P.Coal)
-	r:Horn(H, -1, V(-0.75, 0.45, 0), 1.15, P.Coal)
-	-- огромные наплечники
-	r:Pauldron(RA, 1, 1.25, P.Black, P.Neon, 0.1, M.Neon)
-	r:Sphere(RA, V(1.3, 0.8, 1.25), CF(0.25, 1.45, 0) * ANG(0, 0, rad(-16)), P.Coal, M.Metal)
-	r:Wedge(RA, V(0.35, 0.8, 0.6), CF(0.45, 1.95, 0) * ANG(0, rad(90), rad(-20)), P.Steel, M.Metal)
-	r:Pauldron(LA, -1, 1.18, P.Black, P.Steel, 0.1)
-	r:Sphere(LA, V(1.2, 0.75, 1.15), CF(-0.25, 1.4, 0) * ANG(0, 0, rad(16)), P.Coal, M.Metal)
-	r:Box(RA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
-	r:Box(LA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
-	r:Box(RL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
-	r:Box(LL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
-	-- тёмный плащ
-	r:Cape(2.5, 4.0, P.DeepViolet, true)
-	-- огромный меч
-	local blade = r:Sword(RA, {
-		Length = 5.2 + (lv >= 4 and 0.8 or 0),
-		Width = 1.0 + (lv >= 5 and 0.2 or 0),
-		Blade = P.Coal,
-		Edge = P.Neon,
-		Core = P.Neon,
-		Guard = P.Black,
-		GuardWidth = 2.2,
-		Runes = 2 + lv,
-		Gem = P.NeonSoft,
-	})
-	if lv >= 2 then
-		r:Neon(LL, V(0.08, 1.0, 0.06), CF(0.2, -0.3, -0.62), P.Neon)
-		r:Neon(RL, V(0.08, 1.0, 0.06), CF(-0.2, -0.3, -0.62), P.Neon)
-	end
-	if lv >= 3 then
-		r:Neon(H, V(0.3, 0.3, 0.06), CF(0, 0.55, -0.82) * ANG(0, 0, rad(45)), P.NeonSoft)
-		r:Glow(blade, P.Neon, 10, 1.5)
-	end
-	if lv >= 4 then
-		r:Sparkles(blade, P.Neon, { Rate = 16, Size = 0.4 })
-	end
-	if lv >= 5 then
-		r:Horn(H, 1, V(0.5, 0.75, 0.3), 0.8, P.Neon)
-		r:Horn(H, -1, V(-0.5, 0.75, 0.3), 0.8, P.Neon)
-	end
-	if not UnitModels.Lite then
-		Details.EclipseGuardian(r, lv)
-	end
-	levelAura(r, lv)
-	return r:Finish(1.3, { RS = { 30, 0, 0 } })
-end
-
-------------------------------------------------------------------------
--- 9. FALLEN ANGEL (Legendary) — single target
-------------------------------------------------------------------------
-local function FallenAngel(lv)
-	local r = Rig.new({ Name = "FallenAngel", Torso = P.Coal, Arm = P.Coal, Leg = P.Black, Head = P.Pale, RoundHead = true })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.15, 1.4, 1.15), CF(0, 0.35, 0), P.Black, M.Metal)
-	r:Neon(T, V(0.5, 0.5, 0.06), CF(0, 0.4, -0.6) * ANG(0, 0, rad(45)), P.Neon)
-	r:Box(T, V(2.2, 1.2, 1.25), CF(0, -1.5, 0), P.Black, M.Fabric)
-	r:Pauldron(RA, 1, 0.85, P.Black, P.DarkGold)
-	r:Pauldron(LA, -1, 0.85, P.Black, P.DarkGold)
-	r:Box(RL, V(1.08, 0.6, 1.12), CF(0, -0.72, 0), P.Coal, M.Metal)
-	r:Box(LL, V(1.08, 0.6, 1.12), CF(0, -0.72, 0), P.Coal, M.Metal)
-	-- волосы / шлем
-	r:Box(H, V(1.4, 0.4, 1.4), CF(0, 0.55, 0.05), P.White)
-	r:Box(H, V(1.4, 1.1, 0.35), CF(0, 0.05, 0.55), P.White)
-	r:Wedge(H, V(0.4, 0.8, 0.6), CF(-0.6, 0.35, -0.35) * ANG(0, 0, rad(10)), P.White)
-	r:Eyes(P.Neon, { Y = 0.05, Spacing = 0.3, Size = V(0.26, 0.12, 0.06) })
-	-- нимб
-	local halo = {}
-	local segs = 10
-	local hr = 0.85
-	for i = 0, segs - 1 do
-		local a1 = (i / segs) * math.pi * 2
-		local a2 = ((i + 1) / segs) * math.pi * 2
-		halo[#halo + 1] = r:Rod(H, V(math.cos(a1) * hr, 1.25, math.sin(a1) * hr + 0.15), V(math.cos(a2) * hr, 1.25, math.sin(a2) * hr + 0.15), 0.15, lv >= 3 and P.NeonSoft or P.White, M.Neon)
-	end
-	r:Glow(halo[1], P.NeonSoft, 7, 1)
-	-- чёрные блочные крылья на моторах
-	local ws = lv >= 4 and 1.25 or 1
-	for _, side in ipairs({ 1, -1 }) do
-		local name = side == 1 and "WingR" or "WingL"
-		local wing = r:Joint(name, T, V(3.0 * ws, 0.5, 0.3), CF(0.35 * side, 0.6, 0.55), CF(1.5 * ws * side, 0.55, 0.15) * ANG(0, 0, rad(20 * side)), P.Black)
-		for i = 1, 4 do
-			local len = (2.6 - i * 0.35) * ws
-			local x = (-1.3 + i * 0.6) * ws * side
-			r:Box(wing, V(0.55 * ws, len, 0.2), CF(x, -len / 2 + 0.1, 0.05) * ANG(0, 0, rad(-12 * side)), i % 2 == 0 and P.Coal or P.Black)
-		end
-		if lv >= 2 then
-			r:Neon(wing, V(2.8 * ws, 0.08, 0.32), CF(0, 0.26, 0), P.Neon)
-		end
-	end
-	-- копьё (вертикально в правой руке)
-	local sl = lv >= 5 and 1.2 or 1
-	r:Cyl(RA, 6.2 * sl, 0.24, CF(0, 0.3, -0.55), P.Black, M.Metal, "Y")
-	r:Cyl(RA, 0.25, 0.5, CF(0, 3.1 * sl + 0.2, -0.55), P.DarkGold, M.Metal, "Y")
-	r:Ball(RA, 0.4, CF(0, -2.8 * sl, -0.55), P.DarkGold, M.Metal)
-	local tip = r:Neon(RA, V(0.35, 1.6 * sl, 0.12), CF(0, 4.1 * sl + 0.2, -0.55), P.Neon)
-	r:Wedge(RA, V(0.12, 0.6, 0.35), CF(0, 5.2 * sl, -0.55) * ANG(0, rad(90), 0), P.Neon, M.Neon)
-	tip.Name = "Muzzle"
-	r.Muzzle = tip
-	if lv >= 3 then
-		r:Rod(RA, V(-0.5, 3.1 * sl, -0.55), V(-0.2, 3.6 * sl, -0.55), 0.14, P.Neon, M.Neon)
-		r:Rod(RA, V(0.5, 3.1 * sl, -0.55), V(0.2, 3.6 * sl, -0.55), 0.14, P.Neon, M.Neon)
-	end
-	if lv >= 4 then
-		r:Glow(tip, P.Neon, 10, 2)
-	end
-	if lv >= 5 then
-		r:Cape(1.8, 3.4, P.Black, true)
-	end
-	r:Face({ Mood = "calm", EyeY = 0.05, BrowColor = P.Coal })
-	r:Hands(P.Coal)
-	r:WeaponTrail(RA, V(0, 3.0 * sl, -0.55), V(0, 5.2 * sl, -0.55), P.NeonSoft)
-	if not UnitModels.Lite then
-		Details.FallenAngel(r, lv)
-	end
-	levelAura(r, lv, P.NeonSoft)
-	return r:Finish(1.25, { RS = { 10, 0, 0 } })
-end
-
-------------------------------------------------------------------------
--- 10. VOID EMPEROR (Mythic)
-------------------------------------------------------------------------
-local function VoidEmperor(lv)
-	local r = Rig.new({ Name = "VoidEmperor", Torso = P.DeepViolet, Arm = P.DeepViolet, Leg = P.Coal, Head = P.Pale, TorsoMat = M.Metal, RoundHead = true })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- королевская броня
-	r:Box(T, V(2.3, 1.7, 1.3), CF(0, 0.2, 0), P.Violet, M.Metal)
-	r:Box(T, V(0.5, 1.7, 0.1), CF(0, 0.2, -0.68), P.DarkGold, M.Metal)
-	r:Neon(T, V(0.4, 0.4, 0.06), CF(0, 0.5, -0.75) * ANG(0, 0, rad(45)), P.NeonPink)
-	r:Box(T, V(2.25, 1.6, 1.3), CF(0, -1.7, 0), P.DeepViolet, M.Fabric)
-	r:Box(T, V(2.27, 0.2, 1.32), CF(0, -2.4, 0), P.DarkGold, M.Metal)
-	-- наплечники с шипами
-	r:Pauldron(RA, 1, 1.0, P.Violet, P.Gold)
-	r:Pauldron(LA, -1, 1.0, P.Violet, P.Gold)
-	r:Wedge(RA, V(0.25, 0.8, 0.5), CF(0.45, 1.45, 0) * ANG(0, rad(90), 0), P.DarkGold, M.Metal)
-	r:Wedge(LA, V(0.25, 0.7, 0.5), CF(-0.45, 1.4, 0) * ANG(0, rad(-90), 0), P.DarkGold, M.Metal)
-	r:Box(RA, V(1.1, 0.7, 1.1), CF(0, -0.65, 0), P.Black, M.Metal)
-	r:Box(LA, V(1.1, 0.7, 1.1), CF(0, -0.65, 0), P.Black, M.Metal)
-	-- лицо / борода / глаза
-	r:Box(H, V(1.36, 0.5, 0.2), CF(0, -0.45, -0.6), P.White)
-	r:Eyes(P.NeonPink, { Y = 0.1, Spacing = 0.3, Size = V(0.28, 0.12, 0.06), Tilt = -6 })
-	-- огромная корона
-	local cs = lv >= 3 and 1.15 or 1
-	r:Cyl(H, 0.55, 1.85, CF(0, 0.85, 0), P.Gold, M.Metal, "Y") -- круглая корона
-	r:Cyl(H, 0.12, 1.95, CF(0, 0.62, 0), P.DarkGold, M.Metal, "Y")
-	local spikes = { { -0.7, 1.2, -0.7 }, { 0, 1.7, -0.75 }, { 0.7, 1.3, -0.7 }, { -0.75, 1.1, 0.7 }, { 0.72, 1.4, 0.7 }, { 0, 1.0, 0.75 } }
-	for i, s in ipairs(spikes) do
-		local h = s[2] * cs
-		r:Wedge(H, V(0.34, h, 0.34), CF(s[1], 1.1 + h / 2, s[3]) * ANG(0, s[3] > 0 and 0 or math.pi, rad(s[1] * -10)), P.Gold, M.Metal)
-		if i <= 3 or lv >= 4 then
-			r:Ball(H, 0.34, CF(s[1], 1.15 + h, s[3]), i == 2 and P.NeonPink or P.Neon, M.Neon)
-		end
-	end
-	r:Neon(H, V(0.35, 0.35, 0.08), CF(0, 0.85, -0.9) * ANG(0, 0, rad(45)), P.NeonPink)
-	-- плащ с частицами
-	local cape = r:Cape(2.4, 4.2, P.Maroon, true)
-	r:Sphere(T, V(2.7, 0.7, 1.5), CF(0, 0.95, 0.1), P.Crimson, M.Fabric) -- меховой воротник
-	r:Sparkles(cape, P.NeonPink, { Rate = 8, Size = 0.3 })
-	-- большой меч с красно-фиолетовым свечением
-	local blade = r:Sword(RA, {
-		Length = 4.8 + (lv >= 4 and 0.8 or 0),
-		Width = 0.75,
-		Blade = P.Coal,
-		Edge = P.NeonPink,
-		Core = P.Neon,
-		Guard = P.Gold,
-		GuardWidth = 1.8,
-		Runes = lv >= 2 and 4 or 2,
-		Gem = P.NeonPink,
-	})
-	r:Glow(blade, P.NeonPink, 9, 1.4)
-	if lv >= 2 then
-		r:Box(RL, V(1.1, 0.8, 1.15), CF(0, -0.6, 0), P.Black, M.Metal)
-		r:Box(LL, V(1.1, 0.8, 1.15), CF(0, -0.6, 0), P.Black, M.Metal)
-	end
-	if lv >= 3 then
-		r:Sparkles(blade, P.NeonPink, { Rate = 14, Size = 0.35 })
-	end
-	if lv >= 5 then
-		for i = 0, 2 do
-			local a = rad(-40 + i * 40)
-			r:Neon(T, V(0.15, 1.6, 0.15), CF(math.sin(a) * 1.4, 2.6 + math.cos(a) * 0.4, 0.9) * ANG(0, 0, -a), P.NeonPink)
-		end
-	end
-	r:Face({ Mood = "angry", EyeY = 0.1, BrowColor = P.Black, Mouth = false })
-	r:Hands(P.Black, M.Metal)
-	if not UnitModels.Lite then
-		Details.VoidEmperor(r, lv)
-	end
-	levelAura(r, lv, P.NeonPink)
-	return r:Finish(1.4, { RS = { 15, 0, 0 } })
-end
-
-------------------------------------------------------------------------
--- 11. ABYSS OVERLORD (Mythic)
-------------------------------------------------------------------------
-local function AbyssOverlord(lv)
-	local r = Rig.new({ Name = "AbyssOverlord", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.35, 1.35, 1.35), TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- массивный торс
-	r:Box(T, V(3.0, 2.3, 1.7), CF(0, 0.25, 0), P.Black, M.Metal)
-	r:Box(T, V(2.4, 0.5, 1.5), CF(0, -0.9, 0), P.Coal, M.Metal)
-	r:Box(T, V(1.1, 1.1, 0.3), CF(0, 0.35, -0.9), P.Coal, M.Metal)
-	local crystal = r:Neon(T, V(0.8, 0.8, 0.5), CF(0, 0.35, -1.0) * ANG(0, 0, rad(45)), P.Neon)
-	crystal.Name = "Crystal"
-	r:Glow(crystal, P.Neon, 12, 2)
-	for i = -1, 1, 2 do
-		r:Seg(T, V(i * 0.5, 0.35, -0.92), V(i * 1.3, 1.0, -0.88), 0.1, P.Neon, M.Neon)
-		r:Seg(T, V(i * 0.5, 0.2, -0.92), V(i * 1.1, -0.6, -0.88), 0.1, P.Neon, M.Neon)
-	end
-	-- голова с рогами
-	r:Box(H, V(1.45, 1.2, 1.45), CF(0, 0, 0), P.Black, M.Metal)
-	r:Box(H, V(1.5, 0.4, 0.3), CF(0, 0.15, -0.7), P.Coal, M.Metal)
-	r:Eyes(P.Neon, { Y = -0.1, Spacing = 0.32, Size = V(0.3, 0.14, 0.06), Tilt = -12, Inset = -0.12 })
-	r:Horn(H, 1, V(0.65, 0.4, 0), 1.7, P.Coal)
-	r:Horn(H, -1, V(-0.65, 0.4, 0), 1.5, P.Coal)
-	if lv >= 3 then
-		r:Horn(H, 1, V(0.4, 0.6, 0.4), 1.0, P.Black)
-		r:Horn(H, -1, V(-0.4, 0.6, 0.4), 1.0, P.Black)
-	end
-	-- огромные руки
-	for _, A in ipairs({ RA, LA }) do
-		local s = A == RA and 1 or -1
-		r:Sphere(A, V(2.0, 1.4, 1.9), CF(0.2 * s, 0.85, 0) * ANG(0, 0, rad(-12 * s)), P.Coal, M.Metal) -- огромные наплечники
-		r:Box(A, V(1.8, 1.6, 1.8), CF(0, -0.6, 0), P.Black, M.Metal)
-		r:Cyl(A, 0.7, 2.0, CF(0, -1.3, 0), P.Coal, M.Metal, "Y") -- кулаки-латы
-		for k = -1, 1 do
-			r:Wedge(A, V(0.3, 0.5, 0.45), CF(k * 0.55, -1.75, -0.7) * ANG(0, math.pi, math.pi), P.Steel, M.Metal) -- когти
-		end
-		r:Neon(A, V(0.08, 1.2, 0.08), CF(0.6 * s, -0.6, -0.92), P.Neon)
-		r:Wedge(A, V(0.3, 0.8, 0.6), CF(0.65 * s, 1.35, 0) * ANG(0, rad(90 * s), 0), P.Steel, M.Metal) -- шипы
-	end
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -1.9, -0.4), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:Box(RL, V(1.2, 1.4, 1.25), CF(0, -0.3, 0), P.Coal, M.Metal)
-	r:Box(LL, V(1.2, 1.4, 1.25), CF(0, -0.3, 0), P.Coal, M.Metal)
-	if lv >= 2 then
-		r:Cape(2.7, 3.6, P.DeepViolet, true)
-	end
-	if lv >= 4 then
-		r:Sparkles(crystal, P.Neon, { Rate = 16, Size = 0.4 })
-		for i = -1, 1, 2 do
-			r:Wedge(T, V(0.4, 1.1, 0.8), CF(i * 0.8, 1.8, 0.6) * ANG(rad(-20), 0, rad(-15 * i)), P.Steel, M.Metal)
-		end
-	end
-	if lv >= 5 then
-		local orbit = r:Ball(T, 0.7, CF(1.9, 2.4, 0.3), P.Neon, M.Neon)
-		r:Ball(T, 0.55, CF(-1.9, 2.1, 0.5), P.Neon, M.Neon)
-		r:Glow(orbit, P.Neon, 8, 1)
-	end
-	r:WeaponTrail(RA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
-	r:WeaponTrail(LA, V(0, -0.9, 0), V(0, -1.9, -0.2), P.Neon)
-	if not UnitModels.Lite then
-		Details.AbyssOverlord(r, lv)
-	end
-	levelAura(r, lv)
-	return r:Finish(1.55, { RS = { 12, 0, 8 }, LS = { 12, 0, -8 } })
-end
-
-------------------------------------------------------------------------
-------------------------------------------------------------------------
--- НОВЫЕ ЮНИТЫ: SHATTERED REALITY CASE
-------------------------------------------------------------------------
-local BLUE = Color3.fromRGB(80, 170, 255)
-local ICE = Color3.fromRGB(170, 225, 255)
-local RED = Color3.fromRGB(255, 35, 55)
-local BLOOD = Color3.fromRGB(140, 14, 28)
-local MOON = Color3.fromRGB(245, 225, 235)
-local SILVER = Color3.fromRGB(200, 200, 215)
-
--- кинжал в руке, клинок вперёд
-local function dagger(r, limb, glow, len)
-	len = len or 1.3
-	r:Cyl(limb, 0.6, 0.2, CF(0, -1.05, 0.05), P.Maroon, M.Fabric, "Z")
-	r:Box(limb, V(0.22, 0.55, 0.16), CF(0, -1.05, -0.3), P.Steel, M.Metal)
-	r:Box(limb, V(0.1, 0.32, len), CF(0, -1.05, -0.38 - len / 2), P.Purple, M.Metal)
-	r:Wedge(limb, V(0.1, 0.32, 0.45), CF(0, -1.05, -0.38 - len - 0.22) * ANG(0, math.pi, 0), P.Purple, M.Metal)
-	if glow then
-		r:Neon(limb, V(0.12, 0.07, len), CF(0, -0.9, -0.38 - len / 2), P.Neon)
-	end
-	return V(0, -1.05, -0.38 - len)
-end
-
-local function RiftScout(lv)
-	local r = Rig.new({ Name = "RiftScout", Torso = P.DeepViolet, Arm = P.Coal, Leg = P.Black, Head = P.Skin, RoundHead = true })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.06, 1.0, 1.08), CF(0, 0.45, 0), P.Coal, M.Fabric) -- лёгкая куртка
-	r:Box(T, V(2.04, 0.22, 1.06), CF(0, -0.7, 0), P.Maroon)
-	r:Seg(T, V(0.9, 0.95, -0.56), V(-0.85, -0.65, -0.56), 0.16, P.Black)
-	-- бандана, очки и шарф
-	r:Cyl(H, 0.3, 1.36, CF(0, 0.45, 0), P.Purple, M.Fabric, "Y")
-	r:Wedge(H, V(0.3, 0.5, 0.7), CF(0.2, 0.35, 0.85) * ANG(rad(-30), 0, rad(15)), P.Purple, M.Fabric)
-	r:Box(H, V(1.38, 0.3, 0.2), CF(0, 0.12, -0.6), P.Black, M.Metal)
-	r:Cyl(H, 0.1, 0.36, CF(-0.3, 0.12, -0.7), P.Neon, M.Neon, "Z")
-	r:Cyl(H, 0.1, 0.36, CF(0.3, 0.12, -0.7), P.Neon, M.Neon, "Z")
-	r:Box(H, V(1.38, 0.4, 0.15), CF(0, -0.38, -0.6), P.Maroon, M.Fabric)
-	r:Face({ Mood = "angry", EyeY = 0.0, Mouth = false })
-	local tipR = dagger(r, RA, lv >= 2, 1.2 + (lv >= 4 and 0.3 or 0))
-	local tipL = dagger(r, LA, lv >= 3, 1.1 + (lv >= 4 and 0.3 or 0))
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(tipR), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:WeaponTrail(RA, V(0, -1.05, -0.5), tipR, P.NeonSoft)
-	if lv >= 5 then
-		-- дополнительный энергетический след
-		r:WeaponTrail(LA, V(0, -1.05, -0.5), tipL, P.NeonPink)
-		r:Neon(T, V(0.12, 1.4, 0.06), CF(-0.5, 0.2, -0.58) * ANG(0, 0, rad(-20)), P.NeonPink)
-	end
-	r:Hands(P.Black, M.Fabric)
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.06, 0.45, 1.12), CF(0, -0.78, -0.04), P.Coal)
-		r:Box(Lg, V(1.04, 0.12, 1.04), CF(0, -0.25, 0), P.Purple, M.Fabric)
-	end
-	if lv >= 2 then
-		r:Pauldron(LA, -1, 0.7, P.Coal, P.Purple)
-	end
-	if lv >= 3 then
-		for i = 0, 2 do
-			r:Box(T, V(0.1, 0.5, 0.2), CF(-0.7 + i * 0.25, -0.95, -0.6) * ANG(0, 0, rad(-10)), P.Steel, M.Metal) -- метательные ножи
-		end
-	end
-	if lv >= 4 then
-		r:Cape(1.6, 2.0, P.DeepViolet, true)
-	end
-	levelAura(r, lv)
-	return r:Finish(1, { RS = { 25, 0, 10 }, LS = { 25, 0, -10 } })
-end
-
-local function CrystalHunter(lv)
-	local r = Rig.new({ Name = "CrystalHunter", Torso = Color3.fromRGB(30, 40, 70), Arm = Color3.fromRGB(30, 40, 70), Leg = P.Black, Head = P.Skin, RoundHead = true })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- плащ охотника с меховым воротником
-	r:Box(T, V(2.1, 1.9, 1.1), CF(0, 0.05, 0), Color3.fromRGB(25, 30, 55), M.Fabric)
-	r:Sphere(T, V(2.4, 0.7, 1.4), CF(0, 0.95, 0.05), P.Pale, M.Fabric)
-	r:Box(T, V(2.12, 0.25, 1.12), CF(0, -0.75, 0), P.Maroon)
-	r:Box(T, V(1.0, 1.1, 0.1), CF(0, -1.4, -0.57), Color3.fromRGB(25, 30, 55), M.Fabric)
-	-- широкополая шляпа с пером
-	r:Cyl(H, 0.14, 2.2, CF(0, 0.68, 0) * ANG(rad(-6), 0, rad(4)), P.Coal, M.Fabric, "Y")
-	r:Cyl(H, 0.6, 1.2, CF(0, 1.0, 0.05), P.Coal, M.Fabric, "Y")
-	r:Cyl(H, 0.14, 1.24, CF(0, 0.78, 0.05), BLUE, M.Fabric, "Y")
-	r:Sphere(H, V(0.18, 1.3, 0.3), CF(0.55, 1.35, 0.3) * ANG(rad(-25), 0, rad(-30)), ICE, M.Neon)
-	r:Eyes(BLUE, { Y = 0.05, Spacing = 0.3, Size = V(0.24, 0.12, 0.06) })
-	r:Face({ Mood = "calm", EyeY = 0.05 })
-	-- кристальный колчан на спине
-	r:Cyl(T, 1.8, 0.6, CF(-0.45, 0.2, 0.8) * ANG(0, 0, rad(18)), P.Coal, M.Fabric, "Y")
-	for i = 0, 2 do
-		r:Neon(T, V(0.22, 0.6, 0.22), CF(-0.6 + i * 0.12, 1.2, 0.8 + (i - 1) * 0.12) * ANG(0, rad(45), rad(18)), BLUE)
-	end
-	-- кристальный арбалет (ствол вдоль -Y руки)
-	local function crossbow(yOff, xOff)
-		r:Box(RA, V(0.4, 2.0, 0.5), CF(xOff, -1.9 + yOff, -0.1), P.Coal, M.Metal)
-		r:Box(RA, V(0.4, 0.6, 1.1), CF(xOff, -1.15 + yOff, 0.3), P.Maroon) -- приклад
-		r:Rod(RA, V(xOff, -2.6 + yOff, -0.1), V(xOff - 1.3, -2.3 + yOff, -0.1), 0.18, P.Steel, M.Metal) -- плечи лука
-		r:Rod(RA, V(xOff, -2.6 + yOff, -0.1), V(xOff + 1.3, -2.3 + yOff, -0.1), 0.18, P.Steel, M.Metal)
-		r:Neon(RA, V(2.6, 0.05, 0.05), CF(xOff, -2.15 + yOff, -0.1), ICE) -- тетива
-		r:Neon(RA, V(0.18, 1.2, 0.18), CF(xOff, -2.5 + yOff, -0.35) * ANG(0, rad(45), 0), BLUE) -- кристальный болт
-	end
-	crossbow(0, 0)
-	if lv >= 5 then
-		crossbow(0.05, 0.55) -- двойной выстрел
-	end
-	r.Muzzle = r:Neon(RA, V(0.3, 0.3, 0.3), CF(0, -3.1, -0.35) * ANG(rad(45), rad(45), 0), BLUE)
-	r.Muzzle.Name = "Muzzle"
-	r:Hands(Color3.fromRGB(60, 45, 35), M.Fabric)
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.08, 0.75, 1.14), CF(0, -0.65, -0.04), Color3.fromRGB(60, 45, 35), M.Fabric)
-		r:Sphere(Lg, V(1.15, 0.35, 1.15), CF(0, -0.25, 0), P.Pale, M.Fabric)
-	end
-	if lv >= 2 then
-		r:Pauldron(RA, 1, 0.75, Color3.fromRGB(40, 60, 100), ICE)
-	end
-	if lv >= 3 then
-		r:Pauldron(LA, -1, 0.75, Color3.fromRGB(40, 60, 100), ICE)
-		r:Neon(T, V(0.3, 0.3, 0.08), CF(0, 0.4, -0.58) * ANG(0, 0, rad(45)), BLUE)
-	end
-	if lv >= 4 then
-		r:Orbit("OrbitCrystals", T, CF(0, 0.5, 0), 2.0, 3, 0.3, BLUE)
-	end
-	levelAura(r, lv, BLUE)
-	return r:Finish(1, { RS = { 75, 0, 0 }, LS = { 65, 0, -25 } })
-end
-
-local function VoidPuppeteer(lv)
-	local r = Rig.new({ Name = "VoidPuppeteer", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black })
-	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
-	-- высокий остроконечный капюшон
-	r:Box(H, V(1.6, 0.3, 1.6), CF(0, 0.78, 0.05), P.DeepViolet, M.Fabric)
-	r:Box(H, V(0.26, 1.5, 1.6), CF(-0.78, 0, 0.05), P.DeepViolet, M.Fabric)
-	r:Box(H, V(0.26, 1.5, 1.6), CF(0.78, 0, 0.05), P.DeepViolet, M.Fabric)
-	r:Box(H, V(1.6, 1.5, 0.26), CF(0, 0, 0.78), P.DeepViolet, M.Fabric)
-	r:Wedge(H, V(1.0, 1.6, 1.0), CF(0.1, 1.6, 0.25) * ANG(rad(-10), 0, rad(8)), P.DeepViolet, M.Fabric)
-	r:Eyes(P.NeonSoft, { Y = 0, Spacing = 0.28, Size = V(0.22, 0.22, 0.06), Inset = 0.2 })
-	-- маска-улыбка
-	r:Box(H, V(0.6, 0.1, 0.06), CF(0, -0.35, -0.56), P.NeonSoft, M.Neon)
-	-- длинный камзол
-	r:Box(T, V(2.15, 1.9, 1.15), CF(0, 0.05, 0), P.Violet, M.Fabric)
-	r:Box(T, V(2.2, 1.6, 1.2), CF(0, -1.7, 0), P.DeepViolet, M.Fabric)
-	for i = -1, 1 do
-		r:Ball(T, 0.16, CF(0, 0.6 - i * 0.4, -0.6), P.Gold, M.Metal) -- пуговицы
-	end
-	r:Box(T, V(2.2, 0.2, 1.2), CF(0, -0.85, 0), P.Black)
-	r:Hands(P.Pale)
-	-- нити на пальцах
-	for _, A in ipairs({ RA, LA }) do
-		for k = -1, 1 do
-			r:Rod(A, V(k * 0.25, -1.1, -0.2), V(k * 0.4, -2.6, -0.9), 0.04, P.NeonSoft, M.Neon)
-		end
-	end
-	-- парящая теневая кукла
-	local doll = r:Joint("OrbitPuppet", T, V(0.2, 0.2, 0.2), CF(0, 0.2, 0), CF(), P.Black)
-	doll.Transparency = 1
-	local function makeDoll(cx, cz, color)
-		r:Box(doll, V(0.5, 0.6, 0.3), CF(cx, -0.4, cz), color, M.Fabric)
-		r:Box(doll, V(0.45, 0.45, 0.45), CF(cx, 0.15, cz), color, M.Fabric)
-		r:Neon(doll, V(0.1, 0.1, 0.05), CF(cx - 0.1, 0.18, cz - 0.23), P.NeonPink)
-		r:Neon(doll, V(0.1, 0.1, 0.05), CF(cx + 0.1, 0.18, cz - 0.23), P.NeonPink)
-		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx - 0.35, -0.4, cz), color, M.Fabric)
-		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx + 0.35, -0.4, cz), color, M.Fabric)
-		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx - 0.12, -0.95, cz), color, M.Fabric)
-		r:Box(doll, V(0.18, 0.5, 0.18), CF(cx + 0.12, -0.95, cz), color, M.Fabric)
-		r:Rod(doll, V(cx, 0.4, cz), V(cx, 2.0, cz), 0.03, P.NeonSoft, M.Neon)
-	end
-	makeDoll(2.2, -0.6, P.Coal)
-	if lv >= 5 then
-		makeDoll(-2.2, -0.6, P.DeepViolet)
-	end
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -1.3, -0.3), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	if lv >= 2 then
-		r:Cyl(H, 0.1, 1.7, CF(0, 0.55, 0), P.NeonSoft, M.Neon, "Y") -- светящийся обод капюшона
-	end
-	if lv >= 3 then
-		r:Pauldron(RA, 1, 0.8, P.DeepViolet, P.Gold)
-		r:Pauldron(LA, -1, 0.8, P.DeepViolet, P.Gold)
-	end
-	if lv >= 4 then
-		r:Cape(2.1, 3.4, P.Black, true)
-		r:Glow(doll:FindFirstChildWhichIsA("BasePart") or doll, P.NeonSoft, 6, 1)
-	end
-	levelAura(r, lv)
-	return r:Finish(1.05, { RS = { 40, 0, 20 }, LS = { 40, 0, -20 } })
-end
-
-local function Starbreaker(lv)
-	local GOLD = P.Gold
-	local r = Rig.new({ Name = "Starbreaker", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.45, 1.45, 1.45), TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.7, 2.1, 1.6), CF(0, 0.15, 0), P.Coal, M.Metal)
-	r:Wedge(T, V(2.7, 0.6, 0.6), CF(0, -1.0, -0.65) * ANG(0, math.pi, math.pi), P.Black, M.Metal)
-	-- золото-фиолетовые руны
-	for i = 0, 2 do
-		r:Neon(T, V(0.3, 0.3, 0.06), CF(-0.7 + i * 0.7, 0.55 - (i % 2) * 0.3, -0.82) * ANG(0, 0, rad(45)), i % 2 == 0 and GOLD or P.Neon)
-	end
-	r:Neon(T, V(2.2, 0.08, 0.06), CF(0, -0.2, -0.82), GOLD)
-	-- светящийся шлем
-	r:Cyl(H, 1.5, 1.6, CF(0, 0, 0), P.Black, M.Metal, "Y")
-	r:Sphere(H, V(1.6, 0.7, 1.6), CF(0, 0.75, 0), P.Coal, M.Metal)
-	r:Box(H, V(1.3, 0.35, 0.1), CF(0, 0.05, -0.8), P.NeonSoft, M.Neon)
-	r:Box(H, V(0.25, 0.9, 0.2), CF(0, 1.2, 0), GOLD, M.Metal)
-	r:Pauldron(RA, 1, 1.25, P.Black, GOLD, 0.1)
-	r:Pauldron(LA, -1, 1.2, P.Black, GOLD, 0.1)
-	r:Box(RA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
-	r:Box(LA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
-	r:Box(RL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
-	r:Box(LL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
-	r:Cape(2.5, 3.8, P.DeepViolet, true)
-	-- огромный молот: рукоять вперёд, боёк поперёк
-	local hl = 4.0 + (lv >= 4 and 0.6 or 0)
-	r:Cyl(RA, hl, 0.32, CF(0, -1.05, -hl / 2 + 0.4), P.Maroon, M.Fabric, "Z")
-	r:Ball(RA, 0.5, CF(0, -1.05, 0.55), GOLD, M.Metal)
-	local hz = -hl + 0.2
-	local hs = lv >= 5 and 1.25 or 1
-	r:Box(RA, V(1.6, 2.6, 1.6) * hs, CF(0, -1.05, hz), P.Black, M.Metal)
-	r:Cyl(RA, 0.3, 1.9 * hs, CF(0, -1.05 + 1.3 * hs, hz), GOLD, M.Metal, "Y")
-	r:Cyl(RA, 0.3, 1.9 * hs, CF(0, -1.05 - 1.3 * hs, hz), GOLD, M.Metal, "Y")
-	r:Neon(RA, V(1.65, 0.2, 1.65) * hs, CF(0, -1.05, hz), lv >= 3 and P.Neon or GOLD)
-	if lv >= 5 then
-		r:Neon(RA, V(0.8, 2.7, 0.8), CF(0, -1.05, hz), P.NeonSoft)
-	end
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -1.05, hz), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:WeaponTrail(RA, V(0, -1.05, hz + 0.8), V(0, -1.05, hz - 0.8), GOLD)
-	if lv >= 3 then
-		r:Orbit("OrbitStars", H, CF(0, 1.3, 0), 1.6, lv >= 5 and 5 or 3, 0.3, GOLD)
-	end
-	if lv >= 4 then
-		r:Horn(H, 1, V(0.7, 0.4, 0), 0.9, GOLD)
-		r:Horn(H, -1, V(-0.7, 0.4, 0), 0.9, GOLD)
-	end
-	levelAura(r, lv, GOLD)
-	return r:Finish(1.3, { RS = { 30, 0, 0 }, LS = { 20, 0, 0 } })
-end
-
-local function RiftMonarch(lv)
-	local r = Rig.new({ Name = "RiftMonarch", Torso = P.Black, Arm = P.DeepViolet, Leg = P.Black, Head = P.Pale, RoundHead = true, TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.25, 1.8, 1.25), CF(0, 0.2, 0), P.Coal, M.Metal)
-	r:Box(T, V(2.25, 1.7, 1.3), CF(0, -1.75, 0), P.DeepViolet, M.Fabric)
-	r:Seg(T, V(-0.9, 0.9, -0.66), V(0.8, -0.7, -0.66), V2(0.3, 0.08), P.Neon, M.Neon)
-	r:Pauldron(RA, 1, 1.0, P.Black, P.Neon, 0, M.Neon)
-	r:Pauldron(LA, -1, 1.0, P.Black, P.Neon, 0, M.Neon)
-	r:Eyes(P.Neon, { Y = 0.08, Spacing = 0.3, Size = V(0.26, 0.12, 0.06), Tilt = -8 })
-	r:Face({ Mood = "angry", EyeY = 0.08, Mouth = false })
-	-- чёрно-фиолетовая зубчатая корона
-	r:Cyl(H, 0.5, 1.75, CF(0, 0.85, 0), P.Black, M.Metal, "Y")
-	for i = 0, 6 do
-		local a = i / 7 * math.pi * 2
-		local h = (i % 2 == 0) and 1.1 or 0.7
-		r:Wedge(H, V(0.3, h, 0.3), CF(math.cos(a) * 0.75, 1.1 + h / 2, math.sin(a) * 0.75) * ANG(0, -a, 0), i % 2 == 0 and P.Neon or P.Black, i % 2 == 0 and M.Neon or M.Metal)
-	end
-	-- энергетический посох с порталом наверху
-	r:Cyl(RA, 6, 0.26, CF(0, 0.3, -0.55), P.Black, M.Metal, "Y")
-	local top = V(0, 3.6, -0.55)
-	for i = 0, 9 do
-		local a1, a2 = i / 10 * math.pi * 2, (i + 1) / 10 * math.pi * 2
-		r:Rod(RA, top + V(math.cos(a1) * 0.7, math.sin(a1) * 0.7, 0), top + V(math.cos(a2) * 0.7, math.sin(a2) * 0.7, 0), 0.14, P.Neon, M.Neon)
-	end
-	r:Cyl(RA, 0.1, 1.2, CF(top) * ANG(0, rad(90), 0), Color3.fromRGB(10, 0, 20), M.Neon, "X")
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:WeaponTrail(RA, top - V(0, 0.8, 0), top + V(0, 0.8, 0), P.Neon)
-	r:Hands(P.Black, M.Metal)
-	-- плавающие кольца за спиной
-	local function ring(name, radius, count, color)
-		local hub = r:Orbit(name, T, CF(0, 0.6, 1.6) * ANG(rad(90), 0, 0), radius, 0, 0.2, color)
-		for i = 0, count - 1 do
-			local a = i / count * math.pi * 2
-			r:Neon(hub, V(0.25, 0.25, 0.7), CF(math.cos(a) * radius, 0, math.sin(a) * radius) * ANG(0, -a, 0), color)
-		end
-	end
-	ring("OrbitRing1", 1.8, 12, P.Neon)
-	if lv >= 3 then
-		ring("OrbitRing2", 2.6, 16, P.NeonPink)
-	end
-	if lv >= 2 then
-		r:Cape(2.3, 3.8, P.Black, true)
-	end
-	if lv >= 4 then
-		r:Sparkles(T, P.Neon, { Rate = 10, Size = 0.3 })
-	end
-	levelAura(r, lv)
-	return r:Finish(1.4, { RS = { 12, 0, 0 } })
-end
-
-local function RealityDestroyer(lv)
-	local r = Rig.new({ Name = "RealityDestroyer", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.45, 1.45, 1.45), TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.8, 2.2, 1.6), CF(0, 0.15, 0), P.Black, M.Metal)
-	r:Box(T, V(2.4, 0.5, 1.5), CF(0, -0.95, 0), P.Coal, M.Metal)
-	-- красные светящиеся трещины
-	local cracks = { { V(-1.1, 0.9, -0.82), V(-0.2, 0.1, -0.82) }, { V(-0.2, 0.1, -0.82), V(0.4, -0.7, -0.82) }, { V(-0.2, 0.1, -0.82), V(1.0, 0.5, -0.82) }, { V(0.8, 1.0, -0.82), V(1.2, 0.2, -0.82) } }
-	for _, c in ipairs(cracks) do
-		r:Seg(T, c[1], c[2], 0.12, RED, M.Neon)
-	end
-	r:Box(H, V(1.55, 1.55, 1.55), CF(0, 0, 0), P.Black, M.Metal)
-	r:Eyes(RED, { Y = 0.05, Spacing = 0.32, Size = V(0.32, 0.14, 0.06), Tilt = -15, Inset = -0.06 })
-	r:Seg(H, V(-0.5, 0.6, -0.79), V(0.1, -0.2, -0.79), 0.08, RED, M.Neon)
-	-- сломанная корона (не хватает зубцов, наклонена)
-	r:Cyl(H, 0.4, 1.7, CF(0, 0.95, 0) * ANG(0, 0, rad(-9)), P.DarkGold, M.Metal, "Y")
-	for i, a in ipairs({ 0, 1.2, 2.1, 4.4 }) do
-		local h = ({ 0.9, 0.5, 0.75, 0.35 })[i]
-		r:Wedge(H, V(0.3, h, 0.3), CF(math.cos(a) * 0.75, 1.2 + h / 2, math.sin(a) * 0.75) * ANG(0, -a, rad(-9 + i * 4)), P.DarkGold, M.Metal)
-	end
-	r:Pauldron(RA, 1, 1.3, P.Black, RED, 0.1, M.Neon)
-	r:Pauldron(LA, -1, 1.2, P.Black, BLOOD, 0.1)
-	r:Box(RA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
-	r:Box(LA, V(1.2, 1.0, 1.2), CF(0, -0.5, 0), P.Coal, M.Metal)
-	r:Box(RL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
-	r:Box(LL, V(1.15, 1.3, 1.2), CF(0, -0.35, 0), P.Coal, M.Metal)
-	r:Seg(RL, V(-0.3, 0.2, -0.62), V(0.2, -0.6, -0.62), 0.08, RED, M.Neon)
-	r:Cape(2.6, 4.0, BLOOD, true)
-	-- красно-фиолетовый меч
-	local blade = r:Sword(RA, {
-		Length = 5.0 + (lv >= 4 and 0.8 or 0),
-		Width = 0.9,
-		Blade = P.Black,
-		Edge = RED,
-		Core = P.NeonPink,
-		Guard = P.DarkGold,
-		GuardWidth = 2.0,
-		Runes = 2 + lv,
-		Gem = RED,
-	})
-	r:Glow(blade, RED, 10, 1.5)
-	-- парящие осколки реальности
-	local hub = r:Orbit("OrbitShards", T, CF(0, 0.6, 0), 2.6, 0, 0.3, RED)
-	for i = 0, (lv >= 3 and 7 or 5) - 1 do
-		local a = i / (lv >= 3 and 7 or 5) * math.pi * 2
-		r:Wedge(hub, V(0.25, 0.7, 0.4), CF(math.cos(a) * 2.6, math.sin(a * 3) * 0.4, math.sin(a) * 2.6) * ANG(rad(30), -a, rad(20)), i % 2 == 0 and RED or P.Neon, M.Neon)
-	end
-	if lv >= 2 then
-		r:Horn(H, 1, V(0.7, 0.4, 0), 1.0, P.Black)
-	end
-	if lv >= 4 then
-		r:Sparkles(blade, RED, { Rate = 16, Size = 0.4 })
-		r:Horn(H, -1, V(-0.7, 0.4, 0), 0.6, P.Black) -- обломанный рог
-	end
-	levelAura(r, lv, RED)
-	return r:Finish(1.5, { RS = { 25, 0, 0 } })
-end
-
-------------------------------------------------------------------------
--- НОВЫЕ ЮНИТЫ: BLOOD MOON CASE
-------------------------------------------------------------------------
-local function BloodAcolyte(lv)
-	local r = Rig.new({ Name = "BloodAcolyte", Torso = BLOOD, Arm = BLOOD, Leg = P.Black, Head = P.Pale, RoundHead = true })
-	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
-	r:Box(H, V(1.55, 0.28, 1.5), CF(0, 0.74, 0.04), P.Maroon, M.Fabric)
-	r:Box(H, V(0.24, 1.4, 1.5), CF(-0.74, 0.02, 0.04), P.Maroon, M.Fabric)
-	r:Box(H, V(0.24, 1.4, 1.5), CF(0.74, 0.02, 0.04), P.Maroon, M.Fabric)
-	r:Box(H, V(1.55, 1.4, 0.24), CF(0, 0.02, 0.72), P.Maroon, M.Fabric)
-	r:Eyes(RED, { Y = 0.05, Spacing = 0.28, Size = V(0.22, 0.12, 0.06) })
-	r:Face({ Mood = "angry", EyeY = 0.05, Mouth = true })
-	r:Box(T, V(2.2, 1.7, 1.25), CF(0, -1.65, 0), BLOOD, M.Fabric) -- ряса
-	r:Rod(T, V(-1.05, -0.8, -0.6), V(1.05, -0.8, -0.6), 0.14, Color3.fromRGB(150, 120, 80), M.Fabric) -- верёвочный пояс
-	r:Rod(T, V(0.5, -0.8, -0.62), V(0.6, -1.6, -0.65), 0.1, Color3.fromRGB(150, 120, 80), M.Fabric)
-	r:Ball(T, 0.3, CF(0, 0.45, -0.62), RED, M.Neon) -- кровавый камень
-	r:Hands(P.Pale)
-	-- серп: древко и изогнутое лезвие наверху
-	r:Cyl(RA, 2.6, 0.2, CF(0, -0.9, -0.55), Color3.fromRGB(70, 45, 30), M.Wood or M.Plastic, "Y")
-	local top = V(0, 0.35, -0.55)
-	local pts = { top, top + V(0, 0.35, -0.6), top + V(0, 0.2, -1.2), top + V(0, -0.3, -1.5) }
-	r:Chain(RA, pts, 0.3, P.Steel, M.Metal, 0.8)
-	if lv >= 2 then
-		local edge = {}
-		for i, p in ipairs(pts) do
-			edge[i] = p + V(0, -0.14, 0)
-		end
-		r:Chain(RA, edge, 0.08, RED, M.Neon, 1)
-	end
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top + V(0, -0.3, -1.5)), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:WeaponTrail(RA, top, top + V(0, -0.3, -1.5), RED)
-	if lv >= 3 then
-		r:Box(T, V(2.25, 0.6, 1.3), CF(0, 0.75, 0), P.Maroon, M.Fabric)
-	end
-	if lv >= 4 then
-		r:Cape(1.8, 2.8, P.Maroon, true)
-	end
-	if lv >= 5 then
-		r:Orbit("OrbitBlood", T, CF(0, 0.5, 0), 1.8, 3, 0.3, RED)
-	end
-	levelAura(r, lv, RED)
-	return r:Finish(1, { RS = { 20, 0, 0 } })
-end
-
-local function revolver(r, limb, glow)
-	r:Box(limb, V(0.3, 0.55, 0.45), CF(0, -1.25, 0.1), Color3.fromRGB(70, 45, 30)) -- рукоять
-	r:Cyl(limb, 0.4, 0.45, CF(0, -1.6, -0.05), P.Steel, M.Metal, "Y") -- барабан
-	r:Cyl(limb, 1.0, 0.2, CF(0, -2.2, -0.05), P.Black, M.Metal, "Y") -- ствол
-	if glow then
-		r:Cyl(limb, 0.6, 0.22, CF(0, -2.0, -0.05), RED, M.Neon, "Y")
-	end
-	return V(0, -2.75, -0.05)
-end
-
-local function CrimsonGunslinger(lv)
-	local r = Rig.new({ Name = "CrimsonGunslinger", Torso = P.Coal, Arm = P.Coal, Leg = Color3.fromRGB(50, 35, 30), Head = P.Skin, RoundHead = true })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	-- ковбойская шляпа
-	r:Cyl(H, 0.14, 2.3, CF(0, 0.66, 0) * ANG(rad(-5), 0, rad(-4)), P.Black, M.Fabric, "Y")
-	r:Cyl(H, 0.7, 1.3, CF(0, 1.02, 0), P.Black, M.Fabric, "Y")
-	r:Cyl(H, 0.14, 1.34, CF(0, 0.8, 0), RED, M.Fabric, "Y")
-	r:Eyes(RED, { Y = 0.02, Spacing = 0.28, Size = V(0.24, 0.1, 0.06), Tilt = -10 })
-	r:Face({ Mood = "angry", EyeY = 0.02, Mouth = false })
-	r:Box(H, V(1.38, 0.45, 0.15), CF(0, -0.38, -0.6), BLOOD, M.Fabric) -- платок
-	-- пончо
-	r:Wedge(T, V(2.4, 0.9, 0.7), CF(0, 0.6, -0.5) * ANG(0, math.pi, 0), BLOOD, M.Fabric)
-	r:Wedge(T, V(2.4, 0.9, 0.7), CF(0, 0.6, 0.5), BLOOD, M.Fabric)
-	r:Box(T, V(2.3, 0.12, 1.3), CF(0, 0.16, 0), P.Gold, M.Fabric)
-	r:Box(T, V(2.1, 0.25, 1.1), CF(0, -0.8, 0), Color3.fromRGB(70, 45, 30)) -- пояс
-	r:Ball(T, 0.3, CF(0, -0.8, -0.58), P.Gold, M.Metal)
-	for i = 0, 4 do
-		r:Cyl(T, 0.25, 0.1, CF(-0.8 + i * 0.4, -0.8, -0.6), P.Gold, M.Metal, "Y") -- патроны
-	end
-	r:Hands(P.Black, M.Fabric)
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.08, 0.8, 1.15), CF(0, -0.62, -0.04), Color3.fromRGB(70, 45, 30)) -- сапоги
-		r:Cyl(Lg, 0.1, 0.35, CF(0, -0.95, 0.62), P.Steel, M.Metal, "Z") -- шпоры
-	end
-	local tip = revolver(r, RA, lv >= 3)
-	revolver(r, LA, lv >= 3)
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(tip), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	if lv >= 2 then
-		r:Pauldron(RA, 1, 0.7, BLOOD, P.Gold)
-	end
-	if lv >= 4 then
-		r:Cape(1.8, 2.6, P.Black, true)
-	end
-	if lv >= 5 then
-		r:Neon(H, V(1.36, 0.08, 1.36), CF(0, 0.8, 0), RED)
-	end
-	levelAura(r, lv, RED)
-	return r:Finish(1, { RS = { 70, 0, 0 }, LS = { 70, 0, 0 } })
-end
-
-local function MoonWitch(lv)
-	local r = Rig.new({ Name = "MoonWitch", Torso = Color3.fromRGB(40, 12, 30), Arm = Color3.fromRGB(40, 12, 30), Leg = P.Black, Head = MOON, RoundHead = true })
-	local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
-	-- остроконечная шляпа ведьмы
-	r:Cyl(H, 0.14, 2.4, CF(0, 0.7, 0) * ANG(rad(-4), 0, rad(5)), P.Black, M.Fabric, "Y")
-	r:Cyl(H, 0.6, 1.3, CF(0, 1.05, 0.05), P.Black, M.Fabric, "Y")
-	r:Cyl(H, 0.6, 0.9, CF(0.1, 1.6, 0.25) * ANG(rad(-15), 0, rad(-10)), P.Black, M.Fabric, "Y")
-	r:Cyl(H, 0.5, 0.5, CF(0.2, 2.05, 0.55) * ANG(rad(-30), 0, rad(-18)), P.Black, M.Fabric, "Y")
-	r:Cyl(H, 0.14, 1.34, CF(0, 0.85, 0.05), RED, M.Fabric, "Y")
-	r:Neon(H, V(0.3, 0.3, 0.08), CF(0.45, 1.0, -0.6) * ANG(0, 0, rad(45)), MOON)
-	-- длинные волосы
-	r:Box(H, V(1.4, 1.4, 0.3), CF(0, -0.3, 0.6), Color3.fromRGB(90, 10, 30))
-	r:Eyes(RED, { Y = 0.05, Spacing = 0.28, Size = V(0.22, 0.14, 0.06) })
-	r:Face({ Mood = "calm", EyeY = 0.05, MouthColor = BLOOD })
-	-- платье
-	r:Box(T, V(2.2, 2.1, 1.3), CF(0, -2.0, 0), Color3.fromRGB(40, 12, 30), M.Fabric)
-	r:Box(T, V(2.25, 0.15, 1.35), CF(0, -2.95, 0), RED, M.Fabric)
-	r:Rod(T, V(-1.0, -0.8, -0.6), V(1.0, -0.8, -0.6), 0.14, P.Gold, M.Metal)
-	r:Hands(MOON)
-	-- посох с полумесяцем
-	r:Cyl(RA, 5, 0.22, CF(0, -0.5, -0.55), P.Black, M.Plastic, "Y")
-	local c = V(0, 2.5, -0.55)
-	local pts = {}
-	for i = 0, 6 do
-		local a = math.rad(-60 + i * 40)
-		pts[#pts + 1] = c + V(0, math.cos(a) * 0.9, math.sin(a) * 0.9)
-	end
-	r:Chain(RA, pts, 0.3, MOON, M.Neon, 0.9, true)
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(c), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:WeaponTrail(RA, c - V(0, 0.9, 0), c + V(0, 0.9, 0), MOON)
-	r:Glow(RA, MOON, 6, 1)
-	-- парящая луна
-	if lv >= 2 then
-		local hub = r:Orbit("OrbitMoon", T, CF(0, 1.4, 0), 1.9, 0, 0.3, MOON)
-		r:Ball(hub, 0.7, CF(1.9, 0, 0), MOON, M.Neon)
-		if lv >= 4 then
-			r:Ball(hub, 0.5, CF(-1.9, 0, 0), RED, M.Neon)
-		end
-	end
-	if lv >= 3 then
-		r:Cape(1.9, 3.2, P.Black, true)
-	end
-	if lv >= 5 then
-		r:Sparkles(T, RED, { Rate = 8, Size = 0.3 })
-	end
-	levelAura(r, lv, MOON)
-	return r:Finish(1.05, { RS = { 10, 0, 0 }, LS = { 10, 0, -10 } })
-end
-
-local function BloodfangWarlord(lv)
-	local r = Rig.new({ Name = "BloodfangWarlord", Torso = Color3.fromRGB(80, 50, 40), Arm = Color3.fromRGB(80, 50, 40), Leg = P.Black, Head = Color3.fromRGB(80, 50, 40), HeadSize = V(1.4, 1.4, 1.4) })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	local FUR = Color3.fromRGB(70, 60, 60)
-	-- волчья шкура-капюшон с пастью
-	r:Sphere(H, V(1.7, 1.1, 1.8), CF(0, 0.65, 0.1), FUR, M.Fabric)
-	r:Box(H, V(0.9, 0.5, 0.9), CF(0, 0.75, -0.95), FUR, M.Fabric)
-	for i = -1, 1, 2 do
-		r:Wedge(H, V(0.15, 0.35, 0.2), CF(i * 0.3, 0.42, -1.3) * ANG(0, 0, math.pi), P.White)
-		r:Wedge(H, V(0.3, 0.5, 0.4), CF(i * 0.55, 1.25, 0.2), FUR, M.Fabric) -- уши
-	end
-	r:Neon(H, V(0.12, 0.08, 0.06), CF(-0.3, 0.88, -1.4), RED)
-	r:Neon(H, V(0.12, 0.08, 0.06), CF(0.3, 0.88, -1.4), RED)
-	r:Eyes(RED, { Y = 0.0, Spacing = 0.32, Size = V(0.28, 0.12, 0.06), Tilt = -15 })
-	r:Box(H, V(0.12, 0.6, 0.06), CF(-0.32, -0.25, -0.72), RED, M.Neon) -- боевая раскраска
-	r:Box(H, V(0.12, 0.6, 0.06), CF(0.32, -0.25, -0.72), RED, M.Neon)
-	-- броня и мех
-	r:Box(T, V(2.5, 1.6, 1.4), CF(0, 0.3, 0), P.Coal, M.Metal)
-	r:Sphere(T, V(3.2, 0.9, 1.8), CF(0, 1.0, 0.05), FUR, M.Fabric)
-	r:Box(T, V(2.3, 0.35, 1.3), CF(0, -0.8, 0), Color3.fromRGB(70, 45, 30))
-	r:Ball(T, 0.45, CF(0, -0.8, -0.68), P.Pale) -- череп-пряжка
-	for _, x in ipairs({ -0.6, 0.6 }) do
-		r:Box(T, V(0.8, 0.9, 0.15), CF(x, -1.35, -0.62) * ANG(rad(-8), 0, 0), FUR, M.Fabric)
-	end
-	r:Pauldron(RA, 1, 1.15, P.Coal, RED, 0, M.Neon)
-	r:Pauldron(LA, -1, 1.1, P.Coal, P.Steel)
-	r:Hands(Color3.fromRGB(60, 40, 30), M.Fabric)
-	for _, Lg in ipairs({ RL, LL }) do
-		r:Box(Lg, V(1.15, 0.9, 1.2), CF(0, -0.55, 0), FUR, M.Fabric)
-	end
-	-- двуручный топор: рукоять вперёд, два лезвия
-	local hl = 4.2
-	r:Cyl(RA, hl, 0.3, CF(0, -1.05, -hl / 2 + 0.4), Color3.fromRGB(60, 40, 30), M.Fabric, "Z")
-	local hz = -hl + 0.4
-	local bs = lv >= 4 and 1.2 or 1
-	for _, side in ipairs({ 1, -1 }) do
-		r:Box(RA, V(0.18, 1.3 * bs, 1.2 * bs), CF(0, -1.05 + side * 0.85 * bs, hz), P.Steel, M.Metal)
-		r:Wedge(RA, V(0.18, 0.6 * bs, 1.2 * bs), CF(0, -1.05 + side * 1.75 * bs, hz) * ANG(side == 1 and 0 or math.pi, 0, 0), P.Steel, M.Metal)
-		if lv >= 2 then
-			r:Neon(RA, V(0.2, 0.12, 1.2 * bs), CF(0, -1.05 + side * 2.05 * bs, hz), RED)
-		end
-	end
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(0, -1.05, hz), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:WeaponTrail(RA, V(0, -1.05 + 1.8 * bs, hz), V(0, -1.05 - 1.8 * bs, hz), RED)
-	if lv >= 3 then
-		r:Cape(2.4, 3.4, BLOOD, true)
-	end
-	if lv >= 5 then
-		r:Horn(H, 1, V(0.7, 0.6, 0.1), 0.8, P.Pale)
-		r:Horn(H, -1, V(-0.7, 0.6, 0.1), 0.8, P.Pale)
-	end
-	levelAura(r, lv, RED)
-	return r:Finish(1.3, { RS = { 30, 0, 0 } })
-end
-
-local function LunarSeraph(lv)
-	local r = Rig.new({ Name = "LunarSeraph", Torso = SILVER, Arm = SILVER, Leg = Color3.fromRGB(150, 150, 170), Head = MOON, RoundHead = true, TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.2, 1.5, 1.2), CF(0, 0.3, 0), P.White, M.Metal)
-	r:Neon(T, V(0.45, 0.45, 0.06), CF(0, 0.4, -0.62) * ANG(0, 0, rad(45)), Color3.fromRGB(255, 160, 200))
-	r:Box(T, V(2.2, 1.3, 1.25), CF(0, -1.55, 0), P.White, M.Fabric)
-	r:Box(T, V(2.24, 0.2, 1.28), CF(0, -0.85, 0), P.Gold, M.Metal)
-	r:Pauldron(RA, 1, 0.9, P.White, P.Gold)
-	r:Pauldron(LA, -1, 0.9, P.White, P.Gold)
-	r:Box(H, V(1.4, 1.2, 0.35), CF(0, 0.05, 0.55), Color3.fromRGB(250, 240, 220)) -- волосы
-	r:Eyes(Color3.fromRGB(255, 120, 170), { Y = 0.05, Spacing = 0.3, Size = V(0.24, 0.12, 0.06) })
-	r:Face({ Mood = "calm", EyeY = 0.05, BrowColor = P.Gray })
-	r:Hands(P.White, M.Metal)
-	-- полумесяц-нимб
-	local pts = {}
-	for i = 0, 7 do
-		local a = math.rad(-110 + i * 31)
-		pts[#pts + 1] = V(math.sin(a) * 0.95, 1.35 + math.cos(a) * 0.3, 0.3 + math.cos(a) * 0.2)
-	end
-	r:Chain(H, pts, 0.16, MOON, M.Neon, 1, true)
-	-- две пары крыльев
-	local ws = lv >= 4 and 1.2 or 1
-	for pair = 1, 2 do
-		for _, side in ipairs({ 1, -1 }) do
-			local name = (side == 1 and "WingR" or "WingL") .. (pair == 2 and "2" or "")
-			local y = pair == 1 and 0.6 or -0.2
-			local wing = r:Joint(name, T, V(2.8 * ws, 0.45, 0.25), CF(0.3 * side, y, 0.55), CF(1.4 * ws * side, 0.45, 0.15) * ANG(0, 0, rad((pair == 1 and 25 or -10) * side)), P.White)
-			for i = 1, 4 do
-				local len = (2.2 - i * 0.3) * ws * (pair == 2 and 0.75 or 1)
-				r:Box(wing, V(0.5 * ws, len, 0.18), CF((-1.2 + i * 0.55) * ws * side, -len / 2 + 0.1, 0.05) * ANG(0, 0, rad(-10 * side)), i % 2 == 0 and MOON or P.White)
-			end
-		end
-	end
-	-- копьё-луч
-	local sl = lv >= 5 and 1.2 or 1
-	r:Cyl(RA, 6.2 * sl, 0.24, CF(0, 0.3, -0.55), P.White, M.Metal, "Y")
-	r:Cyl(RA, 0.25, 0.5, CF(0, 3.1 * sl + 0.2, -0.55), P.Gold, M.Metal, "Y")
-	local tip = r:Neon(RA, V(0.35, 1.6 * sl, 0.12), CF(0, 4.1 * sl + 0.2, -0.55), Color3.fromRGB(255, 180, 210))
-	tip.Name = "Muzzle"
-	r.Muzzle = tip
-	r:WeaponTrail(RA, V(0, 3.0 * sl, -0.55), V(0, 5.0 * sl, -0.55), MOON)
-	r:Glow(tip, Color3.fromRGB(255, 180, 210), 8, 1.5)
-	if lv >= 3 then
-		r:Orbit("OrbitStars", H, CF(0, 1.4, 0.2), 1.4, 4, 0.2, MOON)
-	end
-	if lv >= 5 then
-		r:Cape(1.8, 3.4, Color3.fromRGB(240, 200, 220), true)
-	end
-	levelAura(r, lv, MOON)
-	return r:Finish(1.35, { RS = { 10, 0, 0 } })
-end
-
-local function CrimsonEclipse(lv)
-	local r = Rig.new({ Name = "CrimsonEclipse", Torso = P.Black, Arm = P.Black, Leg = P.Black, Head = P.Black, HeadSize = V(1.4, 1.4, 1.4), TorsoMat = M.Metal })
-	local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
-	r:Box(T, V(2.6, 2.0, 1.5), CF(0, 0.2, 0), P.Black, M.Metal)
-	r:Box(T, V(2.3, 1.7, 1.35), CF(0, -1.7, 0), BLOOD, M.Fabric)
-	for _, c in ipairs({ { V(-0.9, 0.9, -0.77), V(-0.1, 0.0, -0.77) }, { V(-0.1, 0.0, -0.77), V(0.7, -0.6, -0.77) }, { V(0.6, 0.9, -0.77), V(0.2, 0.3, -0.77) } }) do
-		r:Seg(T, c[1], c[2], 0.12, RED, M.Neon)
-	end
-	-- капюшон-шлем
-	r:Sphere(H, V(1.7, 1.6, 1.7), CF(0, 0.15, 0.05), P.Black, M.Metal)
-	r:Box(H, V(1.2, 0.5, 0.2), CF(0, -0.05, -0.75), Color3.fromRGB(10, 0, 5))
-	r:Eyes(RED, { Y = 0.0, Spacing = 0.3, Size = V(0.3, 0.12, 0.06), Tilt = -15, Inset = -0.1 })
-	-- диск затмения за головой
-	r:Cyl(H, 0.15, 3.0, CF(0, 0.4, 1.0), RED, M.Neon, "Z")
-	r:Cyl(H, 0.2, 2.5, CF(0.15, 0.45, 1.05), P.Black, M.Plastic, "Z")
-	r:Pauldron(RA, 1, 1.2, P.Black, RED, 0.1, M.Neon)
-	r:Pauldron(LA, -1, 1.15, P.Black, BLOOD, 0.1)
-	r:Hands(P.Black, M.Metal)
-	r:Cape(2.5, 4.0, BLOOD, true)
-	-- огромная красная коса
-	r:Cyl(RA, 6.4, 0.28, CF(0, 0.2, -0.55), P.Black, M.Metal, "Y")
-	local top = V(0, 3.35, -0.55)
-	local bl = lv >= 5 and 1.35 or 1.1
-	local pts = { top, top + V(0, 0.2, -1.0) * bl, top + V(0, -0.05, -2.0) * bl, top + V(0, -0.6, -2.9) * bl, top + V(0, -1.4, -3.4) * bl }
-	r:Chain(RA, pts, 0.5, P.Black, M.Metal, 0.85)
-	local edge = {}
-	for i, p in ipairs(pts) do
-		edge[i] = p + V(0, -0.25, 0)
-	end
-	r:Chain(RA, edge, 0.14, RED, M.Neon, 1)
-	r:Ball(RA, 0.6, CF(top), RED, M.Neon)
-	r.Muzzle = r:Box(RA, V(0.2, 0.2, 0.2), CF(top + V(0, -0.6, -2.5) * bl), P.Black, M.Plastic, { Transparency = 1, Name = "Muzzle" })
-	r:WeaponTrail(RA, top + V(0, -0.2, -0.8) * bl, top + V(0, -1.4, -3.4) * bl, RED)
-	-- капли крови на орбите
-	local hub = r:Orbit("OrbitBlood", T, CF(0, 0.5, 0), 2.4, 0, 0.3, RED)
-	for i = 0, (lv >= 3 and 6 or 4) - 1 do
-		local a = i / (lv >= 3 and 6 or 4) * math.pi * 2
-		r:Sphere(hub, V(0.35, 0.5, 0.35), CF(math.cos(a) * 2.4, math.sin(a * 2) * 0.3, math.sin(a) * 2.4), RED, M.Neon)
-	end
-	if lv >= 2 then
-		r:Horn(H, 1, V(0.6, 0.5, 0.1), 1.1, P.Black)
-		r:Horn(H, -1, V(-0.6, 0.5, 0.1), 1.1, P.Black)
-	end
-	if lv >= 4 then
-		r:Sparkles(T, RED, { Rate = 14, Size = 0.4, Up = 2 })
-	end
-	levelAura(r, lv, RED)
-	return r:Finish(1.5, { RS = { 8, 0, 0 } })
-end
-
 local Builders = {
 	VoidSoldier = VoidSoldier,
 	ShadowArcher = ShadowArcher,
@@ -2256,10 +1788,10 @@ local RARITY_AURA = {
 -- на 5-м уровне броня ещё и подсвечивается цветом редкости.
 local RARITY_TINT = {
 	Epic = Color3.fromRGB(150, 80, 230), Legendary = Color3.fromRGB(230, 180, 60),
-	Mythic = Color3.fromRGB(230, 50, 140), Secret = Color3.fromRGB(230, 30, 40),
+	Mythic = Color3.fromRGB(150, 70, 230), Secret = Color3.fromRGB(230, 30, 40),
 }
 applyLevelSkin = function(model, lv, rarity)
-	local tint = RARITY_TINT[rarity or ""] or Color3.fromRGB(150, 110, 230)
+	local tint = RARITY_TINT[rarity or ""]
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") and d.Transparency < 1 then
 			local mat = d.Material
@@ -2268,14 +1800,14 @@ applyLevelSkin = function(model, lv, rarity)
 					d.Material = Enum.Material.CorrodedMetal
 				elseif lv >= 4 then
 					d.Material = Enum.Material.Foil
-					if lv >= 5 then
-						d.Color = d.Color:Lerp(tint, 0.18)
+					if lv >= 5 and tint then
+						d.Color = d.Color:Lerp(tint, 0.1)
 					end
 				end
 			elseif mat == M.Plastic and lv == 1 then
 				d.Material = Enum.Material.Plastic
-			elseif mat == M.Fabric and lv >= 5 then
-				d.Color = d.Color:Lerp(tint, 0.1)
+			elseif mat == M.Fabric and lv >= 5 and tint then
+				d.Color = d.Color:Lerp(tint, 0.06)
 			end
 		end
 	end
@@ -2290,6 +1822,7 @@ function UnitModels.Build(unitId, level)
 	local rig = builder(lv)
 	rig.Model.Name = unitId
 	applyLevelSkin(rig.Model, lv, UNIT_RARITY[unitId])
+	Kit.Calm(rig.Model)
 	local aura = not UnitModels.Lite and RARITY_AURA[UNIT_RARITY[unitId] or ""]
 	if aura then
 		local at = Instance.new("Attachment")

@@ -2831,11 +2831,11 @@ local function buildPlatform(groundY, radius, glow)
 	local disc = ANG(0, 0, rad(90))
 	part({ Name = "Platform", Shape = Enum.PartType.Cylinder, Size = V(0.6, radius * 2, radius * 2), CFrame = CF(0, groundY - 0.3, 0) * disc, Color = Color3.fromRGB(24, 20, 32), Material = Enum.Material.Slate })
 	part({ Name = "PlatformTop", Shape = Enum.PartType.Cylinder, Size = V(0.62, radius * 1.7, radius * 1.7), CFrame = CF(0, groundY - 0.29, 0) * disc, Color = Color3.fromRGB(40, 34, 54), Material = Enum.Material.Slate })
-	part({ Name = "PlatformRing", Shape = Enum.PartType.Cylinder, Size = V(0.64, radius * 2.06, radius * 2.06), CFrame = CF(0, groundY - 0.36, 0) * disc, Color = glow, Material = Enum.Material.Neon })
+	part({ Name = "PlatformRing", Shape = Enum.PartType.Cylinder, Size = V(0.64, radius * 2.06, radius * 2.06), CFrame = CF(0, groundY - 0.36, 0) * disc, Color = glow:Lerp(Color3.new(0, 0, 0), 0.35), Material = Enum.Material.SmoothPlastic })
 	-- руны по кругу
 	for i = 0, 7 do
 		local a = i / 8 * math.pi * 2
-		part({ Name = "Rune", Size = V(0.12, 0.62, radius * 0.18), CFrame = CF(math.cos(a) * radius * 0.93, groundY - 0.3, math.sin(a) * radius * 0.93) * ANG(0, -a, 0), Color = glow, Material = Enum.Material.Neon })
+		part({ Name = "Rune", Size = V(0.12, 0.62, radius * 0.18), CFrame = CF(math.cos(a) * radius * 0.93, groundY - 0.3, math.sin(a) * radius * 0.93) * ANG(0, -a, 0), Color = glow:Lerp(Color3.new(0, 0, 0), 0.45), Material = Enum.Material.Neon })
 	end
 end
 
@@ -2938,7 +2938,7 @@ local function refreshInfo()
 			end
 		end
 	end
-	refs.Equip.Text = not owned and "🔒 НЕТ В КОЛЛЕКЦИИ" or (equipped and "СНЯТЬ" or "ЭКИПИРОВАТЬ")
+	refs.Equip.Text = not owned and "НЕТ В КОЛЛЕКЦИИ" or (equipped and "СНЯТЬ" or "ЭКИПИРОВАТЬ")
 	refs.Equip.BackgroundColor3 = not owned and Color3.fromRGB(50, 44, 60) or (equipped and Color3.fromRGB(130, 50, 60) or Color3.fromRGB(70, 40, 140))
 	refs.Equip.AutoButtonColor = false
 	refs.Equip.Active = owned
@@ -2950,7 +2950,7 @@ end
 local function setGlow(color)
 	for i, g in ipairs(refs.Glows) do
 		g.BackgroundColor3 = color
-		g.BackgroundTransparency = 0.72 + i * 0.07
+		g.BackgroundTransparency = 0.84 + i * 0.04
 	end
 	refs.SceneStroke.Color = color
 end
@@ -3073,12 +3073,12 @@ local function build()
 	refs.Cam.FieldOfView = 32
 	refs.Cam.Parent = vf
 	vf.CurrentCamera = refs.Cam
-	K.label({ Parent = scene, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.new(1, -20, 0, 18), Text = "🖱 тяни — вращать  •  колесо — приблизить  •  📱 палец / щипок", TextColor3 = THEME.Dim, Font = Enum.Font.Gotham, ZIndex = 24 })
+	K.label({ Parent = scene, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.new(1, -20, 0, 18), Text = "Тяни мышью или пальцем — вращать  •  колесо / щипок — приблизить", TextColor3 = THEME.Dim, Font = Enum.Font.Gotham, ZIndex = 24 })
 	-- анимации
 	local animRow = K.new("Frame", { Parent = scene, Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(330, 34), BackgroundTransparency = 1, ZIndex = 24 }, {
 		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }),
 	})
-	for i, a in ipairs({ { "IDLE", "Idle" }, { "⚔ АТАКА", "Attack" }, { "✦ ПОЗА", "Fidget" } }) do
+	for i, a in ipairs({ { "IDLE", "Idle" }, { "АТАКА", "Attack" }, { "ПОЗА", "Fidget" } }) do
 		K.button({ Parent = animRow, Size = UDim2.fromOffset(104, 32), Text = a[1], LayoutOrder = i, BackgroundColor3 = THEME.BG3, ZIndex = 25 }, function()
 			UnitViewer.PlayAnim(a[2])
 		end)
@@ -3121,11 +3121,11 @@ local function build()
 	local stats = K.new("Frame", { Parent = info, Position = UDim2.fromOffset(0, 178), Size = UDim2.new(1, 0, 0, 180), BackgroundTransparency = 1, ZIndex = 22 }, {
 		K.new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
-	refs.StatDamage = statRow(stats, 1, "⚔ Урон")
-	refs.StatRange = statRow(stats, 2, "◎ Радиус")
-	refs.StatSpeed = statRow(stats, 3, "⏱ Скорость атаки")
-	refs.StatCost = statRow(stats, 4, "💰 Установка")
-	refs.StatUpgrade = statRow(stats, 5, "⬆ Улучшение")
+	refs.StatDamage = statRow(stats, 1, "Урон")
+	refs.StatRange = statRow(stats, 2, "Радиус")
+	refs.StatSpeed = statRow(stats, 3, "Скорость атаки")
+	refs.StatCost = statRow(stats, 4, "Установка")
+	refs.StatUpgrade = statRow(stats, 5, "Улучшение")
 	-- способности
 	local ab = K.new("Frame", { Parent = info, Position = UDim2.fromOffset(0, 364), Size = UDim2.new(1, 0, 0, 108), BackgroundColor3 = THEME.BG2, BackgroundTransparency = 0.2, ZIndex = 22 })
 	K.corner(8).Parent = ab
@@ -3208,6 +3208,11 @@ end
 ------------------------------------------------------------------------
 function UnitViewer.Open(unitId, level)
 	if not Config.Units[unitId] then
+		return
+	end
+	-- 3D-просмотр открывается только для юнитов, которые уже есть в коллекции
+	local prof = ctx.Profile
+	if not prof or (prof.Inventory[unitId] or 0) <= 0 then
 		return
 	end
 	if not window then
@@ -3432,41 +3437,129 @@ local function button(props, onClick)
 	return b
 end
 
--- Квадратная иконка с эмодзи и подписью (панель справа)
-local function iconButton(parent, order, icon, caption, top, bottom, edge, onClick, size)
+------------------------------------------------------------------------
+-- ИКОНКИ: рисуются из фигур (без эмодзи и загруженных картинок)
+------------------------------------------------------------------------
+-- фигура в долях контейнера: центр (x, y), размер (w, h), поворот, скругление
+local function shape(parent, x, y, w, h, color, rot, round, z, props)
+	local f = new("Frame", {
+		Parent = parent,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(x, y),
+		Size = UDim2.fromScale(w, h),
+		BackgroundColor3 = color,
+		BorderSizePixel = 0,
+		Rotation = rot or 0,
+		ZIndex = z or 1,
+	})
+	if round then
+		new("UICorner", { Parent = f, CornerRadius = UDim.new(round, 0) })
+	end
+	for k, v in pairs(props or {}) do
+		f[k] = v
+	end
+	return f
+end
+
+local function shade(f, top, bottom, rot)
+	new("UIGradient", { Parent = f, Rotation = rot or 90, Color = ColorSequence.new(top, bottom) })
+end
+
+local ICONS = {}
+
+-- кристалл: огранённый ромб с бликом
+function ICONS.Gem(c, z)
+	local o = shape(c, 0.5, 0.52, 0.6, 0.6, Color3.new(1, 1, 1), 45, 0.12, z)
+	shade(o, Color3.fromRGB(150, 210, 255), Color3.fromRGB(80, 70, 220), 45)
+	new("UIStroke", { Parent = o, Color = Color3.fromRGB(20, 14, 50), Thickness = 2 })
+	shape(c, 0.5, 0.4, 0.28, 0.28, Color3.fromRGB(215, 240, 255), 45, 0.1, z + 1, { BackgroundTransparency = 0.15 })
+	shape(c, 0.38, 0.38, 0.08, 0.16, Color3.new(1, 1, 1), 45, 0.5, z + 2, { BackgroundTransparency = 0.1 })
+end
+
+-- монета
+function ICONS.Coin(c, z)
+	local o = shape(c, 0.5, 0.5, 0.74, 0.74, Color3.new(1, 1, 1), 0, 0.5, z)
+	shade(o, Color3.fromRGB(255, 225, 110), Color3.fromRGB(190, 120, 30))
+	new("UIStroke", { Parent = o, Color = Color3.fromRGB(70, 40, 10), Thickness = 2 })
+	local i = shape(c, 0.5, 0.5, 0.5, 0.5, Color3.fromRGB(215, 150, 45), 0, 0.5, z + 1)
+	new("TextLabel", { Parent = i, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "$", TextScaled = true, Font = Enum.Font.FredokaOne, TextColor3 = Color3.fromRGB(90, 50, 10), ZIndex = z + 2 })
+end
+
+-- шлем рыцаря Пустоты с Т-визором
+function ICONS.Helmet(c, z)
+	local acc = Color3.fromRGB(196, 130, 255)
+	for _, sx in ipairs({ -1, 1 }) do
+		shape(c, 0.5 + 0.26 * sx, 0.26, 0.09, 0.3, Color3.fromRGB(215, 205, 190), 28 * sx, 0.3, z)
+	end
+	local h = shape(c, 0.5, 0.55, 0.54, 0.62, Color3.new(1, 1, 1), 0, 0.22, z + 1)
+	shade(h, Color3.fromRGB(110, 106, 130), Color3.fromRGB(40, 36, 54))
+	new("UIStroke", { Parent = h, Color = Color3.fromRGB(16, 12, 24), Thickness = 2 })
+	shape(c, 0.5, 0.2, 0.1, 0.18, Color3.fromRGB(90, 86, 110), 0, 0.3, z)
+	shape(c, 0.5, 0.48, 0.38, 0.07, acc, 0, 0.5, z + 2)
+	shape(c, 0.5, 0.6, 0.07, 0.24, acc, 0, 0.5, z + 2)
+end
+
+-- шестерёнка настроек
+function ICONS.Gear(c, z)
+	local col = Color3.fromRGB(190, 186, 210)
+	for k = 0, 7 do
+		local a = k / 8 * math.pi * 2
+		shape(c, 0.5 + math.cos(a) * 0.3, 0.5 + math.sin(a) * 0.3, 0.16, 0.16, col, math.deg(a), 0.15, z)
+	end
+	shape(c, 0.5, 0.5, 0.6, 0.6, col, 0, 0.5, z + 1)
+	shape(c, 0.5, 0.5, 0.26, 0.26, Color3.fromRGB(34, 30, 48), 0, 0.5, z + 2)
+end
+
+-- стрелка «назад»
+function ICONS.Back(c, z)
+	local col = Color3.fromRGB(255, 235, 240)
+	shape(c, 0.56, 0.5, 0.5, 0.12, col, 0, 0.5, z)
+	shape(c, 0.34, 0.37, 0.32, 0.12, col, -42, 0.5, z)
+	shape(c, 0.34, 0.63, 0.32, 0.12, col, 42, 0.5, z)
+end
+
+-- контейнер с иконкой (квадратный)
+local function icon(kind, parent, props)
+	local c = new("Frame", { Parent = parent, Name = "Icon" .. kind, BackgroundTransparency = 1, Size = props.Size, Position = props.Position or UDim2.new(), AnchorPoint = props.AnchorPoint or Vector2.new(), ZIndex = props.ZIndex or 1 })
+	new("UIAspectRatioConstraint", { Parent = c })
+	ICONS[kind](c, (props.ZIndex or 1) + 1)
+	return c
+end
+UI.Icon = icon
+
+-- Квадратная кнопка-иконка с подписью (панель справа)
+local function iconButton(parent, order, kind, caption, top, bottom, edge, onClick, size)
 	size = size or 76
 	local b = new("TextButton", {
 		Parent = parent,
+		Name = kind .. "Button",
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(size, size),
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
 		AutoButtonColor = false,
-		Text = icon,
-		Font = Enum.Font.GothamBold,
-		TextScaled = true,
-		TextColor3 = Color3.new(1, 1, 1),
+		Text = "",
 	})
-	corner(18).Parent = b
-	stroke(edge, 3).Parent = b
+	corner(16).Parent = b
+	stroke(edge, 2).Parent = b
 	new("UIGradient", { Parent = b, Rotation = 90, Color = ColorSequence.new(top, bottom) })
-	new("UIPadding", { Parent = b, PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, size * 0.3), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) })
-	-- блик сверху
-	local shine = new("Frame", { Parent = b, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.82, BorderSizePixel = 0, Position = UDim2.new(0, -6, 0, -4), Size = UDim2.new(1, 12, 0.32, 0) })
+	-- мягкий блик сверху
+	local shine = new("Frame", { Parent = b, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.9, BorderSizePixel = 0, Position = UDim2.fromOffset(4, 4), Size = UDim2.new(1, -8, 0.4, 0) })
 	corner(12).Parent = shine
-	local cap = label({ Parent = b, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 1, 2), Size = UDim2.new(1, 14, 0, size * 0.22), Text = caption, Font = Enum.Font.FredokaOne })
+	icon(kind, b, { Size = UDim2.fromScale(0.72, 0.72), Position = UDim2.fromScale(0.5, 0.48), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = 2 })
+	local cap = label({ Parent = b, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 1, 3), Size = UDim2.new(1, 16, 0, math.max(14, size * 0.2)), Text = caption, Font = Enum.Font.GothamBold })
 	local scale = new("UIScale", { Parent = b })
 	b.MouseEnter:Connect(function()
-		tween(scale, 0.12, { Scale = 1.1 })
+		tween(scale, 0.12, { Scale = 1.08 })
 	end)
 	b.MouseLeave:Connect(function()
 		tween(scale, 0.12, { Scale = 1 })
 	end)
 	b.MouseButton1Down:Connect(function()
-		tween(scale, 0.06, { Scale = 0.92 })
+		tween(scale, 0.06, { Scale = 0.93 })
 	end)
 	b.MouseButton1Up:Connect(function()
-		tween(scale, 0.1, { Scale = 1.06 })
+		tween(scale, 0.1, { Scale = 1.04 })
 	end)
 	if onClick then
 		b.Activated:Connect(onClick)
@@ -3572,8 +3665,10 @@ local function buildHUD()
 	-- деньги и гемы
 	local cur = panel({ Parent = gui, Size = UDim2.fromOffset(230, 92), Position = UDim2.fromOffset(16, 16) })
 	refs.Currency = cur
-	refs.Money = label({ Parent = cur, Size = UDim2.new(1, -20, 0, 38), Position = UDim2.fromOffset(12, 6), Text = "💰 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Good })
-	refs.Gems = label({ Parent = cur, Size = UDim2.new(1, -20, 0, 34), Position = UDim2.fromOffset(12, 50), Text = "💎 0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(120, 200, 255) })
+	refs.Money = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 36), Position = UDim2.fromOffset(52, 6), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(255, 220, 120) })
+	refs.MoneyIcon = icon("Coin", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 7) })
+	refs.Gems = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 32), Position = UDim2.fromOffset(52, 50), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(150, 200, 255) })
+	refs.GemsIcon = icon("Gem", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 49) })
 
 	-- волна и ядро
 	local top = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 104), Position = UDim2.new(0.5, 0, 0, 12) })
@@ -3615,31 +3710,26 @@ local function buildHUD()
 	-- панель иконок справа: магазин, юниты, графика
 	local dock = new("Frame", { Parent = gui, Name = "IconDock", AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, -40), Size = UDim2.fromOffset(84, 290), BackgroundTransparency = 1 })
 	new("UIListLayout", { Parent = dock, Padding = UDim.new(0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder })
-	refs.ShopButton = iconButton(dock, 1, "🛒", "МАГАЗИН", Color3.fromRGB(40, 150, 90), Color3.fromRGB(18, 70, 45), THEME.Good, function()
+	refs.ShopButton = iconButton(dock, 1, "Gem", "МАГАЗИН", Color3.fromRGB(44, 52, 92), Color3.fromRGB(18, 18, 36), Color3.fromRGB(110, 150, 230), function()
 		UI.Toggle("Shop")
 		FX.Sound("Click", 1, 1)
 	end)
-	refs.InvButton = iconButton(dock, 2, "🎒", "ЮНИТЫ", Color3.fromRGB(140, 70, 230), Color3.fromRGB(55, 22, 100), THEME.Accent, function()
+	refs.InvButton = iconButton(dock, 2, "Helmet", "ЮНИТЫ", Color3.fromRGB(66, 44, 100), Color3.fromRGB(22, 14, 36), Color3.fromRGB(150, 110, 210), function()
 		UI.Toggle("Inventory")
 	end)
-	refs.LiteButton, refs.LiteCaption = iconButton(dock, 3, "⚙", "ГРАФИКА", Color3.fromRGB(80, 80, 110), Color3.fromRGB(30, 28, 46), THEME.Dim, function()
+	refs.LiteButton, refs.LiteCaption = iconButton(dock, 3, "Gear", "ГРАФИКА", Color3.fromRGB(56, 54, 72), Color3.fromRGB(22, 20, 30), Color3.fromRGB(120, 116, 140), function()
 		ctx.SetLite(not ctx.Lite, true)
 	end, 62)
 
 	-- выход из матча в лобби
-	refs.Leave = button({ Parent = gui, Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "⟵ В ЛОББИ", BackgroundColor3 = Color3.fromRGB(110, 35, 55), StrokeColor = THEME.Bad }, function()
+	refs.Leave = button({ Parent = gui, Name = "LeaveButton", Size = UDim2.fromOffset(150, 44), Position = UDim2.fromOffset(16, 118), Text = "    В ЛОББИ", BackgroundColor3 = Color3.fromRGB(80, 30, 46), StrokeColor = Color3.fromRGB(170, 70, 90) }, function()
 		ctx.Placement.Stop()
 		UI.CloseUnit()
 		task.spawn(UI.FadeTransition, "ВОЗВРАЩЕНИЕ В ЛОББИ", function()
 			return ctx.Request("LeaveMatch")
 		end)
 	end)
-
-	-- подсказка в лобби
-	local hint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(640, 86), Position = UDim2.new(0.5, 0, 1, -18), StrokeColor = THEME.Accent })
-	refs.LobbyHint = hint
-	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 36), Position = UDim2.fromOffset(10, 6), Text = "ЛОББИ", TextColor3 = THEME.Accent })
-	label({ Parent = hint, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 46), Font = Enum.Font.GothamBold, Text = "Круги слева — 3 КЕЙСА  •  ▶ ИГРАТЬ — в бой  •  🎒 ЮНИТЫ (G) и 🛒 МАГАЗИН — иконки справа" })
+	icon("Back", refs.Leave, { Size = UDim2.fromOffset(26, 26), Position = UDim2.fromOffset(12, 9), ZIndex = 2 })
 
 	-- подсказка размещения
 	refs.PlaceHint = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(520, 34), Position = UDim2.new(0.5, 0, 1, -150), Visible = false })
@@ -3943,10 +4033,15 @@ function UI.Show(name, on)
 	end
 end
 
-local function modal(name, title, size)
+local function modal(name, title, size, iconKind)
 	local m = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 0.5), Size = size, Position = UDim2.fromScale(0.5, 0.5), Visible = false, BackgroundTransparency = 0.04, ZIndex = 5 })
 	new("UIScale", { Parent = m })
-	label({ Parent = m, Size = UDim2.new(1, -80, 0, 44), Position = UDim2.fromOffset(18, 10), Text = title, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Accent })
+	local x = 18
+	if iconKind then
+		icon(iconKind, m, { Size = UDim2.fromOffset(38, 38), Position = UDim2.fromOffset(16, 13), ZIndex = 6 })
+		x = 62
+	end
+	label({ Parent = m, Size = UDim2.new(1, -80 - x, 0, 44), Position = UDim2.fromOffset(x, 10), Text = title, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Accent })
 	button({ Parent = m, Size = UDim2.fromOffset(40, 40), Position = UDim2.new(1, -52, 0, 12), Text = "✕", BackgroundColor3 = Color3.fromRGB(120, 30, 50) }, function()
 		m.Visible = false
 	end)
@@ -4194,7 +4289,7 @@ local function playCaseOpening(caseId, results)
 end
 
 local function buildCases()
-	local m = modal("Summon", "✦ КЕЙСЫ", UDim2.fromOffset(980, 590))
+	local m = modal("Summon", "КЕЙСЫ", UDim2.fromOffset(980, 590), "Gem")
 	refs.CaseTabs = {}
 	local tabs = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.fromOffset(200, 480), Position = UDim2.fromOffset(18, 70), ZIndex = 6 }, {
 		new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }),
@@ -4244,7 +4339,7 @@ end
 -- МАГАЗИН КРИСТАЛЛОВ
 ------------------------------------------------------------------------
 local function buildShop()
-	local m = modal("Shop", "🛒 МАГАЗИН КРИСТАЛЛОВ", UDim2.fromOffset(920, 470))
+	local m = modal("Shop", "МАГАЗИН КРИСТАЛЛОВ", UDim2.fromOffset(920, 470), "Gem")
 	local row = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 270), Position = UDim2.fromOffset(18, 70), ZIndex = 6 }, {
 		new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
 	})
@@ -4304,7 +4399,7 @@ end
 local invSelected
 
 local function buildInventory()
-	local m = modal("Inventory", "☰ ЮНИТЫ", UDim2.fromOffset(860, 560))
+	local m = modal("Inventory", "ЮНИТЫ", UDim2.fromOffset(860, 560), "Helmet")
 	-- экипировка
 	label({ Parent = m, Size = UDim2.fromOffset(300, 22), Position = UDim2.fromOffset(18, 56), Text = "ЭКИПИРОВКА (клик — снять)", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = THEME.Dim, Font = Enum.Font.GothamBold, ZIndex = 6 })
 	refs.EquipRow = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 92), Position = UDim2.fromOffset(18, 80), ZIndex = 6 }, {
@@ -4418,7 +4513,11 @@ function UI.RefreshInventory()
 		local rc = rarityColor(id)
 		local b = button({ Parent = refs.InvGrid, Text = "", BackgroundColor3 = THEME.BG2, StrokeColor = count > 0 and rc or Color3.fromRGB(60, 50, 70), LayoutOrder = order, ZIndex = 7 }, function()
 			selectInventory(id)
-			UnitViewer.Open(id, 1)
+			if (ctx.Profile.Inventory[id] or 0) > 0 then
+				UnitViewer.Open(id, 1)
+			else
+				UI.Toast("Сначала открой этого юнита в кейсе — тогда откроется 3D-просмотр", "error")
+			end
 		end)
 		new("UIGradient", { Parent = b, Rotation = 90, Color = ColorSequence.new(rc:Lerp(THEME.BG, count > 0 and 0.6 or 0.9), THEME.BG) })
 		viewport(b, id, 1, { Size = UDim2.new(1, 0, 0, 96), ZIndex = 8, Silhouette = count == 0 })
@@ -4449,7 +4548,7 @@ local function joinMatch(diffKey)
 end
 
 local function buildMode()
-	local m = modal("Mode", "▶ ВЫБОР СЛОЖНОСТИ", UDim2.fromOffset(880, 430))
+	local m = modal("Mode", "ВЫБОР СЛОЖНОСТИ", UDim2.fromOffset(880, 430))
 	local cards = new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 340), Position = UDim2.fromOffset(18, 70), ZIndex = 6 }, {
 		new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
 	})
@@ -4585,9 +4684,9 @@ local lastRefresh = 0
 function UI.Update(dt)
 	local State = ctx.State
 	local money = player:GetAttribute("Money") or 0
-	refs.Money.Text = "💰 " .. Config.FormatNumber(money)
+	refs.Money.Text = Config.FormatNumber(money)
 	local gems = player:GetAttribute("Gems") or (ctx.Profile and ctx.Profile.Gems) or 0
-	refs.Gems.Text = "💎 " .. Config.FormatNumber(gems)
+	refs.Gems.Text = Config.FormatNumber(gems)
 	if refs.SummonGems then
 		refs.SummonGems.Text = "💎 " .. Config.FormatNumber(gems)
 	end
@@ -4601,8 +4700,9 @@ function UI.Update(dt)
 	refs.Leave.Visible = inMatch
 	refs.Money.Visible = inMatch
 	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
-	refs.Gems.Position = UDim2.fromOffset(12, inMatch and 50 or 8)
-	refs.LobbyHint.Visible = not inMatch and not (modals.Mode.Visible or modals.Summon.Visible or modals.Inventory.Visible)
+	refs.Gems.Position = UDim2.fromOffset(52, inMatch and 50 or 8)
+	refs.GemsIcon.Position = UDim2.fromOffset(10, inMatch and 49 or 7)
+	refs.MoneyIcon.Visible = inMatch
 	if not inMatch and UI.SelectedUid then
 		UI.CloseUnit()
 	end

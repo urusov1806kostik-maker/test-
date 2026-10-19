@@ -85,11 +85,11 @@ local function buildPlatform(groundY, radius, glow)
 	local disc = ANG(0, 0, rad(90))
 	part({ Name = "Platform", Shape = Enum.PartType.Cylinder, Size = V(0.6, radius * 2, radius * 2), CFrame = CF(0, groundY - 0.3, 0) * disc, Color = Color3.fromRGB(24, 20, 32), Material = Enum.Material.Slate })
 	part({ Name = "PlatformTop", Shape = Enum.PartType.Cylinder, Size = V(0.62, radius * 1.7, radius * 1.7), CFrame = CF(0, groundY - 0.29, 0) * disc, Color = Color3.fromRGB(40, 34, 54), Material = Enum.Material.Slate })
-	part({ Name = "PlatformRing", Shape = Enum.PartType.Cylinder, Size = V(0.64, radius * 2.06, radius * 2.06), CFrame = CF(0, groundY - 0.36, 0) * disc, Color = glow, Material = Enum.Material.Neon })
+	part({ Name = "PlatformRing", Shape = Enum.PartType.Cylinder, Size = V(0.64, radius * 2.06, radius * 2.06), CFrame = CF(0, groundY - 0.36, 0) * disc, Color = glow:Lerp(Color3.new(0, 0, 0), 0.35), Material = Enum.Material.SmoothPlastic })
 	-- руны по кругу
 	for i = 0, 7 do
 		local a = i / 8 * math.pi * 2
-		part({ Name = "Rune", Size = V(0.12, 0.62, radius * 0.18), CFrame = CF(math.cos(a) * radius * 0.93, groundY - 0.3, math.sin(a) * radius * 0.93) * ANG(0, -a, 0), Color = glow, Material = Enum.Material.Neon })
+		part({ Name = "Rune", Size = V(0.12, 0.62, radius * 0.18), CFrame = CF(math.cos(a) * radius * 0.93, groundY - 0.3, math.sin(a) * radius * 0.93) * ANG(0, -a, 0), Color = glow:Lerp(Color3.new(0, 0, 0), 0.45), Material = Enum.Material.Neon })
 	end
 end
 
@@ -192,7 +192,7 @@ local function refreshInfo()
 			end
 		end
 	end
-	refs.Equip.Text = not owned and "🔒 НЕТ В КОЛЛЕКЦИИ" or (equipped and "СНЯТЬ" or "ЭКИПИРОВАТЬ")
+	refs.Equip.Text = not owned and "НЕТ В КОЛЛЕКЦИИ" or (equipped and "СНЯТЬ" or "ЭКИПИРОВАТЬ")
 	refs.Equip.BackgroundColor3 = not owned and Color3.fromRGB(50, 44, 60) or (equipped and Color3.fromRGB(130, 50, 60) or Color3.fromRGB(70, 40, 140))
 	refs.Equip.AutoButtonColor = false
 	refs.Equip.Active = owned
@@ -204,7 +204,7 @@ end
 local function setGlow(color)
 	for i, g in ipairs(refs.Glows) do
 		g.BackgroundColor3 = color
-		g.BackgroundTransparency = 0.72 + i * 0.07
+		g.BackgroundTransparency = 0.84 + i * 0.04
 	end
 	refs.SceneStroke.Color = color
 end
@@ -327,12 +327,12 @@ local function build()
 	refs.Cam.FieldOfView = 32
 	refs.Cam.Parent = vf
 	vf.CurrentCamera = refs.Cam
-	K.label({ Parent = scene, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.new(1, -20, 0, 18), Text = "🖱 тяни — вращать  •  колесо — приблизить  •  📱 палец / щипок", TextColor3 = THEME.Dim, Font = Enum.Font.Gotham, ZIndex = 24 })
+	K.label({ Parent = scene, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.new(1, -20, 0, 18), Text = "Тяни мышью или пальцем — вращать  •  колесо / щипок — приблизить", TextColor3 = THEME.Dim, Font = Enum.Font.Gotham, ZIndex = 24 })
 	-- анимации
 	local animRow = K.new("Frame", { Parent = scene, Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(330, 34), BackgroundTransparency = 1, ZIndex = 24 }, {
 		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }),
 	})
-	for i, a in ipairs({ { "IDLE", "Idle" }, { "⚔ АТАКА", "Attack" }, { "✦ ПОЗА", "Fidget" } }) do
+	for i, a in ipairs({ { "IDLE", "Idle" }, { "АТАКА", "Attack" }, { "ПОЗА", "Fidget" } }) do
 		K.button({ Parent = animRow, Size = UDim2.fromOffset(104, 32), Text = a[1], LayoutOrder = i, BackgroundColor3 = THEME.BG3, ZIndex = 25 }, function()
 			UnitViewer.PlayAnim(a[2])
 		end)
@@ -375,11 +375,11 @@ local function build()
 	local stats = K.new("Frame", { Parent = info, Position = UDim2.fromOffset(0, 178), Size = UDim2.new(1, 0, 0, 180), BackgroundTransparency = 1, ZIndex = 22 }, {
 		K.new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
-	refs.StatDamage = statRow(stats, 1, "⚔ Урон")
-	refs.StatRange = statRow(stats, 2, "◎ Радиус")
-	refs.StatSpeed = statRow(stats, 3, "⏱ Скорость атаки")
-	refs.StatCost = statRow(stats, 4, "💰 Установка")
-	refs.StatUpgrade = statRow(stats, 5, "⬆ Улучшение")
+	refs.StatDamage = statRow(stats, 1, "Урон")
+	refs.StatRange = statRow(stats, 2, "Радиус")
+	refs.StatSpeed = statRow(stats, 3, "Скорость атаки")
+	refs.StatCost = statRow(stats, 4, "Установка")
+	refs.StatUpgrade = statRow(stats, 5, "Улучшение")
 	-- способности
 	local ab = K.new("Frame", { Parent = info, Position = UDim2.fromOffset(0, 364), Size = UDim2.new(1, 0, 0, 108), BackgroundColor3 = THEME.BG2, BackgroundTransparency = 0.2, ZIndex = 22 })
 	K.corner(8).Parent = ab
@@ -462,6 +462,11 @@ end
 ------------------------------------------------------------------------
 function UnitViewer.Open(unitId, level)
 	if not Config.Units[unitId] then
+		return
+	end
+	-- 3D-просмотр открывается только для юнитов, которые уже есть в коллекции
+	local prof = ctx.Profile
+	if not prof or (prof.Inventory[unitId] or 0) <= 0 then
 		return
 	end
 	if not window then

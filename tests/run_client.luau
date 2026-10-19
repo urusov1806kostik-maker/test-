@@ -48,6 +48,11 @@ local function tick(sec)
 	end
 end
 
+local function findNamed(name)
+	for _, d in ipairs(player.PlayerGui:GetDescendants()) do
+		if d.Name == name then return d end
+	end
+end
 local function findButton(prefix)
 	for _, d in ipairs(player.PlayerGui:GetDescendants()) do
 		if d.ClassName == "TextButton" and type(d.Text) == "string" and d.Text:sub(1, #prefix) == prefix then return d end
@@ -80,9 +85,9 @@ local function visible(name)
 end
 assert(M.workspace:FindFirstChild("VoidTDLobby"), "no lobby")
 standIn(nil)
-assert(not visible("☰ ЮНИТЫ"), "inventory must be closed at spawn")
+assert(not visible("ЮНИТЫ"), "inventory must be closed at spawn")
 standIn("Units")
-assert(visible("☰ ЮНИТЫ"), "inventory must open in Units circle")
+assert(visible("ЮНИТЫ"), "inventory must open in Units circle")
 local SETS = {
 	old = { "EclipseGuardian", "FallenAngel", "VoidEmperor", "AbyssOverlord", "CorruptedSamurai", "AbyssReaper" },
 	shattered = { "RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer" },
@@ -95,19 +100,19 @@ end
 RS.VoidTD.Remotes.Profile.OnClientEvent:Fire(DS.Snapshot(player))
 tick(0.2)
 standIn(nil)
-assert(not visible("☰ ЮНИТЫ"), "inventory must close when leaving circle")
+assert(not visible("ЮНИТЫ"), "inventory must close when leaving circle")
 print("units circle ok")
-findButton("🎒").Activated:Fire()
+findNamed("HelmetButton").Activated:Fire()
 tick(0.1)
-assert(visible("☰ ЮНИТЫ"), "inventory button must open inventory")
+assert(visible("ЮНИТЫ"), "inventory button must open inventory")
 UIS.InputBegan:Fire({ UserInputType = env.Enum.UserInputType.Keyboard, KeyCode = env.Enum.KeyCode.G }, false)
 tick(0.1)
-assert(not visible("☰ ЮНИТЫ"), "G must toggle inventory")
+assert(not visible("ЮНИТЫ"), "G must toggle inventory")
 print("inventory button ok")
 
 -- кейсы в круге
 standIn("Case_ShatteredReality")
-assert(visible("✦ КЕЙСЫ"), "cases must open in circle")
+assert(visible("КЕЙСЫ"), "cases must open in circle")
 local g0 = DS.Get(player).Gems
 findButton("x10").Activated:Fire()
 tick(6)
@@ -122,9 +127,9 @@ okBtn.Activated:Fire()
 standIn(nil)
 print("case circle ok")
 -- магазин
-findButton("🛒").Activated:Fire()
+findNamed("GemButton").Activated:Fire()
 tick(0.2)
-assert(visible("🛒 МАГАЗИН КРИСТАЛЛОВ"), "shop must open")
+assert(visible("МАГАЗИН КРИСТАЛЛОВ"), "shop must open")
 local g1 = DS.Get(player).Gems
 findButton("R$ 25").Activated:Fire()
 tick(0.2)
@@ -134,12 +139,12 @@ tick(0.2)
 assert(DS.Get(player).Gems == g1 + 100 + Config.Settings.DailyGems, "daily gift")
 findButton("ЗАБРАТЬ")
 tick(0.2)
-findButton("🛒").Activated:Fire()
+findNamed("GemButton").Activated:Fire()
 print("shop ok")
 
 -- портал ИГРАТЬ -> выбор сложности
 standIn("Play")
-assert(visible("▶ ВЫБОР СЛОЖНОСТИ"), "mode menu must open")
+assert(visible("ВЫБОР СЛОЖНОСТИ"), "mode menu must open")
 findButton("ИГРАТЬ").Activated:Fire()
 tick(2)
 assert(player:GetAttribute("InMatch"), "join via menu failed")
@@ -192,14 +197,14 @@ local function unitParts()
 	return n
 end
 local fullParts = unitParts()
-findButton("⚙").Activated:Fire()
+findNamed("GearButton").Activated:Fire()
 tick(0.2)
 local liteParts = unitParts()
 print("unit parts full/lite:", fullParts, liteParts)
 assert(liteParts < fullParts, "lite mode must reduce parts")
-assert(findButton("⚙").Parent and true, "button")
+assert(findNamed("GearButton").Parent and true, "button")
 assert(DS.Get(player).Settings.Lite == true, "lite setting must be saved")
-findButton("⚙").Activated:Fire()
+findNamed("GearButton").Activated:Fire()
 tick(0.2)
 assert(unitParts() == fullParts, "full mode must restore parts")
 print("upgrades done; levels:", (function() local s = 0 for _, f in ipairs(RS.VoidTD.Units:GetChildren()) do s = s + f:GetAttribute("Level") end return s end)())
@@ -222,7 +227,7 @@ for _ = 1, 60 * 30 do
 	end
 	if w >= 12 or ph == "Defeat" or ph == "Victory" then break end
 end
-findButton("⟵").Activated:Fire()
+findNamed("LeaveButton").Activated:Fire()
 tick(2)
 print("left match:", not player:GetAttribute("InMatch"), "phase", RS.VoidTD.State:GetAttribute("Phase"))
 assert(RS.VoidTD.State:GetAttribute("Phase") == "Idle")
