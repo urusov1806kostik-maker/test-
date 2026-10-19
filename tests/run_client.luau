@@ -265,4 +265,37 @@ tick(0.2)
 findButton("ROTATE").Activated:Fire()
 findButton("CANCEL").Activated:Fire()
 print("touch flow ok, active:", PL.Active)
+-- окно 3D-просмотра: все юниты, все уровни, анимации, вращение, зум, закрытие без утечек
+local UV = env.require(clientScript.UnitViewer)
+local E = env.Enum
+for _, id in ipairs(Config.UnitOrder) do
+	UV.Open(id, 1)
+	tick(0.1)
+	for lv = 2, 5 do
+		UV.SetLevel(lv)
+		tick(0.05)
+	end
+	UV.PlayAnim("Attack")
+	tick(0.6)
+	UV.PlayAnim("Fidget")
+	tick(0.3)
+end
+assert(UV.IsOpen(), "viewer must be open")
+local vf
+for _, d in ipairs(player.PlayerGui:GetDescendants()) do
+	if d.ClassName == "WorldModel" then vf = d end
+end
+assert(vf and #vf:GetChildren() > 0, "viewer must show a model")
+-- вращение мышью и колесо
+local VFr = vf.Parent
+VFr.InputBegan:Fire({ UserInputType = E.UserInputType.MouseButton1, Position = M.Vector3.new(100, 100, 0) })
+UIS.InputChanged:Fire({ UserInputType = E.UserInputType.MouseMovement, Position = M.Vector3.new(160, 120, 0) })
+UIS.InputEnded:Fire({ UserInputType = E.UserInputType.MouseButton1, Position = M.Vector3.new(160, 120, 0) })
+VFr.InputChanged:Fire({ UserInputType = E.UserInputType.MouseWheel, Position = M.Vector3.new(0, 0, 1) })
+tick(0.3)
+UV.Close()
+tick(0.1)
+assert(not UV.IsOpen(), "viewer must close")
+assert(#vf:GetChildren() == 0, "viewer must destroy model copies on close")
+print("unit viewer ok")
 print("CLIENT TEST OK")

@@ -25,6 +25,7 @@ ENTRIES = [
     ("StarterPlayerScripts/VoidTDClient/init.client.lua", "StarterPlayerScripts", ["VoidTDClient"], "LocalScript"),
     ("StarterPlayerScripts/VoidTDClient/FX.lua", "StarterPlayerScripts", ["VoidTDClient", "FX"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/Renderer.lua", "StarterPlayerScripts", ["VoidTDClient", "Renderer"], "ModuleScript"),
+    ("StarterPlayerScripts/VoidTDClient/UnitViewer.lua", "StarterPlayerScripts", ["VoidTDClient", "UnitViewer"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/UI.lua", "StarterPlayerScripts", ["VoidTDClient", "UI"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/Placement.lua", "StarterPlayerScripts", ["VoidTDClient", "Placement"], "ModuleScript"),
 ]

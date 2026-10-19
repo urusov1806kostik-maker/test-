@@ -1221,6 +1221,25 @@ local function playAnim(view, name, h, hits, interval)
 	view.Anim = { Start = os.clock(), Frames = builder(h, hits, interval) }
 end
 
+------------------------------------------------------------------------
+-- ПРЕДПРОСМОТР (окно юнита в инвентаре): те же позы и анимации, что в бою
+------------------------------------------------------------------------
+function Renderer.PreviewStep(state, t)
+	applyPose(state.Rig, evalPose(state, t), t, state.Phase or 0)
+end
+
+function Renderer.PreviewAttack(state, unitId, level)
+	local def = Config.Units[unitId]
+	local st = def.Levels[math.clamp(level or 1, 1, #def.Levels)]
+	playAnim(state, def.Anim, def.HitDelay or 0.2, st.Hits or 1, def.HitInterval)
+end
+
+function Renderer.PreviewFidget(state, unitId)
+	local list = FIDGETS[Config.Units[unitId].Anim] or { "LookAround" }
+	local pick = list[math.random(1, #list)]
+	state.Anim = { Start = os.clock(), Frames = Anims[pick]() }
+end
+
 function Renderer.OnAttack(p)
 	local view = unitViews[p.U]
 	if not view then

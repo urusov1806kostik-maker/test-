@@ -10,6 +10,7 @@ local UI = {}
 
 local ctx, Config, UnitModels, Renderer, FX
 local player = Players.LocalPlayer
+local UnitViewer = require(script.Parent:WaitForChild("UnitViewer"))
 
 local THEME = {
 	BG = Color3.fromRGB(16, 10, 26),
@@ -1017,33 +1018,40 @@ local function buildInventory()
 	refs.InvDesc = label({ Parent = d, Size = UDim2.new(1, -20, 0, 48), Position = UDim2.fromOffset(10, 60), Text = "", TextScaled = false, TextSize = 14, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Gotham, TextColor3 = THEME.Dim, ZIndex = 7 })
 	refs.InvStats = label({ Parent = d, Size = UDim2.new(1, -20, 0, 120), Position = UDim2.fromOffset(10, 110), Text = "", TextScaled = false, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Code, ZIndex = 7 })
 	refs.InvEquip = button({ Parent = d, AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -20, 0, 44), Position = UDim2.new(0, 10, 1, -10), Text = "EQUIP", BackgroundColor3 = Color3.fromRGB(60, 130, 80), ZIndex = 7 }, function()
-		if not invSelected then
-			return
-		end
-		local prof = ctx.Profile
-		local equippedSlot
-		for i = 1, Config.Settings.EquipSlots do
-			if prof.Equipped[tostring(i)] == invSelected then
-				equippedSlot = i
-			end
-		end
-		if equippedSlot then
-			ctx.Request("Equip", { Unit = nil, Slot = equippedSlot })
-		else
-			local free
-			for i = 1, Config.Settings.EquipSlots do
-				if not prof.Equipped[tostring(i)] then
-					free = i
-					break
-				end
-			end
-			if not free then
-				UI.Toast("Все слоты заняты — сними юнита сверху", "error")
-				return
-			end
-			ctx.Request("Equip", { Unit = invSelected, Slot = free })
+		if invSelected then
+			UI.ToggleEquip(invSelected)
 		end
 	end)
+end
+
+-- Экипировать / снять юнита (из инвентаря и из окна просмотра)
+function UI.ToggleEquip(unitId)
+	local prof = ctx.Profile
+	if not prof or (prof.Inventory[unitId] or 0) <= 0 then
+		return
+	end
+	local equippedSlot
+	for i = 1, Config.Settings.EquipSlots do
+		if prof.Equipped[tostring(i)] == unitId then
+			equippedSlot = i
+		end
+	end
+	if equippedSlot then
+		ctx.Request("Equip", { Unit = nil, Slot = equippedSlot })
+	else
+		local free
+		for i = 1, Config.Settings.EquipSlots do
+			if not prof.Equipped[tostring(i)] then
+				free = i
+				break
+			end
+		end
+		if not free then
+			UI.Toast("Все слоты заняты — сними юнита сверху", "error")
+			return
+		end
+		ctx.Request("Equip", { Unit = unitId, Slot = free })
+	end
 end
 
 local function selectInventory(id)
@@ -1105,6 +1113,7 @@ function UI.RefreshInventory()
 		local rc = rarityColor(id)
 		local b = button({ Parent = refs.InvGrid, Text = "", BackgroundColor3 = THEME.BG2, StrokeColor = count > 0 and rc or Color3.fromRGB(60, 50, 70), LayoutOrder = order, ZIndex = 7 }, function()
 			selectInventory(id)
+			UnitViewer.Open(id, 1)
 		end)
 		new("UIGradient", { Parent = b, Rotation = 90, Color = ColorSequence.new(rc:Lerp(THEME.BG, count > 0 and 0.6 or 0.9), THEME.BG) })
 		viewport(b, id, 1, { Size = UDim2.new(1, 0, 0, 96), ZIndex = 8, Silhouette = count == 0 })
@@ -1261,6 +1270,7 @@ end
 function UI.SetProfile(prof)
 	ctx.Profile = prof
 	refreshHotbar()
+	UnitViewer.Refresh()
 	if modals.Inventory and modals.Inventory.Visible then
 		UI.RefreshInventory()
 	end
@@ -1393,6 +1403,11 @@ function UI.Init(c)
 		end
 	end
 	UI.Gui = screen
+	-- окно 3D-просмотра юнита
+	UI.Root = gui
+	UI.Kit = { new = new, corner = corner, stroke = stroke, label = label, button = button, panel = panel, tween = tween }
+	UI.SpecialText = specialText
+	UnitViewer.Init(c, UI)
 end
 
 return UI

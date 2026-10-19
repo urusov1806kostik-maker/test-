@@ -190,7 +190,7 @@ local EVENTS = {
 	MouseEnter = true, MouseLeave = true, MouseButton1Down = true, MouseButton1Up = true, MouseButton1Click = true,
 	Activated = true, AttributeChanged = true, ChildAdded = true, ChildRemoved = true, OnClientEvent = true,
 	OnServerEvent = true, Changed = true, Heartbeat = true, RenderStepped = true, Stepped = true, PlayerAdded = true,
-	PlayerRemoving = true, CharacterAdded = true, InputBegan = true, InputEnded = true, Touched = true, DescendantAdded = true,
+	PlayerRemoving = true, CharacterAdded = true, InputBegan = true, InputEnded = true, InputChanged = true, TouchPinch = true, Touched = true, DescendantAdded = true,
 }
 M.instanceCount = 0
 M.partCount = 0
