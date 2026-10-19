@@ -821,6 +821,23 @@ local function calm(root)
 	end
 end
 
+-- Круг-зона: встал — открылось меню (или сработал портал)
+local function zoneCircle(parent, key, z, zc, subtitle, padColor)
+	local zm = Instance.new("Model")
+	zm.Name = key
+	zm.Parent = parent
+	cylinderY(zm, "PadBase", z.Radius + 1.2, 0.6, zc + V(0, 0.3, 0), C.Stone2)
+	cylinderY(zm, "PadEdge", z.Radius + 0.5, 0.65, zc + V(0, 0.33, 0), z.Color, Enum.Material.Neon)
+	local pad = cylinderY(zm, "Pad", z.Radius, 0.7, zc + V(0, 0.36, 0), padColor or Color3.fromRGB(25, 15, 40), Enum.Material.Glass, { Transparency = 0.15 })
+	local beam = cylinderY(zm, "LightBeam", z.Radius * 0.9, 26, zc + V(0, 13, 0), z.Color, Enum.Material.Neon, { CanCollide = false, Transparency = 0.88 })
+	beam.CastShadow = false
+	emitter(pad, z.Color, { Rate = 14, Size = 0.5, SpeedMin = 2, SpeedMax = 4, Spread = 10, Dir = Enum.NormalId.Right, LifeMin = 1.5, LifeMax = 2.5 })
+	light(pad, z.Color, 18, 2)
+	billboard(zm, zc + V(0, 8.5, 0), z.Title, subtitle or (z.Teleport and "войди в портал" or "встань в круг"), z.Color, 12)
+	zm:SetAttribute("Zone", key)
+	return zm
+end
+
 function MapBuilder.BuildLobby()
 	local existing = workspace:FindFirstChild("VoidTDLobby")
 	if existing then
@@ -870,19 +887,7 @@ function MapBuilder.BuildLobby()
 	zonesFolder.Name = "Zones"
 	zonesFolder.Parent = m
 	for key, z in pairs(L.Zones) do
-		local zc = c + z.Offset
-		local zm = Instance.new("Model")
-		zm.Name = key
-		zm.Parent = zonesFolder
-		cylinderY(zm, "PadBase", z.Radius + 1.2, 0.6, zc + V(0, 0.3, 0), C.Stone2)
-		cylinderY(zm, "PadEdge", z.Radius + 0.5, 0.65, zc + V(0, 0.33, 0), z.Color, Enum.Material.Neon)
-		local pad = cylinderY(zm, "Pad", z.Radius, 0.7, zc + V(0, 0.36, 0), Color3.fromRGB(25, 15, 40), Enum.Material.Glass, { Transparency = 0.15 })
-		local beam = cylinderY(zm, "LightBeam", z.Radius * 0.9, 26, zc + V(0, 13, 0), z.Color, Enum.Material.Neon, { CanCollide = false, Transparency = 0.88 })
-		beam.CastShadow = false
-		emitter(pad, z.Color, { Rate = 14, Size = 0.5, SpeedMin = 2, SpeedMax = 4, Spread = 10, Dir = Enum.NormalId.Right, LifeMin = 1.5, LifeMax = 2.5 })
-		light(pad, z.Color, 18, 2)
-		billboard(zm, zc + V(0, 8.5, 0), z.Title, "встань в круг", z.Color, 12)
-		zm:SetAttribute("Zone", key)
+		zoneCircle(zonesFolder, key, z, c + z.Offset)
 	end
 
 	-- КЕЙСЫ: витрины с вращающимися 3D-кейсами за каждым кругом
@@ -1009,6 +1014,18 @@ function MapBuilder.BuildLobby()
 	calm(m)
 	m.Parent = workspace
 	return m
+end
+
+-- Хелперы для HalloweenWorld
+MapBuilder.H = {
+	part = part, light = light, emitter = emitter, cylinderY = cylinderY, billboard = billboard,
+	statue = statue, calm = calm, zoneCircle = zoneCircle, lobbyPortal = lobbyPortal, C = C,
+}
+
+-- Хэллоуин-остров, портал в лобби и карта Haunted Hollow
+function MapBuilder.BuildHalloween()
+	local HalloweenWorld = require(script.Parent:WaitForChild("HalloweenWorld"))
+	return HalloweenWorld.Build(MapBuilder.H)
 end
 
 ------------------------------------------------------------------------

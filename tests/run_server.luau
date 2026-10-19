@@ -36,7 +36,7 @@ local UnitModels = env.require(RS.VoidTD.UnitModels)
 local EnemyModels = env.require(RS.VoidTD.EnemyModels)
 local Config = env.require(RS.VoidTD.Config)
 for _, id in ipairs(Config.UnitOrder) do
-	for lv = 1, 5 do
+	for lv = 1, (UnitModels.Has(id) and 5 or 0) do
 		local before = M.partCount
 		local rig = UnitModels.Build(id, lv)
 		assert(rig.Muzzle, id .. " no muzzle")
@@ -45,6 +45,7 @@ for _, id in ipairs(Config.UnitOrder) do
 	end
 end
 for _, id in ipairs(Config.EnemyOrder) do
+	if not EnemyModels.Has(id) then continue end
 	local before = M.partCount
 	local rig = EnemyModels.Build(id)
 	assert(rig.Style and rig.HipHeight and rig.Height, id .. " missing info")

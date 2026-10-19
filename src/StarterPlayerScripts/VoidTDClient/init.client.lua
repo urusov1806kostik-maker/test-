@@ -20,6 +20,8 @@ local ctx = {
 	EnemyModels = require(Shared:WaitForChild("EnemyModels")),
 	CaseModels = require(Shared:WaitForChild("CaseModels")),
 	FX = require(script:WaitForChild("FX")),
+	HFX = require(script:WaitForChild("HalloweenFX")),
+	HalloweenAnims = require(script:WaitForChild("HalloweenAnims")),
 	Renderer = require(script:WaitForChild("Renderer")),
 	UI = require(script:WaitForChild("UI")),
 	Placement = require(script:WaitForChild("Placement")),
@@ -53,7 +55,7 @@ local Lighting = game:GetService("Lighting")
 ctx.Lite = false
 
 local function applyWorldLite(on)
-	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby" }) do
+	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby", "VoidTDHalloween", "VoidTDHalloweenMap" }) do
 		local root = workspace:FindFirstChild(name)
 		if root then
 			for _, d in ipairs(root:GetDescendants()) do
@@ -123,7 +125,8 @@ Remotes.Impact.OnClientEvent:Connect(Renderer.OnImpact)
 Remotes.Notify.OnClientEvent:Connect(function(p)
 	UI.OnNotify(p)
 	if p.Type == "CoreHit" then
-		local core = workspace:FindFirstChild("VoidTDMap") and workspace.VoidTDMap:FindFirstChild("VoidCore")
+		local map = Renderer.ActiveMap()
+		local core = map and map:FindFirstChild("VoidCore")
 		local c = core and core:GetAttribute("CoreCenter")
 		if c then
 			FX.Sphere(c, 6, FX.Colors.Pink, 0.4)
@@ -272,7 +275,24 @@ task.spawn(function()
 	task.wait(1)
 	collectSpinners(map)
 	collectSpinners(lobby)
+	collectSpinners(workspace:WaitForChild("VoidTDHalloween", 30))
+	collectSpinners(workspace:WaitForChild("VoidTDHalloweenMap", 30))
 end)
+
+------------------------------------------------------------------------
+-- КАРТА МАТЧА: Void или Haunted Hollow (дорога пересчитывается у всех одинаково)
+------------------------------------------------------------------------
+local function applyMap()
+	local key = State:GetAttribute("Map") or "Void"
+	if ctx.PathUtil.MapKey ~= key then
+		Renderer.ClearEnemies()
+		ctx.HFX.ClearAllies()
+		ctx.PathUtil.SetMap(key)
+	end
+	UI.SetMapMode(key)
+end
+State:GetAttributeChangedSignal("Map"):Connect(applyMap)
+applyMap()
 
 local function updateSpinners(t)
 	for _, s in ipairs(spinners) do
@@ -298,19 +318,31 @@ end
 ------------------------------------------------------------------------
 -- КРУГИ В ЛОББИ: встал в круг — открылось меню, вышел — закрылось
 ------------------------------------------------------------------------
-local ZONE_MODAL = { Units = "Inventory", Play = "Mode" }
-for key, z in pairs(ctx.Config.Lobby.Zones) do
-	if z.Case then
-		ZONE_MODAL[key] = "Summon"
+local ZONE_MODAL = { Units = "Inventory", Play = "Mode", Bestiary = "Bestiary", HalloweenUnits = "Inventory" }
+-- зоны главного лобби и Хэллоуин-острова
+local ZONE_SETS = {
+	{ Prefix = "", Center = ctx.Config.Lobby.Center, Zones = ctx.Config.Lobby.Zones },
+	{ Prefix = "H_", Center = ctx.Config.HalloweenIsland.Center, Zones = ctx.Config.HalloweenIsland.Zones },
+}
+for _, set in ipairs(ZONE_SETS) do
+	for key, z in pairs(set.Zones) do
+		if z.Case then
+			ZONE_MODAL[set.Prefix .. key] = "Summon"
+		elseif ZONE_MODAL[key] then
+			ZONE_MODAL[set.Prefix .. key] = ZONE_MODAL[key]
+		end
 	end
 end
 local zoneState = {}
+local teleportCooldown = 0
 
 local function updateZones()
 	if player:GetAttribute("InMatch") then
 		if next(zoneState) then
 			for key in pairs(zoneState) do
-				UI.Show(ZONE_MODAL[key], false)
+				if ZONE_MODAL[key] then
+					UI.Show(ZONE_MODAL[key], false)
+				end
 			end
 			zoneState = {}
 		end
@@ -321,23 +353,45 @@ local function updateZones()
 	if not root then
 		return
 	end
-	local L = ctx.Config.Lobby
 	local pos = root.Position
-	for key, z in pairs(L.Zones) do
-		local c = L.Center + z.Offset
-		local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
-		local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
-		if inside ~= (zoneState[key] == true) then
-			zoneState[key] = inside or nil
-			if inside and z.Case then
-				UI.SelectCase(z.Case)
-			end
-			UI.Show(ZONE_MODAL[key], inside)
-			if inside then
-				FX.Sound("Click", 1, 1)
+	for _, set in ipairs(ZONE_SETS) do
+		for key, z in pairs(set.Zones) do
+			local id = set.Prefix .. key
+			local c = set.Center + z.Offset
+			local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
+			local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
+			if inside ~= (zoneState[id] == true) then
+				zoneState[id] = inside or nil
+				if z.Teleport then
+					-- портал: телепорт на остров / в лобби
+					if inside and os.clock() > teleportCooldown then
+						teleportCooldown = os.clock() + 2
+						FX.Sound("Portal", 1, 1)
+						UI.Fade(z.Teleport == "Halloween" and "HALLOWEEN" or "ЛОББИ")
+						task.delay(0.35, function()
+							ctx.Request("Teleport", { To = z.Teleport })
+						end)
+					end
+				else
+					if inside and z.Case then
+						UI.SelectCase(z.Case)
+					end
+					if inside and z.EventUnits then
+						UI.SetInventoryFilter(z.EventUnits)
+					elseif inside and key == "Units" then
+						UI.SetInventoryFilter(nil)
+					end
+					if ZONE_MODAL[id] then
+						UI.Show(ZONE_MODAL[id], inside)
+					end
+					if inside then
+						FX.Sound("Click", 1, 1)
+					end
+				end
 			end
 		end
 	end
+	UI.UpdateQueue()
 end
 
 ------------------------------------------------------------------------

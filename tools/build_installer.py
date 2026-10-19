@@ -15,17 +15,24 @@ ENTRIES = [
     ("ReplicatedStorage/VoidTD/Config.lua", "ReplicatedStorage", ["VoidTD", "Config"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/PathUtil.lua", "ReplicatedStorage", ["VoidTD", "PathUtil"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/ModelKit.lua", "ReplicatedStorage", ["VoidTD", "ModelKit"], "ModuleScript"),
+    ("ReplicatedStorage/VoidTD/HalloweenModels.lua", "ReplicatedStorage", ["VoidTD", "HalloweenModels"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/UnitModels.lua", "ReplicatedStorage", ["VoidTD", "UnitModels"], "ModuleScript"),
+    ("ReplicatedStorage/VoidTD/HalloweenEnemies.lua", "ReplicatedStorage", ["VoidTD", "HalloweenEnemies"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/EnemyModels.lua", "ReplicatedStorage", ["VoidTD", "EnemyModels"], "ModuleScript"),
     ("ReplicatedStorage/VoidTD/CaseModels.lua", "ReplicatedStorage", ["VoidTD", "CaseModels"], "ModuleScript"),
     ("ServerScriptService/VoidTDServer/init.server.lua", "ServerScriptService", ["VoidTDServer"], "Script"),
     ("ServerScriptService/VoidTDServer/MapBuilder.lua", "ServerScriptService", ["VoidTDServer", "MapBuilder"], "ModuleScript"),
     ("ServerScriptService/VoidTDServer/DataService.lua", "ServerScriptService", ["VoidTDServer", "DataService"], "ModuleScript"),
     ("ServerScriptService/VoidTDServer/GameService.lua", "ServerScriptService", ["VoidTDServer", "GameService"], "ModuleScript"),
+    ("ServerScriptService/VoidTDServer/HalloweenService.lua", "ServerScriptService", ["VoidTDServer", "HalloweenService"], "ModuleScript"),
+    ("ServerScriptService/VoidTDServer/HalloweenWorld.lua", "ServerScriptService", ["VoidTDServer", "HalloweenWorld"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/init.client.lua", "StarterPlayerScripts", ["VoidTDClient"], "LocalScript"),
     ("StarterPlayerScripts/VoidTDClient/FX.lua", "StarterPlayerScripts", ["VoidTDClient", "FX"], "ModuleScript"),
+    ("StarterPlayerScripts/VoidTDClient/HalloweenFX.lua", "StarterPlayerScripts", ["VoidTDClient", "HalloweenFX"], "ModuleScript"),
+    ("StarterPlayerScripts/VoidTDClient/HalloweenAnims.lua", "StarterPlayerScripts", ["VoidTDClient", "HalloweenAnims"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/Renderer.lua", "StarterPlayerScripts", ["VoidTDClient", "Renderer"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/UnitViewer.lua", "StarterPlayerScripts", ["VoidTDClient", "UnitViewer"], "ModuleScript"),
+    ("StarterPlayerScripts/VoidTDClient/HalloweenUI.lua", "StarterPlayerScripts", ["VoidTDClient", "HalloweenUI"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/UI.lua", "StarterPlayerScripts", ["VoidTDClient", "UI"], "ModuleScript"),
     ("StarterPlayerScripts/VoidTDClient/Placement.lua", "StarterPlayerScripts", ["VoidTDClient", "Placement"], "ModuleScript"),
 ]
@@ -47,7 +54,7 @@ local SPS = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts"
 local SERVICES = { ReplicatedStorage = RS, ServerScriptService = SSS, StarterPlayerScripts = SPS }
 
 -- удалить предыдущую установку
-for _, pair in ipairs({ { RS, "VoidTD" }, { SSS, "VoidTDServer" }, { SPS, "VoidTDClient" }, { workspace, "VoidTDMap" }, { workspace, "VoidTDLobby" } }) do
+for _, pair in ipairs({ { RS, "VoidTD" }, { SSS, "VoidTDServer" }, { SPS, "VoidTDClient" }, { workspace, "VoidTDMap" }, { workspace, "VoidTDLobby" }, { workspace, "VoidTDHalloween" }, { workspace, "VoidTDHalloweenMap" } }) do
 	local obj = pair[1]:FindFirstChild(pair[2])
 	if obj then obj:Destroy() end
 end

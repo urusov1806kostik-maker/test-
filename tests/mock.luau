@@ -143,10 +143,11 @@ M.TweenInfo = datatype("TweenInfo")
 M.RaycastParams = { new = function() return { __type = "RaycastParams" } end }
 M.Random = {
 	new = function(seed)
-		local state = seed or 12345
+		-- MINSTD (Park–Miller): произведение < 2^47, точно в double
+		local state = math.floor(seed or 12345) % 2147483646 + 1
 		local function nxt()
-			state = (state * 1103515245 + 12345) % 2147483648
-			return state / 2147483648
+			state = (state * 48271) % 2147483647
+			return (state - 1) / 2147483646
 		end
 		return {
 			NextNumber = function(_, a, b) if a == nil then return nxt() end return a + (b - a) * nxt() end,
@@ -321,9 +322,17 @@ function Inst.SetAttribute(self, k, v)
 	assert(v == nil or t == "number" or t == "string" or t == "boolean" or t == "Vector3" or t == "Color3" or t == "CFrame" or t == "UDim2", "bad attribute type " .. t .. " for " .. k)
 	rawget(self, "_attrs")[k] = v
 	if rawget(self, "_props").AttributeChanged then self.AttributeChanged:Fire(k) end
+	local acs = rawget(self, "_attrSignals")
+	if acs and acs[k] then acs[k]:Fire() end
 end
 function Inst.GetAttribute(self, k) return rawget(self, "_attrs")[k] end
 function Inst.GetPropertyChangedSignal(self, prop) return Signal.new() end
+function Inst.GetAttributeChangedSignal(self, k)
+	local acs = rawget(self, "_attrSignals")
+	if not acs then acs = {}; rawset(self, "_attrSignals", acs) end
+	acs[k] = acs[k] or Signal.new()
+	return acs[k]
+end
 function Inst.GetPivot(self)
 	local props = rawget(self, "_props")
 	if props.WorldPivot then return props.WorldPivot end

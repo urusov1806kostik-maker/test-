@@ -84,7 +84,7 @@ local function update()
 		local screen = UserInputService:GetMouseLocation()
 		ray = cam:ViewportPointToRay(screen.X, screen.Y)
 	end
-	local map = workspace:FindFirstChild("VoidTDMap")
+	local map = ctx.Renderer.ActiveMap()
 	if not map then
 		return
 	end

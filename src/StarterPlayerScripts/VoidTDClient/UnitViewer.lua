@@ -35,6 +35,7 @@ local refs = {}
 local state -- текущее открытие: { Id, Level, Rig, Yaw, Pitch, Dist, ... }
 local conns = {} -- соединения, живущие только пока окно открыто
 local previewFx -- эффекты способностей в предпросмотре (определены ниже)
+local showGallery -- галерея призыва (определена ниже)
 
 ------------------------------------------------------------------------
 -- 3D-сцена
@@ -162,8 +163,15 @@ local function refreshInfo()
 	local st = def.Levels[lv]
 	local rc = Config.Rarities[def.Rarity].Color
 	refs.Name.Text = def.Name
-	refs.Rarity.Text = def.Rarity:upper()
+	-- основная редкость + тег события (оба тега видны)
+	local ev = def.Event and Config.Events[def.Event]
+	refs.Rarity.RichText = true
+	refs.Rarity.Text = def.Rarity:upper() .. (ev and string.format('  <font color="#%s">%s</font>', ev.Color:ToHex(), ev.Tag) or "")
 	refs.Rarity.TextColor3 = rc
+	local runeId = ctx.Profile and ctx.Profile.RuneSlots and ctx.Profile.RuneSlots[id]
+	if runeId then
+		refs.Rarity.Text = refs.Rarity.Text .. string.format('  <font color="#%s">• РУНА %s</font>', Config.RuneRarity.Color:ToHex(), Config.Runes[runeId].Name)
+	end
 	refs.RarityBar.BackgroundColor3 = rc
 	refs.Desc.Text = def.Description or ""
 	refs.StatDamage.Text = fmt(st.Damage) .. ((st.Hits and st.Hits > 1) and ("  x" .. st.Hits) or "")
@@ -271,12 +279,22 @@ local function applyRarityFx(first)
 	local rarity = Config.Units[state.Id].Rarity
 	local glow = GLOW[rarity] or THEME.Accent
 	setGlow(glow)
-	if rarity == "Mythic" then
-		spawnParticles(glow, 14)
-	elseif rarity == "Secret" then
-		spawnParticles(glow, 10)
-	else
-		spawnParticles(glow, 0)
+	-- Mythic — фиолетовые частицы, Legendary — золотые, Epic — синие, Secret — кинематографичное появление
+	local counts = { Mythic = 14, Secret = 10, Legendary = 9, Epic = 6 }
+	spawnParticles(glow, counts[rarity] or 0)
+	-- Хэллоуин: тыква и оранжевые искры поверх основного свечения (не заменяют его)
+	local ev = Config.Units[state.Id].Event
+	refs.EventPumpkin.Visible = ev == "Halloween"
+	for _, p in ipairs(refs.EventSparks) do
+		p:Destroy()
+	end
+	refs.EventSparks = {}
+	if ev == "Halloween" then
+		for i = 1, 8 do
+			local p = K.new("Frame", { Parent = refs.Scene, Size = UDim2.fromOffset(4, 4), BackgroundColor3 = Color3.fromRGB(255, 150, 50), BackgroundTransparency = 0.3, BorderSizePixel = 0, Rotation = 45, ZIndex = 24 })
+			p:SetAttribute("Seed", (i * 0.37 + 0.11) % 1)
+			refs.EventSparks[#refs.EventSparks + 1] = p
+		end
 	end
 	if first and rarity == "Secret" then
 		secretIntro()
@@ -349,6 +367,17 @@ local function build()
 			state.Idle = 0
 		end
 	end)
+	-- галерея призыва / проклятых людей
+	refs.GalleryButton = K.button({ Parent = scene, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -56, 0, 10), Size = UDim2.fromOffset(190, 32), Text = "", BackgroundColor3 = Color3.fromRGB(110, 40, 30), StrokeColor = Color3.fromRGB(255, 130, 40), Visible = false, ZIndex = 25 }, function()
+		if state then
+			showGallery(state.GalleryKind)
+		end
+	end)
+	refs.GalleryInfo = K.label({ Parent = scene, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 10, 1, -30), Size = UDim2.new(1, -20, 0, 120), Text = "", TextScaled = false, TextSize = 13, TextWrapped = true, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Bottom, Visible = false, ZIndex = 25 })
+	-- хэллоуинская тыква в углу сцены
+	refs.EventPumpkin = K.new("Frame", { Parent = scene, Size = UDim2.fromOffset(40, 40), Position = UDim2.new(1, -54, 1, -64), BackgroundTransparency = 1, Visible = false, ZIndex = 25 })
+	UI.Icon("Pumpkin", refs.EventPumpkin, { Size = UDim2.fromScale(1, 1), ZIndex = 25 })
+	refs.EventSparks = {}
 	-- вступление секретного юнита
 	refs.Intro = K.new("Frame", { Parent = scene, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), Visible = false, ZIndex = 30 })
 	refs.IntroRing = K.new("Frame", { Parent = refs.Intro, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.05, 0.05), BackgroundColor3 = GLOW.Secret, BorderSizePixel = 0, ZIndex = 31 })
@@ -444,7 +473,7 @@ local function bindInput()
 end
 
 local function step(dt)
-	if not state or not state.Rig then
+	if not state or (not state.Rig and not state.Gallery) then
 		return
 	end
 	local t = os.clock()
@@ -456,10 +485,114 @@ local function step(dt)
 	state.Dist = state.Dist + (state.BaseDist * state.Zoom - state.Dist) * math.min(1, dt * 8)
 	updateCamera()
 	-- анимация модели (те же позы, что в бою)
-	Renderer.PreviewStep(state, t)
+	if state.Rig then
+		Renderer.PreviewStep(state, t)
+	end
 	if #refs.Particles > 0 then
 		stepParticles(t)
 	end
+	-- хэллоуинские искры и подпрыгивающая тыква
+	for i, p in ipairs(refs.EventSparks) do
+		local seed = p:GetAttribute("Seed") or 0
+		local a = (t * (0.12 + seed * 0.1) + seed) % 1
+		p.Position = UDim2.new(0.08 + seed * 0.84 + math.sin(t * 2 + i) * 0.03, 0, 1 - a, 0)
+		p.BackgroundTransparency = 0.25 + a * 0.75
+	end
+	if refs.EventPumpkin.Visible then
+		refs.EventPumpkin.Position = UDim2.new(1, -54, 1, -64 - math.abs(math.sin(t * 3)) * 10)
+		refs.EventPumpkin.Rotation = math.sin(t * 3) * 8
+	end
+	-- союзники в галерее призыва идут на месте
+	if state.Gallery then
+		for i, g in ipairs(state.Gallery) do
+			local rig = g.Rig
+			local sw = math.sin(t * 6 + i) * 28
+			local m, b = rig.Motors, rig.Base
+			if m.RH and b.RH then
+				m.RH.C0 = b.RH * ANG(rad(sw), 0, 0)
+				m.LH.C0 = b.LH * ANG(rad(-sw), 0, 0)
+				m.RS.C0 = b.RS * ANG(rad(-sw * 0.7), 0, 0)
+				m.LS.C0 = b.LS * ANG(rad(sw * 0.7), 0, 0)
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------
+-- ГАЛЕРЕЯ ПРИЗЫВА: все союзники юнита (или «проклятые люди» руны) в ряд с HP
+------------------------------------------------------------------------
+local function galleryList(kind)
+	local def = Config.Units[state.Id]
+	local list = {}
+	if kind == "Rune" then
+		for i, lv in ipairs(Config.Runes.CursedThreads.Summon.Levels) do
+			list[#list + 1] = { Ally = lv.Ally, HP = lv.HP, Text = string.format("LVL %d • x%d • %d HP • каждые 60 с", i, lv.Count, lv.HP) }
+		end
+	elseif def.Summon then
+		for i, lv in ipairs(def.Summon.Levels) do
+			list[#list + 1] = { Ally = lv.Ally, HP = lv.HP, Text = string.format("%s • x%d • %d HP • %d с", i == 5 and "MAX" or ("LVL " .. i), lv.Count, lv.HP, lv.Interval) }
+		end
+		if def.Summon.Golden then
+			local g = def.Summon.Golden
+			list[#list + 1] = { Ally = g.Ally, HP = g.HP, Text = string.format("MAX • каждый %d-й призыв • %d HP", g.Every, g.HP) }
+		end
+	end
+	return list
+end
+
+local function clearGallery()
+	if state and state.Gallery then
+		for _, g in ipairs(state.Gallery) do
+			g.Rig.Model:Destroy()
+		end
+		state.Gallery = nil
+	end
+	if refs.GalleryInfo then
+		refs.GalleryInfo.Visible = false
+	end
+end
+
+showGallery = function(kind)
+	if not UnitModels.BuildAlly then
+		return
+	end
+	if state.Gallery then
+		clearGallery()
+		buildModel(true)
+		refs.GalleryButton.Text = state.GalleryLabel
+		return
+	end
+	clearScene()
+	local list = galleryList(kind)
+	state.Gallery = {}
+	local n = #list
+	local lines = {}
+	for i, it in ipairs(list) do
+		local ok, rig = pcall(UnitModels.BuildAlly, it.Ally)
+		if ok and rig then
+			for _, d in ipairs(rig.Model:GetDescendants()) do
+				if d:IsA("ParticleEmitter") or d:IsA("PointLight") or d:IsA("Trail") then
+					d:Destroy()
+				end
+			end
+			local x = (i - (n + 1) / 2) * 3.4
+			rig.Root.CFrame = CF(x, rig.HipHeight, math.abs(x) * 0.25) * ANG(0, math.pi, 0)
+			rig.Model.Parent = refs.World
+			state.Gallery[#state.Gallery + 1] = { Rig = rig }
+		end
+		lines[#lines + 1] = string.format("%d. %s — %s", i, Config.Allies[it.Ally].Name, it.Text)
+	end
+	local glow = GLOW[Config.Units[state.Id].Rarity] or THEME.Accent
+	buildPlatform(0, n * 1.9 + 2, glow)
+	state.Center = V(0, 2.4, 0)
+	state.BaseDist = n * 3.6 + 8
+	state.Zoom = 1
+	state.Dist = state.BaseDist
+	state.Yaw, state.Pitch = math.rad(180), math.rad(10)
+	updateCamera()
+	refs.GalleryInfo.Text = (kind == "Rune" and "ПРОКЛЯТЫЕ НИТИ — проклятые люди:\n" or "ПРИЗЫВ — союзники идут по дороге навстречу врагам, HP = запас урона:\n") .. table.concat(lines, "\n")
+	refs.GalleryInfo.Visible = true
+	refs.GalleryButton.Text = "← К ЮНИТУ"
 end
 
 ------------------------------------------------------------------------
@@ -500,8 +633,21 @@ local function previewStorm(on)
 	end
 end
 
+local POWER_FX = {
+	LanternBeam = Color3.fromRGB(255, 230, 150), DirtBurst = Color3.fromRGB(140, 110, 80), LeafStorm = Color3.fromRGB(230, 140, 40),
+	CurseMark = Color3.fromRGB(120, 255, 110), MidnightToll = Color3.fromRGB(190, 160, 255), PlagueCloud = Color3.fromRGB(140, 230, 80),
+	GhostSword = Color3.fromRGB(110, 190, 255), MirrorShatter = Color3.fromRGB(180, 90, 255), ThreadSnap = Color3.fromRGB(230, 30, 50),
+	Execution = Color3.fromRGB(255, 110, 30), GhostPumpkin = Color3.fromRGB(255, 140, 40), Summon = Color3.fromRGB(200, 90, 255),
+}
+
 previewFx = function(kind)
 	local s = state.Rig.Scale or 1
+	if POWER_FX[kind] then
+		local col = POWER_FX[kind]
+		previewRing(0.08, 1, 7 * s, col, 0.8, 0.5)
+		previewRing(0.12, 0.5, 4.5 * s, col:Lerp(Color3.new(1, 1, 1), 0.3), 0.6, 0.6)
+		return
+	end
 	if kind == "TimeBreak" then
 		previewRing(0.05, 1, 6 * s, GOLD, 0.9, 0.5)
 		previewRing(0.1, 0.5, 4 * s, ORANGE, 0.6, 0.55)
@@ -544,9 +690,17 @@ function UnitViewer.Open(unitId, level)
 	refs.Dim.Visible = true
 	refs.Scale.Scale = 0.88
 	K.tween(refs.Scale, 0.22, { Scale = 1 }, Enum.EasingStyle.Back)
+	clearGallery()
 	buildModel(false)
 	refreshInfo()
 	applyRarityFx(true)
+	-- «Посмотреть призыв» у Кукловода и Иллюзиониста, «Проклятые люди» у юнитов с руной «Проклятые нити»
+	local def = Config.Units[unitId]
+	local hasThreads = prof.RuneSlots and prof.RuneSlots[unitId] == "CursedThreads"
+	state.GalleryKind = def.Summon and "Summon" or (hasThreads and "Rune" or nil)
+	state.GalleryLabel = def.Summon and "ПОСМОТРЕТЬ ПРИЗЫВ" or "ПРОКЛЯТЫЕ ЛЮДИ"
+	refs.GalleryButton.Visible = state.GalleryKind ~= nil
+	refs.GalleryButton.Text = state.GalleryLabel
 	for _, c in ipairs(refs.AbilityRow:GetChildren()) do
 		if c:IsA("GuiButton") then
 			c:Destroy()
@@ -574,6 +728,10 @@ function UnitViewer.SetLevel(lv)
 		return
 	end
 	state.Level = math.clamp(lv, 1, 5)
+	if state.Gallery then
+		clearGallery()
+		refs.GalleryButton.Text = state.GalleryLabel
+	end
 	buildModel(true)
 	refreshInfo()
 	if FX then
@@ -582,6 +740,11 @@ function UnitViewer.SetLevel(lv)
 end
 
 function UnitViewer.PlayAnim(kind)
+	if state and state.Gallery then
+		clearGallery()
+		buildModel(true)
+		refs.GalleryButton.Text = state.GalleryLabel
+	end
 	if not state or not state.Rig then
 		return
 	end
@@ -619,7 +782,12 @@ function UnitViewer.Close()
 		c:Disconnect()
 	end
 	conns = {}
+	clearGallery()
 	clearScene()
+	for _, p in ipairs(refs.EventSparks) do
+		p:Destroy()
+	end
+	refs.EventSparks = {}
 	spawnParticles(THEME.Accent, 0)
 	refs.Intro.Visible = false
 	state = nil

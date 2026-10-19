@@ -11,6 +11,7 @@ local UI = {}
 local ctx, Config, UnitModels, Renderer, FX
 local player = Players.LocalPlayer
 local UnitViewer = require(script.Parent:WaitForChild("UnitViewer"))
+local HalloweenUI = require(script.Parent:WaitForChild("HalloweenUI"))
 
 local THEME = {
 	BG = Color3.fromRGB(16, 10, 26),
@@ -208,6 +209,30 @@ function ICONS.Back(c, z)
 	shape(c, 0.34, 0.63, 0.32, 0.12, col, 42, 0.5, z)
 end
 
+-- тыква: дольки, хвостик, вырезанное лицо
+function ICONS.Pumpkin(c, z)
+	for i, x in ipairs({ 0.3, 0.7, 0.5 }) do
+		local o = shape(c, x, 0.58, i == 3 and 0.42 or 0.38, 0.6, Color3.new(1, 1, 1), 0, 0.45, z + (i == 3 and 1 or 0))
+		shade(o, Color3.fromRGB(255, 165, 60), Color3.fromRGB(190, 80, 20))
+		new("UIStroke", { Parent = o, Color = Color3.fromRGB(70, 25, 5), Thickness = 1.5 })
+	end
+	shape(c, 0.52, 0.22, 0.1, 0.18, Color3.fromRGB(80, 110, 40), 14, 0.3, z + 2)
+	for _, x in ipairs({ 0.38, 0.62 }) do
+		shape(c, x, 0.52, 0.12, 0.12, Color3.fromRGB(255, 230, 120), 45, 0.1, z + 3)
+	end
+	shape(c, 0.5, 0.7, 0.34, 0.08, Color3.fromRGB(255, 230, 120), 0, 0.4, z + 3)
+end
+
+-- руна: камень-ромб с символом
+function ICONS.Rune(c, z)
+	local o = shape(c, 0.5, 0.5, 0.62, 0.62, Color3.new(1, 1, 1), 45, 0.15, z)
+	shade(o, Color3.fromRGB(255, 160, 60), Color3.fromRGB(120, 30, 40), 45)
+	new("UIStroke", { Parent = o, Color = Color3.fromRGB(40, 10, 10), Thickness = 2 })
+	shape(c, 0.5, 0.5, 0.08, 0.42, Color3.fromRGB(255, 240, 200), 0, 0.5, z + 1)
+	shape(c, 0.5, 0.4, 0.3, 0.07, Color3.fromRGB(255, 240, 200), 30, 0.5, z + 1)
+	shape(c, 0.5, 0.6, 0.3, 0.07, Color3.fromRGB(255, 240, 200), -30, 0.5, z + 1)
+end
+
 -- контейнер с иконкой (квадратный)
 local function icon(kind, parent, props)
 	local c = new("Frame", { Parent = parent, Name = "Icon" .. kind, BackgroundTransparency = 1, Size = props.Size, Position = props.Position or UDim2.new(), AnchorPoint = props.AnchorPoint or Vector2.new(), ZIndex = props.ZIndex or 1 })
@@ -260,6 +285,30 @@ end
 local function rarityColor(id)
 	return Config.Rarities[Config.Units[id].Rarity].Color
 end
+
+-- лёгкие оранжевые искры на карточках хэллоуинских юнитов (двигаются в UI.Update)
+local sparks = {}
+local function eventSparks(parent, z, n)
+	for i = 1, n or 4 do
+		local f = new("Frame", { Parent = parent, BackgroundColor3 = Color3.fromRGB(255, 160, 60), BorderSizePixel = 0, Size = UDim2.fromOffset(3, 3), Rotation = 45, ZIndex = z, BackgroundTransparency = 0.2 })
+		sparks[#sparks + 1] = { F = f, X = math.random(), P = math.random() * 3, S = 0.25 + math.random() * 0.25 }
+	end
+end
+
+-- Тег события: значок-тыква в углу, «🎃 HALLOWEEN» и искры. Рамка остаётся цветом редкости.
+local function eventTag(parent, unitId, z, textPos, textSize)
+	local def = Config.Units[unitId]
+	local ev = def and def.Event and Config.Events[def.Event]
+	if not ev then
+		return
+	end
+	icon("Pumpkin", parent, { Size = UDim2.fromOffset(22, 22), Position = UDim2.fromOffset(4, 4), ZIndex = z + 2 })
+	if textPos then
+		label({ Parent = parent, Size = textSize or UDim2.new(1, -8, 0, 13), Position = textPos, Text = ev.Tag, TextColor3 = ev.Color, Font = Enum.Font.GothamBold, ZIndex = z + 1 })
+	end
+	eventSparks(parent, z + 1, 4)
+end
+UI.EventTag = eventTag
 
 -- 3D превью юнита
 local function viewport(parent, unitId, level, props)
@@ -359,6 +408,8 @@ local function buildHUD()
 	refs.MoneyIcon = icon("Coin", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 7) })
 	refs.Gems = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 32), Position = UDim2.fromOffset(52, 50), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(150, 200, 255) })
 	refs.GemsIcon = icon("Gem", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 49) })
+	refs.Coins = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 30), Position = UDim2.fromOffset(52, 92), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(255, 160, 60) })
+	refs.CoinsIcon = icon("Pumpkin", cur, { Size = UDim2.fromOffset(32, 32), Position = UDim2.fromOffset(11, 91) })
 
 	-- волна и ядро
 	local top = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 104), Position = UDim2.new(0.5, 0, 0, 12) })
@@ -703,6 +754,8 @@ function UI.Toggle(name)
 					UI.RefreshInventory()
 				elseif name == "Mode" then
 					UI.RefreshMode()
+				elseif name == "Bestiary" then
+					HalloweenUI.FillBestiary()
 				end
 			end
 		else
@@ -804,6 +857,21 @@ end
 
 local function rateText(case)
 	local lines = {}
+	if case.Rewards then
+		-- полный список наград с шансами (юниты и руны)
+		for _, r in ipairs(case.Rewards) do
+			local name, color
+			if r.Rune then
+				local rd = Config.Runes[r.Rune]
+				name, color = "Руна «" .. rd.Name .. "»", Config.RuneRarity.Color
+			else
+				local def = Config.Units[r.Unit]
+				name, color = def.Name .. " (" .. def.Rarity .. ")", Config.Rarities[def.Rarity].Color
+			end
+			lines[#lines + 1] = string.format('<font color="#%s">%s</font>  %s%%', color:ToHex(), name, tostring(r.Rate))
+		end
+		return table.concat(lines, "\n")
+	end
 	for _, rarity in ipairs(Config.RarityOrder) do
 		local rate = case.Rates[rarity]
 		if rate and rate > 0 then
@@ -823,8 +891,11 @@ function UI.SelectCase(caseId)
 	refs.CaseName.TextColor3 = case.Color
 	refs.CaseDesc.Text = case.Description
 	refs.CaseRates.Text = rateText(case)
-	refs.CaseBuy1.Text = "x1  💎" .. case.Cost1
-	refs.CaseBuy10.Text = "x10  💎" .. case.Cost10
+	refs.CaseRates.TextSize = case.Rewards and 13 or 18
+	local cur = case.Currency == "HalloweenCoins" and "🎃" or "💎"
+	refs.CaseBuy1.Text = (case.Single and "ОТКРЫТЬ  " or "x1  ") .. cur .. case.Cost1
+	refs.CaseBuy10.Visible = not case.Single and case.Cost10 ~= nil
+	refs.CaseBuy10.Text = "x10  " .. cur .. tostring(case.Cost10 or "")
 	refs.CaseBig:ClearAllChildren()
 	caseViews.Big = caseViewport(refs.CaseBig, caseId)
 	for id, b in pairs(refs.CaseTabs) do
@@ -842,6 +913,17 @@ function UI.SelectCase(caseId)
 		viewport(cell, id, 1, { Size = UDim2.new(1, 0, 0, 74), ZIndex = 8 })
 		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 16), Position = UDim2.fromOffset(3, 74), Text = def.Name, Font = Enum.Font.GothamBold, ZIndex = 8 })
 		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.fromOffset(3, 90), Text = def.Rarity, TextColor3 = rc, ZIndex = 8 })
+		eventTag(cell, id, 8)
+	end
+	-- руны в кейсе
+	for i, r in ipairs(case.Rewards or {}) do
+		if r.Rune then
+			local rd = Config.Runes[r.Rune]
+			local cell = panel({ Parent = refs.CaseUnits, Size = UDim2.fromOffset(100, 108), BackgroundColor3 = THEME.BG2, StrokeColor = Config.RuneRarity.Color, LayoutOrder = 1000 + i, ZIndex = 7 })
+			HalloweenUI.RuneViewport(cell, r.Rune, { Size = UDim2.new(1, 0, 0, 74), ZIndex = 8 })
+			label({ Parent = cell, Size = UDim2.new(1, -6, 0, 16), Position = UDim2.fromOffset(3, 74), Text = rd.Name, Font = Enum.Font.GothamBold, ZIndex = 8 })
+			label({ Parent = cell, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.fromOffset(3, 90), Text = "РУНА • HALLOWEEN", TextColor3 = Config.RuneRarity.Color, ZIndex = 8 })
+		end
 	end
 end
 
@@ -851,6 +933,10 @@ local function showCards(overlay, results)
 	})
 	for i, r in ipairs(results) do
 		task.delay(0.15 * i, function()
+			if r.Rune then
+				HalloweenUI.RuneCard(grid, r, i)
+				return
+			end
 			local def = Config.Units[r.Id]
 			local rc = rarityColor(r.Id)
 			local card = panel({ Parent = grid, BackgroundColor3 = THEME.BG2, StrokeColor = rc, LayoutOrder = i, ZIndex = 23 })
@@ -859,6 +945,7 @@ local function showCards(overlay, results)
 			viewport(card, r.Id, 1, { Size = UDim2.new(1, 0, 0, 120), Position = UDim2.fromOffset(0, 8), ZIndex = 24 })
 			label({ Parent = card, Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 130), Text = def.Name, ZIndex = 24 })
 			label({ Parent = card, Size = UDim2.new(1, -8, 0, 18), Position = UDim2.fromOffset(4, 154), Text = def.Rarity:upper(), TextColor3 = rc, ZIndex = 24 })
+			eventTag(card, r.Id, 24, UDim2.fromOffset(4, 172), UDim2.new(1, -8, 0, 14))
 			if r.New then
 				local tag = label({ Parent = card, Size = UDim2.fromOffset(56, 22), Position = UDim2.fromOffset(6, 6), Text = "NEW!", TextColor3 = THEME.Gold, ZIndex = 25 })
 				tag.Rotation = -12
@@ -879,7 +966,9 @@ local function playCaseOpening(caseId, results)
 	local case = Config.Cases[caseId]
 	local best = 1
 	for _, r in ipairs(results) do
-		best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+		if r.Id then
+			best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+		end
 	end
 	local bestName = Config.RarityOrder[best]
 	local bestColor = Config.Rarities[bestName].Color
@@ -1013,7 +1102,12 @@ local function buildCases()
 		local ok, res = ctx.Request("Summon", { Case = selectedCase, Count = count })
 		busy = false
 		if ok then
-			playCaseOpening(selectedCase, res)
+			if selectedCase == "Halloween" then
+				-- проклятый сундук: своя кинематографичная анимация
+				HalloweenUI.PlayOpening(res, showCards)
+			else
+				playCaseOpening(selectedCase, res)
+			end
 		end
 	end
 	refs.CaseBuy1 = button({ Parent = m, AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(200, 50), Position = UDim2.new(1, -238, 1, -12), Text = "x1", BackgroundColor3 = THEME.AccentDark, ZIndex = 6 }, function()
@@ -1107,6 +1201,12 @@ local function buildInventory()
 	refs.InvRarity = label({ Parent = d, Size = UDim2.new(1, -20, 0, 18), Position = UDim2.fromOffset(10, 38), Text = "", TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7 })
 	refs.InvDesc = label({ Parent = d, Size = UDim2.new(1, -20, 0, 48), Position = UDim2.fromOffset(10, 60), Text = "", TextScaled = false, TextSize = 14, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Gotham, TextColor3 = THEME.Dim, ZIndex = 7 })
 	refs.InvStats = label({ Parent = d, Size = UDim2.new(1, -20, 0, 120), Position = UDim2.fromOffset(10, 110), Text = "", TextScaled = false, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Code, ZIndex = 7 })
+	-- руна юнита: показать, надеть, снять
+	refs.InvRune = button({ Parent = d, AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -20, 0, 34), Position = UDim2.new(0, 10, 1, -60), Text = "РУНА: нет", TextColor3 = Color3.fromRGB(255, 170, 70), BackgroundColor3 = Color3.fromRGB(50, 26, 20), StrokeColor = Color3.fromRGB(255, 130, 30), ZIndex = 7 }, function()
+		if invSelected then
+			HalloweenUI.OpenRunePicker(invSelected)
+		end
+	end)
 	refs.InvEquip = button({ Parent = d, AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -20, 0, 44), Position = UDim2.new(0, 10, 1, -10), Text = "EQUIP", BackgroundColor3 = Color3.fromRGB(60, 130, 80), ZIndex = 7 }, function()
 		if invSelected then
 			UI.ToggleEquip(invSelected)
@@ -1165,8 +1265,22 @@ local function selectInventory(id)
 		end
 	end
 	refs.InvEquip.Visible = owned
+	refs.InvRune.Visible = owned
+	local runeId = prof.RuneSlots and prof.RuneSlots[id]
+	refs.InvRune.Text = runeId and ("РУНА: " .. Config.Runes[runeId].Name .. "  (сменить)") or "РУНА: нет  (надеть)"
+	if def.Event and Config.Events[def.Event] then
+		refs.InvRarity.Text = def.Rarity:upper() .. "  •  " .. Config.Events[def.Event].Tag .. (def.Ability and ("  •  " .. def.Ability) or "")
+	end
 	refs.InvEquip.Text = equipped and "UNEQUIP" or "EQUIP"
 	refs.InvEquip.BackgroundColor3 = equipped and Color3.fromRGB(130, 50, 60) or Color3.fromRGB(60, 130, 80)
+end
+
+-- фильтр коллекции: nil — все юниты, "Halloween" — только юниты события (круг на острове)
+function UI.SetInventoryFilter(eventKey)
+	UI.InvFilter = eventKey
+	if modals.Inventory and modals.Inventory.Visible then
+		UI.RefreshInventory()
+	end
 end
 
 function UI.RefreshInventory()
@@ -1201,6 +1315,9 @@ function UI.RefreshInventory()
 		local def = Config.Units[id]
 		local count = prof.Inventory[id] or 0
 		local rc = rarityColor(id)
+		if UI.InvFilter and def.Event ~= UI.InvFilter then
+			continue
+		end
 		local b = button({ Parent = refs.InvGrid, Text = "", BackgroundColor3 = THEME.BG2, StrokeColor = count > 0 and rc or Color3.fromRGB(60, 50, 70), LayoutOrder = order, ZIndex = 7 }, function()
 			selectInventory(id)
 			if (ctx.Profile.Inventory[id] or 0) > 0 then
@@ -1215,7 +1332,11 @@ function UI.RefreshInventory()
 		label({ Parent = b, Size = UDim2.new(1, -8, 0, 16), Position = UDim2.fromOffset(4, 118), Text = def.Rarity, TextColor3 = rc, ZIndex = 8 })
 		if count > 0 then
 			label({ Parent = b, Size = UDim2.fromOffset(40, 20), Position = UDim2.new(1, -44, 0, 4), Text = "x" .. count, TextColor3 = THEME.Gold, ZIndex = 9 })
+			if prof.RuneSlots and prof.RuneSlots[id] then
+				icon("Rune", b, { Size = UDim2.fromOffset(20, 20), Position = UDim2.new(1, -24, 0, 26), ZIndex = 10 })
+			end
 		end
+		eventTag(b, id, 8, UDim2.fromOffset(4, 82), UDim2.new(1, -8, 0, 13))
 	end
 	if invSelected then
 		selectInventory(invSelected)
@@ -1292,7 +1413,7 @@ local function showEnd(victory, payload)
 	local title = label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(800, 120), Position = UDim2.fromScale(0.5, 0.38), Text = victory and "VICTORY" or "DEFEAT", TextColor3 = victory and THEME.Gold or THEME.Bad, ZIndex = 31, StrokeThickness = 4 })
 	local sc = new("UIScale", { Parent = title, Scale = 0.2 })
 	tween(sc, 0.5, { Scale = 1 }, Enum.EasingStyle.Back)
-	local sub = victory and ("Пустота отступила! Награда: 💎" .. tostring(payload.Gems)) or ("Ядро Пустоты разрушено на волне " .. tostring(payload.Wave))
+	local sub = victory and ("Пустота отступила! Награда: 💎" .. tostring(payload.Gems) .. (payload.Coins and ("  +🎃" .. payload.Coins .. " Halloween Coins") or "")) or ("Ядро разрушено на волне " .. tostring(payload.Wave) .. (payload.Mode == "Halloween" and "  •  Halloween Coins не выдаются" or ""))
 	label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(800, 40), Position = UDim2.fromScale(0.5, 0.5), Text = sub, ZIndex = 31 })
 	local timer = label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(600, 30), Position = UDim2.fromScale(0.5, 0.57), Text = "", TextColor3 = THEME.Dim, ZIndex = 31 })
 	local reset = payload.Reset or 15
@@ -1334,7 +1455,7 @@ function UI.OnNotify(p)
 		end
 		local f = refs.CoreFill
 		f.BackgroundColor3 = THEME.Bad
-		tween(f, 0.4, { BackgroundColor3 = THEME.Accent })
+		tween(f, 0.4, { BackgroundColor3 = UI.MapMode == "Halloween" and Color3.fromRGB(255, 130, 30) or THEME.Accent })
 	elseif t == "Victory" then
 		FX.Sound("Victory", 1, 1)
 		showEnd(true, p)
@@ -1352,8 +1473,28 @@ function UI.OnNotify(p)
 			refs.EndOverlay = nil
 		end
 		UI.CloseUnit()
-		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
+		if player:GetAttribute("Island") then
+			UI.Toast("Бой окончен. Ты на Хэллоуин-острове", "good")
+		else
+			UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
+		end
 	end
+end
+
+-- карта матча: Void или Haunted Hollow
+function UI.SetMapMode(key)
+	UI.MapMode = key
+	if refs.CoreFill then
+		refs.CoreFill.BackgroundColor3 = key == "Halloween" and Color3.fromRGB(255, 130, 30) or THEME.Accent
+	end
+end
+
+function UI.Fade(text)
+	task.spawn(UI.FadeTransition, text)
+end
+
+function UI.UpdateQueue()
+	HalloweenUI.UpdateQueue()
 end
 
 function UI.SetLiteText(on)
@@ -1368,6 +1509,7 @@ function UI.SetProfile(prof)
 	if modals.Inventory and modals.Inventory.Visible then
 		UI.RefreshInventory()
 	end
+	HalloweenUI.OnProfile(prof)
 end
 
 local lastRefresh = 0
@@ -1377,7 +1519,7 @@ function UI.Update(dt)
 	refs.Money.Text = Config.FormatNumber(money)
 	local gems = player:GetAttribute("Gems") or (ctx.Profile and ctx.Profile.Gems) or 0
 	refs.Gems.Text = Config.FormatNumber(gems)
-	if refs.SummonGems then
+	if refs.SummonGems and selectedCase ~= "Halloween" then
 		refs.SummonGems.Text = "💎 " .. Config.FormatNumber(gems)
 	end
 
@@ -1389,9 +1531,32 @@ function UI.Update(dt)
 	refs.Hotbar.Visible = inMatch
 	refs.Leave.Visible = inMatch
 	refs.Money.Visible = inMatch
-	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
-	refs.Gems.Position = UDim2.fromOffset(52, inMatch and 50 or 8)
-	refs.GemsIcon.Position = UDim2.fromOffset(10, inMatch and 49 or 7)
+	local coins = player:GetAttribute("HalloweenCoins") or (ctx.Profile and ctx.Profile.HalloweenCoins) or 0
+	refs.Coins.Text = Config.FormatNumber(coins)
+	local gy = inMatch and 50 or 8
+	refs.Currency.Size = UDim2.fromOffset(230, gy + 84)
+	refs.Gems.Position = UDim2.fromOffset(52, gy)
+	refs.GemsIcon.Position = UDim2.fromOffset(10, gy - 1)
+	refs.Coins.Position = UDim2.fromOffset(52, gy + 44)
+	refs.CoinsIcon.Position = UDim2.fromOffset(11, gy + 43)
+	if refs.SummonGems and selectedCase == "Halloween" then
+		refs.SummonGems.Text = "🎃 " .. Config.FormatNumber(coins)
+		refs.SummonGems.TextColor3 = Color3.fromRGB(255, 160, 60)
+	elseif refs.SummonGems then
+		refs.SummonGems.TextColor3 = Color3.fromRGB(120, 200, 255)
+	end
+	-- искры на карточках хэллоуинских юнитов
+	local tt = os.clock()
+	for i = #sparks, 1, -1 do
+		local sp = sparks[i]
+		if not sp.F.Parent then
+			table.remove(sparks, i)
+		else
+			local a = ((tt * sp.S + sp.P) % 1)
+			sp.F.Position = UDim2.fromScale(sp.X + math.sin(tt * 2 + sp.P) * 0.04, 1 - a)
+			sp.F.BackgroundTransparency = 0.2 + a * 0.8
+		end
+	end
 	refs.MoneyIcon.Visible = inMatch
 	if not inMatch and UI.SelectedUid then
 		UI.CloseUnit()
@@ -1427,7 +1592,7 @@ function UI.Update(dt)
 	local hp = State:GetAttribute("CoreHP") or 100
 	local maxHp = State:GetAttribute("CoreMaxHP") or 100
 	refs.CoreFill.Size = UDim2.fromScale(math.clamp(hp / maxHp, 0, 1), 1)
-	refs.CoreText.Text = "VOID CORE  " .. hp .. " / " .. maxHp
+	refs.CoreText.Text = (UI.MapMode == "Halloween" and "СВЯТИЛИЩЕ  " or "VOID CORE  ") .. hp .. " / " .. maxHp
 
 	-- босс
 	local bossId = State:GetAttribute("BossId") or 0
@@ -1500,9 +1665,13 @@ function UI.Init(c)
 	UI.Gui = screen
 	-- окно 3D-просмотра юнита
 	UI.Root = gui
-	UI.Kit = { new = new, corner = corner, stroke = stroke, label = label, button = button, panel = panel, tween = tween }
+	UI.Kit = { new = new, corner = corner, stroke = stroke, label = label, button = button, panel = panel, tween = tween,
+		modal = modal, viewport = viewport, icon = icon, rarityColor = rarityColor, eventTag = eventTag, eventSparks = eventSparks, pad = pad }
 	UI.SpecialText = specialText
+	UI.Modals = modals
+	UI.Refs = refs
 	UnitViewer.Init(c, UI)
+	HalloweenUI.Init(c, UI)
 end
 
 return UI

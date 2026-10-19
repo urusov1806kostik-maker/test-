@@ -16,6 +16,7 @@ local S = Config.Settings
 local GameService = {}
 
 local Remotes, State, UnitsFolder, Map
+local MapModels = {}
 local rng = Random.new()
 
 local enemies = {}
@@ -38,6 +39,20 @@ local waveSpawning = false
 local nextWaveAt = 0
 local lastSync = 0
 local lastAttrFlush = 0
+-- режим матча: Void (обычный) или Halloween (карта Haunted Hollow, вход только из очереди на острове)
+local matchMode = "Void"
+local maxWave = S.MaxWave
+local roster = {}       -- участники Хэллоуин-матча (UserId -> true)
+local coinsPaid = {}    -- matchId -> true: награда за победу выдана (повторно не платится)
+-- союзники (призывы): идут по дороге от базы к порталу
+local allies = {}
+local nextAllyId = 0
+local allyRemoved = {}
+local allyIndex = {}
+for i, id in ipairs(Config.AllyOrder or {}) do
+	allyIndex[id] = i
+end
+local echoAttack = false -- true, пока выполняется повтор атаки «Призрачной короны»
 
 local function now()
 	return workspace:GetServerTimeNow()
@@ -113,12 +128,16 @@ local function teleport(player, pos)
 end
 
 local function toBattle(player)
-	teleport(player, Config.BattleSpawn)
+	local m = Config.Maps[matchMode] or Config.Map
+	teleport(player, m.BattleSpawn or Config.BattleSpawn)
 end
 
-local function toLobby(player)
-	teleport(player, Config.Lobby.Spawn)
+local function toLobby(player, island)
+	player:SetAttribute("Island", island == true)
+	teleport(player, island and Config.HalloweenIsland.Spawn or Config.Lobby.Spawn)
 end
+GameService.ToLobby = toLobby
+GameService.Teleport = teleport
 
 ------------------------------------------------------------------------
 -- ВРАГИ
@@ -173,6 +192,21 @@ local function spawnEnemy(typeId, startDist, lateral)
 	if def.Summon then
 		e.NextSummon = now() + def.Summon.Interval
 	end
+	-- особое поведение хэллоуинских врагов
+	local t0 = now()
+	e.BaseArmor = e.Armor
+	if def.Phase then
+		e.NextPhase = t0 + def.Phase.Every * rng:NextNumber(0.5, 1)
+	end
+	if def.Fog then
+		e.NextFog = t0 + def.Fog.Every * rng:NextNumber(0.4, 0.8)
+	end
+	if def.Shield then
+		e.NextShield = t0 + def.Shield.Every * 0.6
+	end
+	if def.Haste then
+		e.NextHaste = t0 + def.Haste.Every * 0.7
+	end
 	e.Pos = enemyPos(e)
 	enemies[e.Id] = e
 	Remotes.EnemySpawn:FireAllClients({ e.Id, typeId, hp, e.Speed, e.Lateral, e.Dist })
@@ -202,7 +236,66 @@ local function killEnemy(e)
 		notifyAll({ Type = "Toast", Text = e.Def.Name .. " повержен! +" .. g .. " гемов", Kind = "boss" })
 		notifyAll({ Type = "BossDown" })
 	end
+	if e.Def.OnDeath then
+		pendingSpawns[#pendingSpawns + 1] = { e.Def.OnDeath.Enemy, e.Def.OnDeath.Count, e.Dist + 1.5, e.Pos, "Straw" }
+	end
 	removeEnemy(e, "kill")
+end
+
+local function enemyState(e, state, dur)
+	Remotes.Impact:FireAllClients({ K = "EnemyState", I = e.Id, S = state, DUR = dur, P = e.Pos })
+end
+
+-- множитель получаемого урона: фаза призрака, защита, метка проклятия
+local function takenMult(e, t)
+	local m = 1
+	if (e.PhasedUntil or 0) > t then
+		m = m * e.Def.Phase.Taken
+	end
+	if (e.ShieldUntil or 0) > t then
+		m = m * e.Def.Shield.Taken
+	end
+	if (e.MarkUntil or 0) > t then
+		m = m * (1 + (e.Mark or 0))
+	end
+	return m
+end
+
+-- броня с учётом участков дороги (Проклятый монарх)
+local function armorOf(e)
+	local a = e.Armor
+	local zones = e.Def.ArmorZones
+	if zones then
+		local f = PathUtil.Fraction(e.Dist)
+		for _, z in ipairs(zones) do
+			if f >= z[1] and f <= z[2] then
+				a = a + z[3]
+			end
+		end
+	end
+	return math.min(a, 0.9)
+end
+
+-- пороги HP: ломается броня, ярость, вторая фаза
+local function checkThresholds(e)
+	local def = e.Def
+	local ratio = e.Health / e.MaxHealth
+	if def.ArmorScale then
+		e.Armor = e.BaseArmor * math.max(ratio, 0)
+	end
+	if def.ArmorBreak and not e.ArmorBroken and ratio <= def.ArmorBreak.At then
+		e.ArmorBroken = true
+		e.Armor = def.ArmorBreak.Armor
+		enemyState(e, "ArmorBreak")
+	end
+	if def.Enrage and not e.Enraged and ratio <= def.Enrage.At then
+		e.Enraged = true
+		e.EnrageSpeed = def.Enrage.Speed or 0
+		enemyState(e, "Enrage")
+		if def.Enrage.Spawn then
+			pendingSpawns[#pendingSpawns + 1] = { def.Enrage.Spawn[1], def.Enrage.Spawn[2], math.max(e.Dist - 4, 0), e.Pos, "Fire" }
+		end
+	end
 end
 
 local function pushDamage(id, amount, flag)
@@ -218,7 +311,7 @@ local function damageEnemy(e, amount, crit, unit, noDodge)
 		pushDamage(e.Id, 0, 2)
 		return 0
 	end
-	local dmg = math.max(1, math.floor(amount * (1 - e.Armor) + 0.5))
+	local dmg = math.max(1, math.floor(amount * (1 - armorOf(e)) * takenMult(e, now()) + 0.5))
 	e.Health = e.Health - dmg
 	pushDamage(e.Id, dmg, crit and 1 or 0)
 	if unit then
@@ -226,6 +319,28 @@ local function damageEnemy(e, amount, crit, unit, noDodge)
 	end
 	if e.Health <= 0 then
 		killEnemy(e)
+	else
+		checkThresholds(e)
+	end
+	return dmg
+end
+
+-- чистый урон без брони и уклонения (столкновение с союзником)
+local function rawDamage(e, amount, unit)
+	if not e.Alive or amount <= 0 then
+		return 0
+	end
+	local dmg = math.min(amount, e.Health)
+	e.Health = e.Health - dmg
+	pushDamage(e.Id, math.floor(dmg + 0.5), 0)
+	if unit and unit.Alive then
+		unit.DamageDealt = unit.DamageDealt + dmg
+	end
+	if e.Health <= 0.5 then
+		e.Health = 0
+		killEnemy(e)
+	else
+		checkThresholds(e)
 	end
 	return dmg
 end
@@ -260,7 +375,22 @@ local function endMatch(victory)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Victory", Wave = wave, Gems = g, Reset = S.ResetDelay, Difficulty = difficultyKey })
+		-- Halloween Coins: каждому участнику за победу, один раз за матч
+		local coins = 0
+		if matchMode == "Halloween" and not coinsPaid[myMatch] then
+			coinsPaid[myMatch] = true
+			coins = Config.Halloween.Coins[difficultyKey] or 0
+			for _, pl in ipairs(matchPlayers()) do
+				if roster[pl.UserId] then
+					DataService.AddCurrency(pl, "HalloweenCoins", coins)
+					DataService.Save(pl, true)
+					if GameService.OnProfileChanged then
+						GameService.OnProfileChanged(pl)
+					end
+				end
+			end
+		end
+		notifyAll({ Type = "Victory", Wave = wave, Gems = g, Coins = coins > 0 and coins or nil, Reset = S.ResetDelay, Difficulty = difficultyKey, Mode = matchMode })
 	else
 		for _, pl in ipairs(matchPlayers()) do
 			local prof = DataService.Get(pl)
@@ -269,7 +399,7 @@ local function endMatch(victory)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay, Difficulty = difficultyKey })
+		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay, Difficulty = difficultyKey, Mode = matchMode })
 		clearEnemies()
 	end
 	task.delay(S.ResetDelay, function()
@@ -295,7 +425,7 @@ local function waveCleared()
 	local reward = math.floor((S.WaveRewardBase + S.WaveRewardPerWave * wave) * D.Money + 0.5)
 	addMoneyAll(reward)
 	local gems = addGemsAll(S.WaveGemsBase + S.WaveGemsPerWave * wave)
-	if wave >= S.MaxWave then
+	if wave >= maxWave then
 		endMatch(true)
 		return
 	end
@@ -315,7 +445,12 @@ local function startWave()
 	setState("Wave", wave)
 	setState("Phase", phase)
 	setState("NextWaveAt", 0)
-	local groups = Config.Waves[wave] or {}
+	local source = matchMode == "Halloween" and Config.Maps.Halloween.Waves or Config.Waves
+	local groups = {}
+	for i, g in ipairs(source[wave] or {}) do
+		-- BOSS — финальный босс выбранной сложности
+		groups[i] = g[1] == "BOSS" and { Config.Halloween.Bosses[difficultyKey] or "GraveWarden", g[2], g[3] } or g
+	end
 	local bossName
 	for _, g in ipairs(groups) do
 		local def = Config.Enemies[g[1]]
@@ -375,11 +510,26 @@ local function unitCountFor(player, unitId)
 	return total, same
 end
 
+local function removeAlly(a, reason)
+	if not a.Alive then
+		return
+	end
+	a.Alive = false
+	allies[a.Id] = nil
+	allyRemoved[#allyRemoved + 1] = { a.Id, reason }
+end
+
 local function removeUnit(u)
 	u.Alive = false
 	units[u.Uid] = nil
 	if u.Folder then
 		u.Folder:Destroy()
+	end
+	-- проданный юнит забирает своих союзников
+	for _, a in pairs(allies) do
+		if a.Owner == u then
+			removeAlly(a, "sold")
+		end
 	end
 end
 
@@ -420,8 +570,8 @@ function GameService.PlaceUnit(player, unitId, pos, rotation)
 		return false, why
 	end
 	-- проверяем, что под ногами остров
-	raycastParams.FilterDescendantsInstances = { Map }
-	local hit = workspace:Raycast(Vector3.new(pos.X, Config.Map.GroundY + 30, pos.Z), Vector3.new(0, -60, 0), raycastParams)
+	raycastParams.FilterDescendantsInstances = { MapModels[matchMode] or Map }
+	local hit = workspace:Raycast(Vector3.new(pos.X, PathUtil.Map.GroundY + 30, pos.Z), Vector3.new(0, -60, 0), raycastParams)
 	if not hit or not hit.Instance:GetAttribute("Placeable") then
 		return false, "Сюда ставить нельзя"
 	end
@@ -469,6 +619,19 @@ function GameService.PlaceUnit(player, unitId, pos, rotation)
 	end
 	if def.TimeStorm then
 		u.NextStorm = u.PlacedAt + def.TimeStorm.FirstDelay
+	end
+	-- призыв союзников: первый — через интервал текущего уровня
+	if def.Summon then
+		u.NextSummon = u.PlacedAt + def.Summon.Levels[1].Interval
+		u.SummonCount = 0
+	end
+	-- руна: читается из профиля в момент установки
+	u.Rune = DataService.GetRune(player, unitId)
+	if u.Rune then
+		f:SetAttribute("Rune", u.Rune)
+		if u.Rune == "CursedThreads" then
+			u.NextRuneSummon = u.PlacedAt + Config.Runes.CursedThreads.Summon.Interval
+		end
 	end
 	units[u.Uid] = u
 	return true, u.Uid
@@ -591,7 +754,7 @@ local function rollDamage(stats)
 end
 
 local function fireAttack(u, targetIds, extra)
-	local payload = { U = u.Uid, T = targetIds, L = u.Level }
+	local payload = { U = u.Uid, T = targetIds, L = u.Level, EC = echoAttack or nil }
 	if extra then
 		for k, v in pairs(extra) do
 			payload[k] = v
@@ -617,6 +780,9 @@ local function applyDot(e, dps, duration, u, kind)
 end
 
 local function applySlow(e, amount, duration)
+	if not e then
+		return
+	end
 	if not e.Alive or not amount then
 		return
 	end
@@ -667,7 +833,10 @@ local function aoeHit(u, center, radius, stats, kind, opts)
 	for _, e in ipairs(hitSet) do
 		local dmg, crit = rollDamage(stats)
 		if opts.Bleed then
-			applyDot(e, opts.Bleed, opts.BleedTime or 3, u, "Bleed")
+			applyDot(e, opts.Bleed, opts.BleedTime or 3, u, opts.DotKind or "Bleed")
+		end
+		if opts.Slow then
+			applySlow(e, opts.Slow, opts.SlowTime or 1.5)
 		end
 		damageEnemy(e, dmg * (opts.Mult or 1), crit, u)
 	end
@@ -790,7 +959,24 @@ local function updateChrono(u, stats, t)
 	end
 end
 
+-- ядовитая/огненная зона: урон раз в 0.5 с всем внутри
+local function poisonZone(u, pos, radius, duration, dps, kind, delay)
+	if dps <= 0 then
+		return
+	end
+	local t = now() + (delay or 0)
+	zones[#zones + 1] = {
+		Pos = pos, Radius = radius, Until = t + duration, NextTick = t, Tick = 0.5,
+		TickDamage = dps * 0.5, Slow = 0, Unit = u,
+	}
+	Remotes.Impact:FireAllClients({ K = kind, P = pos, R = radius, DUR = duration, DL = delay, U = u.Uid, L = u.Level })
+end
+
 local function attack(u, stats, list)
+	list = list or {}
+	if not list[1] then
+		return
+	end
 	local def = u.Def
 	local myMatch = matchId
 	local hitDelay = def.HitDelay or 0.2
@@ -819,7 +1005,7 @@ local function attack(u, stats, list)
 
 	if atype == "Melee" or atype == "Laser" then
 		local mult, power = 1, false
-		if def.EveryNth then
+		if def.EveryNth and not echoAttack then
 			u.HitCount = (u.HitCount or 0) + 1
 			if u.HitCount % def.EveryNth.N == 0 then
 				mult, power = def.EveryNth.Mult, true
@@ -847,7 +1033,7 @@ local function attack(u, stats, list)
 				local center = e.Pos
 				strike(e)
 				if stats.Explode then
-					aoeHit(u, center, stats.Explode, stats, "Crystal", { Exclude = e, Mult = def.ExplodeMult or 0.5 })
+					aoeHit(u, center, stats.Explode, stats, def.ExplodeKind or "Crystal", { Exclude = e, Mult = def.ExplodeMult or 0.5 })
 				end
 			end)
 		end
@@ -1032,8 +1218,10 @@ local function attack(u, stats, list)
 		end
 		-- ПОЛОМКА ВРЕМЕНИ: каждая 8-я обычная атака, но не чаще раза в 18 с
 		local tb = def.TimeBreak
-		u.ChronoCount = (u.ChronoCount or 0) + 1
-		if u.ChronoCount >= tb.EveryNth and t0 - (u.LastBreak or -1e9) >= tb.MinInterval then
+		if not echoAttack then
+			u.ChronoCount = (u.ChronoCount or 0) + 1
+		end
+		if not echoAttack and u.ChronoCount >= tb.EveryNth and t0 - (u.LastBreak or -1e9) >= tb.MinInterval then
 			u.ChronoCount = 0
 			u.LastBreak = t0
 			u.NextAttack = math.max(u.NextAttack or 0, t0 + 1.6)
@@ -1041,6 +1229,22 @@ local function attack(u, stats, list)
 				castTimeBreak(u, stats)
 			end)
 		end
+	elseif atype == "Pulse" then
+		-- звуковая волна вокруг самого юнита
+		fireAttack(u, { target.Id }, { D = hitDelay })
+		later(hitDelay, function()
+			aoeHit(u, u.Pos, stats.AOERadius or stats.Range, stats, def.ImpactKind or "BellWave")
+		end)
+	elseif atype == "Flask" then
+		-- колба: взрыв по области и ядовитая лужа (урон по времени)
+		local travel = PathUtil.FlatDistance(u.Pos, target.Pos) / (def.ProjectileSpeed or 45)
+		local saved = target.Pos
+		fireAttack(u, { target.Id }, { D = hitDelay, TR = travel })
+		later(hitDelay + travel, function()
+			local center = target.Alive and target.Pos or saved
+			aoeHit(u, center, stats.Explode or 5, stats, "FlaskSplash")
+			poisonZone(u, center, (stats.Explode or 5) * 0.8, def.PoisonTime or 3, stats.PoisonDps or 0, "Poison")
+		end)
 	elseif atype == "Pierce" then
 		-- луч насквозь: все враги на линии от юнита через цель
 		local dir = Vector3.new(target.Pos.X - u.Pos.X, 0, target.Pos.Z - u.Pos.Z)
@@ -1050,7 +1254,7 @@ local function attack(u, stats, list)
 		local endPos = u.Pos + dir.Unit * (stats.Range + 4)
 		fireAttack(u, { target.Id }, { D = hitDelay, E = endPos })
 		later(hitDelay, function()
-			Remotes.Impact:FireAllClients({ K = "Pierce", P = u.Pos, E = endPos, L = u.Level, U = u.Uid })
+			Remotes.Impact:FireAllClients({ K = def.ImpactKindPierce or "Pierce", P = u.Pos, E = endPos, L = u.Level, U = u.Uid })
 			local half = (def.PierceWidth or 3) / 2
 			local hitSet = {}
 			for _, e in pairs(enemies) do
@@ -1062,6 +1266,277 @@ local function attack(u, stats, list)
 				strike(e)
 			end
 		end)
+	end
+end
+
+------------------------------------------------------------------------
+-- HALLOWEEN: обычная атака с рунами, способности Power, союзники
+------------------------------------------------------------------------
+-- через сколько секунд обычная атака попадает в цель
+local function impactDelay(u, target)
+	local def = u.Def
+	local d = def.HitDelay or 0.2
+	if def.ProjectileSpeed and def.AttackType ~= "Chrono" then
+		d = d + PathUtil.FlatDistance(u.Pos, target.Pos) / def.ProjectileSpeed
+	elseif def.AttackType == "Chrono" then
+		d = d + PathUtil.FlatDistance(u.Pos, target.Pos) / (def.ProjectileSpeed or 70)
+	end
+	return d
+end
+
+local function nearestTo(center, radius, exclude, maxCount)
+	local list = {}
+	for _, e in pairs(enemies) do
+		if e.Alive and not exclude[e] then
+			local d = PathUtil.FlatDistance(e.Pos, center)
+			if d <= radius + (e.IsBoss and 1 or 0.3) then
+				e._dr = d
+				list[#list + 1] = e
+			end
+		end
+	end
+	table.sort(list, function(a, b)
+		return a._dr < b._dr
+	end)
+	while #list > maxCount do
+		table.remove(list)
+	end
+	return list
+end
+
+-- Руны после обычной атаки (повтор «Призрачной короны» руны не запускает)
+local function runeAfterAttack(u, stats, list)
+	local runeId = u.Rune
+	local rune = runeId and Config.Runes[runeId]
+	if not rune or echoAttack then
+		return
+	end
+	local target = list[1]
+	local myMatch = matchId
+	if runeId == "LanternHeart" then
+		-- каждая 3-я обычная атака: огненный взрыв 20% урона, радиус 4, до 4 дополнительных врагов
+		u.RuneCount = (u.RuneCount or 0) + 1
+		if u.RuneCount % rune.EveryNth == 0 then
+			local saved = target.Pos
+			task.delay(impactDelay(u, target), function()
+				if not valid(u, myMatch) then
+					return
+				end
+				local center = target.Alive and target.Pos or saved
+				local extra = nearestTo(center, rune.Radius, { [target] = true }, rune.MaxTargets)
+				Remotes.Impact:FireAllClients({ K = "LanternHeart", P = center, R = rune.Radius, U = u.Uid, L = u.Level, N = #extra })
+				for _, e in ipairs(extra) do
+					damageEnemy(e, stats.Damage * rune.Mult, false, u, true)
+				end
+			end)
+		end
+	elseif runeId == "CursedThreads" then
+		-- каждая 5-я обычная атака: замедление до 3 врагов на 25% (боссы — вдвое слабее), не суммируется
+		u.RuneCount = (u.RuneCount or 0) + 1
+		if u.RuneCount % rune.EveryNth == 0 then
+			task.delay(impactDelay(u, target), function()
+				if not valid(u, myMatch) then
+					return
+				end
+				local first = target.Alive and target or nil
+				local center = first and first.Pos or target.Pos
+				local list2 = first and { first } or {}
+				for _, e in ipairs(nearestTo(center, 8, { [target] = true }, rune.MaxTargets - #list2)) do
+					list2[#list2 + 1] = e
+				end
+				local ids = {}
+				for i, e in ipairs(list2) do
+					applySlow(e, rune.Slow, rune.SlowTime)
+					ids[i] = e.Id
+				end
+				Remotes.Impact:FireAllClients({ K = "CursedThreads", P = center, A = ids, U = u.Uid, L = u.Level, DUR = rune.SlowTime })
+			end)
+		end
+	elseif runeId == "PhantomCrown" then
+		-- 30%: призрачная копия повторяет атаку через 0.3 с со 100% урона, не задерживая следующую атаку
+		if rng:NextNumber() < rune.Chance then
+			task.delay(rune.Delay, function()
+				if not valid(u, myMatch) or phase ~= "Wave" and phase ~= "Intermission" and phase ~= "Prep" then
+					return
+				end
+				local pool = candidates(u, stats.Range)
+				if target.Alive and PathUtil.FlatDistance(target.Pos, u.Pos) <= stats.Range then
+					for i, e in ipairs(pool) do
+						if e == target then
+							table.remove(pool, i)
+							break
+						end
+					end
+					table.insert(pool, 1, target)
+				end
+				if #pool == 0 then
+					return -- целей нет — повтор отменяется
+				end
+				Remotes.Impact:FireAllClients({ K = "PhantomEcho", P = u.Pos, U = u.Uid, L = u.Level })
+				echoAttack = true
+				local ok, err = pcall(attack, u, stats, pool)
+				echoAttack = false
+				if not ok then
+					warn("[VOID TD] echo: " .. tostring(err))
+				end
+			end)
+		end
+	end
+end
+
+local function normalAttack(u, stats, list)
+	attack(u, stats, list)
+	if u.Rune then
+		runeAfterAttack(u, stats, list)
+	end
+end
+
+-- Способность вместо каждой N-й обычной атаки
+local function castPower(u, stats, list)
+	local def = u.Def
+	local P = def.Power
+	local target = list[1]
+	local myMatch = matchId
+	local delay = P.Delay or 0.45
+	local saved = target.Pos
+	-- длинная анимация способности не обрывается следующей атакой
+	u.NextAttack = math.max(u.NextAttack, now() + delay + 0.25)
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = { target.Id }, L = u.Level, D = delay, AB = P.Anim })
+	task.delay(delay, function()
+		if not valid(u, myMatch) then
+			return
+		end
+		local center = target.Alive and target.Pos or saved
+		if P.Mode == "Single" then
+			local e = target.Alive and target or candidates(u, stats.Range + 2)[1]
+			if not e then
+				return
+			end
+			Remotes.Impact:FireAllClients({ K = P.Kind, P = e.Pos, I = e.Id, U = u.Uid, L = u.Level, DUR = P.MarkTime })
+			if P.Mark then
+				e.Mark = P.Mark
+				e.MarkUntil = now() + (P.MarkTime or 3)
+			end
+			local dmg, crit = rollDamage(stats)
+			damageEnemy(e, dmg * (P.Mult or 1), crit or true, u)
+		elseif P.Mode == "Zone" then
+			local radius = (stats.Explode or 5) * (P.RadiusMult or 1.5)
+			aoeHit(u, center, radius, stats, P.Kind .. "Burst", { Mult = 0.5 })
+			poisonZone(u, center, radius, P.Duration or 5, (stats.PoisonDps or stats.Damage * 0.3) * (P.Mult or 1), P.Kind)
+		else
+			local radius = stats.PowerRadius or P.Radius or ((stats.AOERadius or 5) + (P.RadiusAdd or 0))
+			if P.Mode == "Self" then
+				center = u.Pos
+				radius = stats.PowerRadius or P.Radius or ((stats.AOERadius or stats.Range) + (P.RadiusAdd or 1))
+			end
+			aoeHit(u, center, radius, stats, P.Kind, {
+				Mult = P.Mult, Slow = P.Slow, SlowTime = P.SlowTime,
+				Bleed = P.Burn and stats.Damage * P.Burn or nil, BleedTime = P.BurnTime, DotKind = "Burn",
+			})
+		end
+	end)
+end
+
+-- СОЮЗНИКИ
+local function spawnAlly(u, allyId, hp, source, index)
+	nextAllyId = nextAllyId + 1
+	local a = {
+		Id = nextAllyId,
+		AllyId = allyId,
+		HP = hp,
+		MaxHP = hp,
+		Dist = math.max(1, PathUtil.Length - (S.AllyStartBack or 4) - (index or 0) * 2.2),
+		Lateral = rng:NextNumber(-1.6, 1.6),
+		Speed = S.AllySpeed or 6,
+		Owner = u,
+		Source = source,
+		Born = now(),
+		Alive = true,
+	}
+	a.Pos = PathUtil.OffsetPositionAt(a.Dist, a.Lateral)
+	allies[a.Id] = a
+	return a
+end
+
+local function alliesOf(u, source)
+	local list = {}
+	for _, a in pairs(allies) do
+		if a.Owner == u and a.Source == source then
+			list[#list + 1] = a
+		end
+	end
+	table.sort(list, function(x, y)
+		return x.Id < y.Id
+	end)
+	return list
+end
+
+-- Призыв Кукловода / Иллюзиониста: не больше Max живых, лишние не появляются
+local function castSummon(u, t)
+	local sm = u.Def.Summon
+	local lv = sm.Levels[u.Level]
+	u.NextSummon = t + lv.Interval
+	local alive = #alliesOf(u, "Summon")
+	local count = math.min(lv.Count, sm.Max - alive)
+	if count <= 0 then
+		return
+	end
+	u.SummonCount = (u.SummonCount or 0) + 1
+	local golden = sm.Golden and u.Level >= #u.Def.Levels and u.SummonCount % sm.Golden.Every == 0
+	local ids = {}
+	for i = 1, count do
+		local a
+		if golden and i == 1 then
+			a = spawnAlly(u, sm.Golden.Ally, sm.Golden.HP, "Summon", i - 1)
+		else
+			a = spawnAlly(u, lv.Ally, lv.HP, "Summon", i - 1)
+		end
+		ids[i] = a.Id
+	end
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = {}, L = u.Level, D = 0.6, AB = "Summon" })
+	Remotes.Impact:FireAllClients({ K = "SummonPortal", S = sm.Portal, P = PathUtil.PositionAt(PathUtil.Length - (S.AllyStartBack or 4)), U = u.Uid, L = u.Level, A = ids, G = golden or nil })
+end
+
+-- «Проклятые нити»: ровно каждые 60 с, не больше 3 живых, лишний — самый старый — исчезает
+local function runeSummon(u, t)
+	local sm = Config.Runes.CursedThreads.Summon
+	u.NextRuneSummon = u.NextRuneSummon + sm.Interval
+	local lv = sm.Levels[u.Level]
+	local ids = {}
+	for i = 1, lv.Count do
+		local a = spawnAlly(u, lv.Ally, lv.HP, "Rune", i - 1)
+		ids[i] = a.Id
+	end
+	local list = alliesOf(u, "Rune")
+	for i = 1, #list - sm.Max do
+		removeAlly(list[i], "replaced")
+	end
+	Remotes.Impact:FireAllClients({ K = "CursedCircle", P = PathUtil.PositionAt(PathUtil.Length - (S.AllyStartBack or 4)), U = u.Uid, L = u.Level, A = ids })
+end
+
+local function updateAllies(t, dt)
+	for _, a in pairs(allies) do
+		if a.Alive then
+			a.Dist = a.Dist - a.Speed * dt
+			if a.Dist <= 0 then
+				removeAlly(a, "portal")
+			else
+				a.Pos = PathUtil.OffsetPositionAt(a.Dist, a.Lateral)
+				-- столкновение: враг дошёл до союзника (окно с запасом для большого dt)
+				for _, e in pairs(enemies) do
+					if e.Alive and e.Dist >= a.Dist - 1.4 - (e.IsBoss and 1.2 or 0) and e.Dist <= a.Dist + 3 then
+						local cost = e.Def.FireAura or 1
+						local dealt = rawDamage(e, math.min(a.HP / cost, e.Health), a.Owner)
+						a.HP = a.HP - dealt * cost
+						Remotes.Impact:FireAllClients({ K = "AllyHit", P = a.Pos, I = a.Id, E = e.Id, F = cost > 1 or nil })
+						if a.HP <= 0.5 then
+							removeAlly(a, "dead")
+							break
+						end
+					end
+				end
+			end
+		end
 	end
 end
 
@@ -1108,9 +1583,11 @@ local function updateZones(t)
 			z.NextTick = z.NextTick + z.Tick
 			for _, e in pairs(enemies) do
 				if e.Alive and PathUtil.FlatDistance(e.Pos, z.Pos) <= z.Radius then
-					local slow = z.Slow * (e.IsBoss and S.BossSlowResist or 1)
-					e.SlowUntil = t + z.Tick + 0.15
-					e.SlowAmount = math.max(slow, (e.SlowUntil > t and e.SlowAmount) or 0)
+					if z.Slow and z.Slow > 0 then
+						local slow = z.Slow * (e.IsBoss and S.BossSlowResist or 1)
+						e.SlowUntil = t + z.Tick + 0.15
+						e.SlowAmount = math.max(slow, (e.SlowUntil > t and e.SlowAmount) or 0)
+					end
 					damageEnemy(e, z.TickDamage, false, z.Unit, true)
 				end
 			end
@@ -1140,6 +1617,12 @@ local function updateUnits(t)
 		if u.Def.TimeHaste or u.Def.TimeStorm then
 			updateChrono(u, stats, t)
 		end
+		if u.Def.Summon and t >= u.NextSummon then
+			castSummon(u, t)
+		end
+		if u.NextRuneSummon and t >= u.NextRuneSummon then
+			runeSummon(u, t)
+		end
 		if t >= u.NextAttack then
 			local list = candidates(u, stats.Range)
 			if #list > 0 then
@@ -1149,7 +1632,15 @@ local function updateUnits(t)
 					cd = cd / (1 + (u.Haste or 0))
 				end
 				u.NextAttack = t + cd
-				attack(u, stats, list)
+				local P = u.Def.Power
+				if P then
+					u.PowerCount = (u.PowerCount or 0) + 1
+				end
+				if P and u.PowerCount % P.N == 0 then
+					castPower(u, stats, list)
+				else
+					normalAttack(u, stats, list)
+				end
 			end
 		end
 	end
@@ -1169,6 +1660,43 @@ local function updateEnemies(t, dt)
 		else
 			e.SlowAmount = 0
 		end
+		-- ускорения: туман, рывок босса, ярость (замедление и заморозка действуют поверх)
+		local boost = (e.EnrageSpeed or 0)
+		if (e.FogUntil or 0) > t then
+			boost = boost + (e.FogAmount or 0)
+		end
+		if (e.HasteUntil or 0) > t then
+			boost = boost + e.Def.Haste.Speed
+		end
+		mult = mult * (1 + boost)
+		local def = e.Def
+		if e.NextPhase and t >= e.NextPhase then
+			e.NextPhase = t + def.Phase.Every
+			e.PhasedUntil = t + def.Phase.Duration
+			enemyState(e, "Phase", def.Phase.Duration)
+		end
+		if e.NextShield and t >= e.NextShield then
+			e.NextShield = t + def.Shield.Every
+			e.ShieldUntil = t + def.Shield.Duration
+			enemyState(e, "Shield", def.Shield.Duration)
+		end
+		if e.NextHaste and t >= e.NextHaste then
+			e.NextHaste = t + def.Haste.Every
+			e.HasteUntil = t + def.Haste.Duration
+			enemyState(e, "Haste", def.Haste.Duration)
+		end
+		if e.NextFog and t >= e.NextFog then
+			-- туман: враги рядом (и сам колдун) ускоряются; одинаковый туман не суммируется
+			local fog = def.Fog
+			e.NextFog = t + fog.Every
+			for _, o in pairs(enemies) do
+				if PathUtil.FlatDistance(o.Pos, e.Pos) <= fog.Radius then
+					o.FogAmount = math.max((o.FogUntil or 0) > t and o.FogAmount or 0, fog.Speed)
+					o.FogUntil = math.max(o.FogUntil or 0, t + fog.Duration)
+				end
+			end
+			Remotes.Impact:FireAllClients({ K = "Fog", P = e.Pos, R = fog.Radius, I = e.Id, DUR = fog.Duration })
+		end
 		e.Dist = e.Dist + e.Speed * mult * dt
 		e.Pos = enemyPos(e)
 		if e.NextSummon and t >= e.NextSummon then
@@ -1187,7 +1715,7 @@ local function updateEnemies(t, dt)
 		local list = pendingSpawns
 		pendingSpawns = {}
 		for _, s in ipairs(list) do
-			Remotes.Impact:FireAllClients({ K = "Summon", P = s[4], R = 6 })
+			Remotes.Impact:FireAllClients({ K = s[5] or "Summon", P = s[4], R = 6 })
 			for k = 1, s[2] do
 				spawnEnemy(s[1], s[3] - k * 1.5)
 			end
@@ -1203,15 +1731,29 @@ local function sync(t)
 		list[#list + 1] = math.max(0, e.Health)
 		list[#list + 1] = ((e.FrozenUntil or 0) > t) and 2 or ((e.SlowUntil > t) and 1 or 0)
 	end
-	Remotes.Sync:FireAllClients({ T = t, E = list, DMG = damageBuffer, RM = removedBuffer })
+	-- союзники: id, дистанция, HP, тип (индекс в Config.AllyOrder), максимум HP
+	local al
+	if next(allies) or #allyRemoved > 0 then
+		al = {}
+		for _, a in pairs(allies) do
+			al[#al + 1] = a.Id
+			al[#al + 1] = math.floor(a.Dist * 100) / 100
+			al[#al + 1] = math.floor(a.HP + 0.5)
+			al[#al + 1] = allyIndex[a.AllyId] or 1
+			al[#al + 1] = a.MaxHP
+		end
+	end
+	Remotes.Sync:FireAllClients({ T = t, E = list, DMG = damageBuffer, RM = removedBuffer, AL = al, RA = #allyRemoved > 0 and allyRemoved or nil })
 	damageBuffer = {}
 	removedBuffer = {}
+	allyRemoved = {}
 end
 
 local function step(dt)
 	local t = now()
 	if phase == "Wave" or phase == "Intermission" or phase == "Prep" then
 		updateEnemies(t, dt)
+		updateAllies(t, dt)
 		updateZones(t)
 		updateDots(t)
 		updateUnits(t)
@@ -1240,6 +1782,10 @@ local function clearMatch()
 		removeUnit(u)
 	end
 	units = {}
+	for _, a in pairs(allies) do
+		removeAlly(a, "clear")
+	end
+	allies = {}
 	wave = 0
 	waveSpawning = false
 	nextWaveAt = 0
@@ -1249,7 +1795,16 @@ local function clearMatch()
 end
 
 -- Матч закончен (или все ушли): все возвращаются в лобби
+local function setMapMode(mode)
+	matchMode = mode
+	PathUtil.SetMap(mode)
+	maxWave = (Config.Maps[mode] and Config.Maps[mode].MaxWave) or S.MaxWave
+	setState("Map", mode)
+	setState("MaxWave", maxWave)
+end
+
 resetMatch = function()
+	local wasHalloween = matchMode == "Halloween"
 	clearMatch()
 	phase = "Idle"
 	setState("Phase", phase)
@@ -1258,18 +1813,21 @@ resetMatch = function()
 		if inMatch(pl) then
 			pl:SetAttribute("InMatch", false)
 			setMoney(pl, 0)
-			-- чёрный экран-переход, затем телепорт в лобби
-			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = "ЛОББИ" })
+			-- чёрный экран-переход, затем телепорт в лобби (после Хэллоуин-матча — на остров)
+			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = wasHalloween and "HALLOWEEN" or "ЛОББИ" })
 			task.delay(0.45, function()
-				toLobby(pl)
+				toLobby(pl, wasHalloween)
 			end)
 		end
 	end
+	roster = {}
+	setMapMode("Void")
 	notifyAll({ Type = "Reset" })
 end
 
-local function startNewMatch(diffKey)
+local function startNewMatch(diffKey, mode)
 	clearMatch()
+	setMapMode(mode or "Void")
 	difficultyKey = diffKey
 	D = Config.Difficulties[diffKey]
 	coreHP = D.CoreHP
@@ -1287,6 +1845,9 @@ function GameService.JoinMatch(player, diffKey)
 	if phase == "Victory" or phase == "Defeat" then
 		return false, "Матч завершается, подожди пару секунд"
 	end
+	if phase ~= "Idle" and matchMode == "Halloween" then
+		return false, "Сейчас идёт Хэллоуин-матч. Подожди, пока он закончится"
+	end
 	if phase == "Idle" then
 		if not Config.Difficulties[diffKey] then
 			return false, "Выбери сложность"
@@ -1301,6 +1862,43 @@ function GameService.JoinMatch(player, diffKey)
 	return true, difficultyKey
 end
 
+-- Хэллоуин-матч: все игроки из очереди попадают в один матч
+function GameService.CanStartHalloween()
+	return phase == "Idle"
+end
+
+function GameService.StartHalloween(players, diffKey)
+	if phase ~= "Idle" then
+		return false, "Арена занята — идёт другой матч"
+	end
+	if not table.find(Config.Halloween.Difficulties, diffKey) then
+		return false, "Неверная сложность"
+	end
+	startNewMatch(diffKey, "Halloween")
+	roster = {}
+	for _, pl in ipairs(players) do
+		if pl.Parent and not inMatch(pl) then
+			roster[pl.UserId] = true
+			pl:SetAttribute("InMatch", true)
+			setMoney(pl, S.StartMoney * D.Money)
+			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = "HAUNTED HOLLOW" })
+			task.delay(0.45, function()
+				toBattle(pl)
+			end)
+		end
+	end
+	if #matchPlayers() == 0 then
+		resetMatch()
+		return false, "Никого нет в очереди"
+	end
+	notifyAll({ Type = "Toast", Text = "🎃 Хэллоуин-матч начался (" .. D.Name .. ")", Kind = "good" })
+	return true
+end
+
+function GameService.GetMode()
+	return matchMode, phase
+end
+
 function GameService.LeaveMatch(player)
 	if not inMatch(player) then
 		return false, "Ты не в матче"
@@ -1312,7 +1910,7 @@ function GameService.LeaveMatch(player)
 	end
 	player:SetAttribute("InMatch", false)
 	setMoney(player, 0)
-	toLobby(player)
+	toLobby(player, matchMode == "Halloween")
 	if #matchPlayers() == 0 and phase ~= "Idle" then
 		resetMatch()
 	end
@@ -1320,7 +1918,7 @@ function GameService.LeaveMatch(player)
 end
 
 function GameService.GetMatchInfo()
-	return { Phase = phase, Difficulty = difficultyKey, Wave = wave, Players = #matchPlayers() }
+	return { Phase = phase, Difficulty = difficultyKey, Wave = wave, Players = #matchPlayers(), Mode = matchMode }
 end
 
 ------------------------------------------------------------------------
@@ -1342,7 +1940,7 @@ function GameService.PlayerAdded(player)
 		if inMatch(player) then
 			toBattle(player)
 		else
-			toLobby(player)
+			toLobby(player, player:GetAttribute("Island") == true)
 		end
 	end)
 end
@@ -1369,8 +1967,10 @@ function GameService.GetEnemySnapshot()
 	return list
 end
 
-function GameService.Init(remotes, state, unitsFolder, map)
+function GameService.Init(remotes, state, unitsFolder, map, maps)
 	Remotes, State, UnitsFolder, Map = remotes, state, unitsFolder, map
+	MapModels = maps or { Void = map }
+	MapModels.Void = MapModels.Void or map
 	setState("MaxWave", S.MaxWave)
 	setState("CoreMaxHP", S.CoreMaxHP)
 	setState("CoreHP", S.CoreMaxHP)
@@ -1382,7 +1982,15 @@ end
 
 -- Доступ к внутреннему состоянию для автотестов (в игре не используется)
 function GameService.Debug()
-	return { Units = units, Enemies = enemies, Spawn = spawnEnemy, Now = now }
+	return {
+		Units = units, Enemies = enemies, Spawn = spawnEnemy, Now = now,
+		Allies = function()
+			return allies
+		end,
+		Mode = function()
+			return matchMode, roster
+		end,
+	}
 end
 
 return GameService

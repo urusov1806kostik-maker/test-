@@ -38,6 +38,8 @@ local function defaultProfile()
 		LastDaily = 0,
 		Receipts = {},
 		HalloweenCoins = 0,
+		Runes = {},       -- RuneId -> количество
+		RuneSlots = {},   -- UnitId -> RuneId (1 руна на юнита)
 	}
 	for i, id in ipairs(s.StarterUnits) do
 		p.Inventory[id] = 1
@@ -58,7 +60,28 @@ local function sanitize(p)
 	p.Settings = type(p.Settings) == "table" and p.Settings or {}
 	p.LastDaily = tonumber(p.LastDaily) or 0
 	p.Receipts = type(p.Receipts) == "table" and p.Receipts or {}
-	p.HalloweenCoins = tonumber(p.HalloweenCoins) or 0
+	p.HalloweenCoins = math.max(0, math.floor(tonumber(p.HalloweenCoins) or 0))
+	-- руны: только известные, слоты — только у своих юнитов и не больше, чем рун есть
+	local runes = {}
+	if type(p.Runes) == "table" then
+		for id, n in pairs(p.Runes) do
+			n = math.floor(tonumber(n) or 0)
+			if Config.Runes[id] and n > 0 then
+				runes[id] = n
+			end
+		end
+	end
+	p.Runes = runes
+	local slots, used = {}, {}
+	if type(p.RuneSlots) == "table" then
+		for unitId, runeId in pairs(p.RuneSlots) do
+			if Config.Units[unitId] and (p.Inventory[unitId] or 0) > 0 and runes[runeId] and (used[runeId] or 0) < runes[runeId] then
+				slots[unitId] = runeId
+				used[runeId] = (used[runeId] or 0) + 1
+			end
+		end
+	end
+	p.RuneSlots = slots
 	-- убрать неизвестные юниты
 	for id in pairs(p.Inventory) do
 		if not Config.Units[id] then
@@ -99,6 +122,7 @@ function DataService.Load(player)
 	end
 	DataService.Profiles[player] = profile
 	player:SetAttribute("Gems", profile.Gems)
+	player:SetAttribute("HalloweenCoins", profile.HalloweenCoins)
 	return profile
 end
 
@@ -168,7 +192,65 @@ function DataService.Snapshot(player)
 		Settings = deepCopy(p.Settings or {}),
 		DailyReadyAt = (tonumber(p.LastDaily) or 0) + Config.Settings.DailyCooldown,
 		HalloweenCoins = p.HalloweenCoins or 0,
+		Runes = deepCopy(p.Runes or {}),
+		RuneSlots = deepCopy(p.RuneSlots or {}),
 	}
+end
+
+function DataService.AddCurrency(player, currency, amount)
+	local p = DataService.Profiles[player]
+	if not p then
+		return
+	end
+	if currency == "Gems" then
+		DataService.AddGems(player, amount)
+		return
+	end
+	p[currency] = math.max(0, (p[currency] or 0) + math.floor(amount))
+	player:SetAttribute(currency, p[currency])
+end
+
+------------------------------------------------------------------------
+-- РУНЫ: 1 руна на юнита, снимается и переносится на другого, работает только надетой
+------------------------------------------------------------------------
+function DataService.GetRune(player, unitId)
+	local p = DataService.Profiles[player]
+	return p and p.RuneSlots and p.RuneSlots[unitId] or nil
+end
+
+local function runesUsed(p, runeId, exceptUnit)
+	local n = 0
+	for unitId, r in pairs(p.RuneSlots) do
+		if r == runeId and unitId ~= exceptUnit then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+-- runeId = nil — снять руну с юнита
+function DataService.EquipRune(player, unitId, runeId)
+	local p = DataService.Profiles[player]
+	if not p then
+		return false, "Профиль не загружен"
+	end
+	if not Config.Units[unitId] or (p.Inventory[unitId] or 0) <= 0 then
+		return false, "Юнита нет в инвентаре"
+	end
+	if runeId == nil then
+		p.RuneSlots[unitId] = nil
+		DataService.Save(player)
+		return true
+	end
+	if not Config.Runes[runeId] then
+		return false, "Неизвестная руна"
+	end
+	if runesUsed(p, runeId, unitId) >= (p.Runes[runeId] or 0) then
+		return false, "Все такие руны уже надеты — сними руну с другого юнита"
+	end
+	p.RuneSlots[unitId] = runeId
+	DataService.Save(player)
+	return true
 end
 
 ------------------------------------------------------------------------
@@ -230,7 +312,13 @@ function DataService.Summon(player, caseId, count)
 	end
 	local s = Config.Settings
 	count = (count == 10) and 10 or 1
+	if case.Single and count ~= 1 then
+		return false, "Этот кейс открывается по одному"
+	end
 	local cost = (count == 10) and case.Cost10 or case.Cost1
+	if not cost then
+		return false, "Неверный запрос"
+	end
 	local currency = case.Currency or "Gems"
 	if (p[currency] or 0) < cost then
 		return false, currency == "Gems" and "Недостаточно кристаллов" or "Недостаточно Halloween Coins"
@@ -238,6 +326,46 @@ function DataService.Summon(player, caseId, count)
 	p[currency] = p[currency] - cost
 	if currency == "Gems" then
 		player:SetAttribute("Gems", p.Gems)
+	end
+	-- кейс с полным списком наград (юниты и руны): один бросок на открытие
+	if case.Rewards then
+		local total = 0
+		for _, r in ipairs(case.Rewards) do
+			total = total + r.Rate
+		end
+		local roll, acc, pick = rng:NextNumber() * total, 0, case.Rewards[#case.Rewards]
+		for _, r in ipairs(case.Rewards) do
+			acc = acc + r.Rate
+			if roll < acc then
+				pick = r
+				break
+			end
+		end
+		local result
+		if pick.Rune then
+			local isNew = (p.Runes[pick.Rune] or 0) == 0
+			p.Runes[pick.Rune] = (p.Runes[pick.Rune] or 0) + 1
+			result = { Rune = pick.Rune, New = isNew }
+		else
+			local id = pick.Unit
+			local isNew = (p.Inventory[id] or 0) == 0
+			p.Inventory[id] = (p.Inventory[id] or 0) + 1
+			result = { Id = id, New = isNew }
+			if isNew then
+				for slot = 1, s.EquipSlots do
+					if not p.Equipped[slot] then
+						p.Equipped[slot] = id
+						break
+					end
+				end
+			end
+		end
+		if currency ~= "Gems" then
+			player:SetAttribute(currency, p[currency])
+		end
+		p.Stats.Summons = (p.Stats.Summons or 0) + 1
+		DataService.Save(player, true)
+		return true, { result }
 	end
 	local pool = unitsByRarity(case)
 	local results = {}

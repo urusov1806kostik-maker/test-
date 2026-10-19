@@ -2063,6 +2063,27 @@ applyLevelSkin = function(model, lv, rarity)
 	end
 end
 
+-- Хелперы для модулей-расширений (HalloweenModels): тот же R6-стиль и те же детали
+UnitModels.H = {
+	figure = figure, eyes = eyes, chest = chest, belt = belt, tassets = tassets, robe = robe, mantle = mantle,
+	hood = hood, helm = helm, wizardHat = wizardHat, crown = crown, kabuto = kabuto,
+	plateShoulders = plateShoulders, bigShoulders = bigShoulders, bracers = bracers, greaves = greaves, wings = wings,
+	muzzle = muzzle, blade = blade, shaft = shaft, staff = staff, scythe = scythe, spear = spear, hammer = hammer,
+	axe = axe, bow = bow, quiver = quiver, crossbow = crossbow, rifle = rifle, dagger = dagger, shield = shield,
+	capeWith = capeWith, levelAura = levelAura, octa = octa, gear = gear, clockFace = clockFace, miniClock = miniClock,
+	rgb = rgb, GRIP = GRIP, AIM = AIM, M = M, P = P, AC = AC,
+}
+
+-- Регистрация юнита из модуля-расширения
+function UnitModels.Register(unitId, builder, rarity)
+	Builders[unitId] = builder
+	UNIT_RARITY[unitId] = rarity
+end
+
+function UnitModels.Has(unitId)
+	return Builders[unitId] ~= nil
+end
+
 function UnitModels.Build(unitId, level)
 	local builder = Builders[unitId]
 	if not builder then
@@ -2099,5 +2120,8 @@ function UnitModels.Build(unitId, level)
 	rig.Model:SetAttribute("Level", level or 1)
 	return rig
 end
+
+-- Хэллоуинские юниты, союзники-призывы и руны
+require(script.Parent:WaitForChild("HalloweenModels"))(UnitModels)
 
 return UnitModels

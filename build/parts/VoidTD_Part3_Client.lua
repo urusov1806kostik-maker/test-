@@ -63,6 +63,8 @@ local ctx = {
 	EnemyModels = require(Shared:WaitForChild("EnemyModels")),
 	CaseModels = require(Shared:WaitForChild("CaseModels")),
 	FX = require(script:WaitForChild("FX")),
+	HFX = require(script:WaitForChild("HalloweenFX")),
+	HalloweenAnims = require(script:WaitForChild("HalloweenAnims")),
 	Renderer = require(script:WaitForChild("Renderer")),
 	UI = require(script:WaitForChild("UI")),
 	Placement = require(script:WaitForChild("Placement")),
@@ -96,7 +98,7 @@ local Lighting = game:GetService("Lighting")
 ctx.Lite = false
 
 local function applyWorldLite(on)
-	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby" }) do
+	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby", "VoidTDHalloween", "VoidTDHalloweenMap" }) do
 		local root = workspace:FindFirstChild(name)
 		if root then
 			for _, d in ipairs(root:GetDescendants()) do
@@ -166,7 +168,8 @@ Remotes.Impact.OnClientEvent:Connect(Renderer.OnImpact)
 Remotes.Notify.OnClientEvent:Connect(function(p)
 	UI.OnNotify(p)
 	if p.Type == "CoreHit" then
-		local core = workspace:FindFirstChild("VoidTDMap") and workspace.VoidTDMap:FindFirstChild("VoidCore")
+		local map = Renderer.ActiveMap()
+		local core = map and map:FindFirstChild("VoidCore")
 		local c = core and core:GetAttribute("CoreCenter")
 		if c then
 			FX.Sphere(c, 6, FX.Colors.Pink, 0.4)
@@ -315,7 +318,24 @@ task.spawn(function()
 	task.wait(1)
 	collectSpinners(map)
 	collectSpinners(lobby)
+	collectSpinners(workspace:WaitForChild("VoidTDHalloween", 30))
+	collectSpinners(workspace:WaitForChild("VoidTDHalloweenMap", 30))
 end)
+
+------------------------------------------------------------------------
+-- КАРТА МАТЧА: Void или Haunted Hollow (дорога пересчитывается у всех одинаково)
+------------------------------------------------------------------------
+local function applyMap()
+	local key = State:GetAttribute("Map") or "Void"
+	if ctx.PathUtil.MapKey ~= key then
+		Renderer.ClearEnemies()
+		ctx.HFX.ClearAllies()
+		ctx.PathUtil.SetMap(key)
+	end
+	UI.SetMapMode(key)
+end
+State:GetAttributeChangedSignal("Map"):Connect(applyMap)
+applyMap()
 
 local function updateSpinners(t)
 	for _, s in ipairs(spinners) do
@@ -341,19 +361,31 @@ end
 ------------------------------------------------------------------------
 -- КРУГИ В ЛОББИ: встал в круг — открылось меню, вышел — закрылось
 ------------------------------------------------------------------------
-local ZONE_MODAL = { Units = "Inventory", Play = "Mode" }
-for key, z in pairs(ctx.Config.Lobby.Zones) do
-	if z.Case then
-		ZONE_MODAL[key] = "Summon"
+local ZONE_MODAL = { Units = "Inventory", Play = "Mode", Bestiary = "Bestiary", HalloweenUnits = "Inventory" }
+-- зоны главного лобби и Хэллоуин-острова
+local ZONE_SETS = {
+	{ Prefix = "", Center = ctx.Config.Lobby.Center, Zones = ctx.Config.Lobby.Zones },
+	{ Prefix = "H_", Center = ctx.Config.HalloweenIsland.Center, Zones = ctx.Config.HalloweenIsland.Zones },
+}
+for _, set in ipairs(ZONE_SETS) do
+	for key, z in pairs(set.Zones) do
+		if z.Case then
+			ZONE_MODAL[set.Prefix .. key] = "Summon"
+		elseif ZONE_MODAL[key] then
+			ZONE_MODAL[set.Prefix .. key] = ZONE_MODAL[key]
+		end
 	end
 end
 local zoneState = {}
+local teleportCooldown = 0
 
 local function updateZones()
 	if player:GetAttribute("InMatch") then
 		if next(zoneState) then
 			for key in pairs(zoneState) do
-				UI.Show(ZONE_MODAL[key], false)
+				if ZONE_MODAL[key] then
+					UI.Show(ZONE_MODAL[key], false)
+				end
 			end
 			zoneState = {}
 		end
@@ -364,23 +396,45 @@ local function updateZones()
 	if not root then
 		return
 	end
-	local L = ctx.Config.Lobby
 	local pos = root.Position
-	for key, z in pairs(L.Zones) do
-		local c = L.Center + z.Offset
-		local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
-		local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
-		if inside ~= (zoneState[key] == true) then
-			zoneState[key] = inside or nil
-			if inside and z.Case then
-				UI.SelectCase(z.Case)
-			end
-			UI.Show(ZONE_MODAL[key], inside)
-			if inside then
-				FX.Sound("Click", 1, 1)
+	for _, set in ipairs(ZONE_SETS) do
+		for key, z in pairs(set.Zones) do
+			local id = set.Prefix .. key
+			local c = set.Center + z.Offset
+			local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
+			local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
+			if inside ~= (zoneState[id] == true) then
+				zoneState[id] = inside or nil
+				if z.Teleport then
+					-- портал: телепорт на остров / в лобби
+					if inside and os.clock() > teleportCooldown then
+						teleportCooldown = os.clock() + 2
+						FX.Sound("Portal", 1, 1)
+						UI.Fade(z.Teleport == "Halloween" and "HALLOWEEN" or "ЛОББИ")
+						task.delay(0.35, function()
+							ctx.Request("Teleport", { To = z.Teleport })
+						end)
+					end
+				else
+					if inside and z.Case then
+						UI.SelectCase(z.Case)
+					end
+					if inside and z.EventUnits then
+						UI.SetInventoryFilter(z.EventUnits)
+					elseif inside and key == "Units" then
+						UI.SetInventoryFilter(nil)
+					end
+					if ZONE_MODAL[id] then
+						UI.Show(ZONE_MODAL[id], inside)
+					end
+					if inside then
+						FX.Sound("Click", 1, 1)
+					end
+				end
 			end
 		end
 	end
+	UI.UpdateQueue()
 end
 
 ------------------------------------------------------------------------
@@ -708,8 +762,11 @@ end
 -- getTarget() -> Vector3 | nil (текущая позиция цели)
 function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 	lv = lv or 1
-	local p
-	if kind == "Arrow" then
+	local p, trailColor
+	local maker = FX.ProjectileMakers and FX.ProjectileMakers[kind]
+	if maker then
+		p, trailColor = maker(lv)
+	elseif kind == "Arrow" then
 		p = FX.Part({ Size = V(0.18, 0.18, 2.2), Color = lv >= 4 and NEON or NEON_SOFT })
 		local tipP = FX.Part({ Size = V(0.35, 0.35, 0.35), Color = NEON, Parent = p })
 		tipP.Name = "Tip"
@@ -737,7 +794,7 @@ function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 	local trail = Instance.new("Trail")
 	trail.Attachment0 = a0
 	trail.Attachment1 = a1
-	trail.Color = ColorSequence.new(kind == "Orb" and NEON or NEON_SOFT)
+	trail.Color = ColorSequence.new(trailColor or (kind == "Orb" and NEON or NEON_SOFT))
 	trail.LightEmission = 1
 	trail.Lifetime = 0.18
 	trail.Transparency = NumberSequence.new(0.2, 1)
@@ -1476,6 +1533,1485 @@ end
 
 return FX
 ]======] }
+FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "HalloweenFX" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenFX (клиент)
+-- Эффекты Хэллоуина: атаки и способности 11 юнитов, руны, союзники на дороге (модели, ходьба, HP),
+-- состояния и смерти хэллоуинских врагов, появление боссов. Только визуал — урон считает сервер.
+
+local RunService = game:GetService("RunService")
+
+local HFX = {}
+
+local V = Vector3.new
+local CF = CFrame.new
+local ANG = CFrame.Angles
+local rad = math.rad
+
+local ctx, Config, PathUtil, UnitModels, FX, Renderer
+local rng = Random.new()
+
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+local COL = {
+	Orange = rgb(255, 140, 40),
+	Ember = rgb(255, 90, 20),
+	Fire = rgb(255, 180, 70),
+	Light = rgb(255, 235, 170),
+	Green = rgb(120, 255, 110),
+	Poison = rgb(140, 230, 80),
+	PoisonDark = rgb(60, 110, 40),
+	Blue = rgb(90, 170, 255),
+	Ghost = rgb(170, 220, 255),
+	Purple = rgb(180, 90, 255),
+	Red = rgb(230, 30, 50),
+	Gold = rgb(255, 205, 80),
+	Straw = rgb(220, 190, 110),
+	Dirt = rgb(110, 85, 60),
+	Stone = rgb(120, 112, 104),
+	Leaf = rgb(230, 140, 40),
+	Bell = rgb(190, 160, 255),
+	Bone = rgb(230, 222, 205),
+	Black = rgb(16, 12, 18),
+	Smoke = rgb(90, 90, 96),
+	FogC = rgb(160, 170, 160),
+}
+HFX.Colors = COL
+
+local function part(props)
+	return FX.Part(props)
+end
+
+local function fade(p, life, goal)
+	goal = goal or {}
+	goal.Transparency = 1
+	FX.Tween(p, life, goal)
+	task.delay(life + 0.05, function()
+		p:Destroy()
+	end)
+end
+
+local function ground(pos)
+	return V(pos.X, PathUtil.Map.GroundY + 0.15, pos.Z)
+end
+
+local function plight(p, color, range, brightness, life)
+	local l = Instance.new("PointLight")
+	l.Color = color
+	l.Range = range
+	l.Brightness = brightness
+	l.Shadows = false
+	l.Parent = p
+	if life then
+		FX.Tween(l, life, { Brightness = 0 })
+	end
+	return l
+end
+
+-- обломки: куски с гравитацией (камни, кость, солома, щепки)
+local function debris(pos, color, count, size, speed, life, material)
+	if FX.Lite then
+		count = math.min(3, count)
+	end
+	for _ = 1, count do
+		local s = size * rng:NextNumber(0.6, 1.3)
+		local p = part({ Size = V(s, s * 0.8, s * 1.1), CFrame = CF(pos) * ANG(rng:NextNumber(0, 6), rng:NextNumber(0, 6), 0), Color = color, Material = material or Enum.Material.Slate })
+		local v = V(rng:NextNumber(-1, 1), rng:NextNumber(0.6, 1.4), rng:NextNumber(-1, 1)) * speed
+		local t0 = os.clock()
+		local spin = V(rng:NextNumber(-8, 8), rng:NextNumber(-8, 8), 0)
+		local conn
+		conn = RunService.RenderStepped:Connect(function()
+			local t = os.clock() - t0
+			if t >= life or not p.Parent then
+				conn:Disconnect()
+				if p.Parent then
+					p:Destroy()
+				end
+				return
+			end
+			local q = pos + v * t + V(0, -30 * t * t, 0)
+			q = V(q.X, math.max(q.Y, PathUtil.Map.GroundY + s * 0.4), q.Z)
+			p.CFrame = CF(q) * ANG(spin.X * t, spin.Y * t, 0)
+			if t > life * 0.6 then
+				p.Transparency = (t - life * 0.6) / (life * 0.4)
+			end
+		end)
+	end
+end
+
+-- дымное облако из полупрозрачных шаров
+local function smoke(pos, color, n, size, life, rise)
+	if FX.Lite then
+		n = math.min(n, 2)
+	end
+	for _ = 1, n do
+		local s = size * rng:NextNumber(0.7, 1.2)
+		local p = part({ Shape = Enum.PartType.Ball, Size = V(s, s, s), CFrame = CF(pos + V(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1)) * size * 0.4), Color = color, Material = Enum.Material.SmoothPlastic, Transparency = 0.45 })
+		fade(p, life * rng:NextNumber(0.8, 1.2), { Size = V(s, s, s) * 1.9, CFrame = p.CFrame + V(rng:NextNumber(-1, 1), rise or 2, rng:NextNumber(-1, 1)) })
+	end
+end
+
+-- вспышка света
+local function flash(pos, color, radius, life)
+	FX.Sphere(pos, radius, color, life or 0.3)
+	local a = part({ Size = V(0.2, 0.2, 0.2), CFrame = CF(pos), Transparency = 1 })
+	plight(a, color, radius * 4, 4, life or 0.35)
+	task.delay((life or 0.35) + 0.05, function()
+		a:Destroy()
+	end)
+end
+
+-- кольцо рун на земле
+local function runeRing(pos, r, color, life)
+	local list = {}
+	for i = 0, 7 do
+		local a = i / 8 * math.pi * 2
+		list[#list + 1] = part({ Size = V(0.4, 0.06, 1.2), CFrame = CF(ground(pos) + V(math.cos(a) * r, 0.05, math.sin(a) * r)) * ANG(0, -a, 0), Color = color })
+	end
+	for i = 0, 1 do
+		list[#list + 1] = part({ Size = V(r * 1.5, 0.05, 0.22), CFrame = CF(ground(pos) + V(0, 0.04, 0)) * ANG(0, i * math.pi / 2 + rad(45), 0), Color = color, Transparency = 0.3 })
+	end
+	local ring = part({ Shape = Enum.PartType.Cylinder, Size = V(0.06, r * 2.2, r * 2.2), CFrame = CF(ground(pos)) * ANG(0, 0, rad(90)), Color = color, Transparency = 0.55 })
+	list[#list + 1] = ring
+	for _, p in ipairs(list) do
+		task.delay(life * 0.6, function()
+			fade(p, life * 0.4)
+		end)
+	end
+	return list
+end
+
+-- вертикальный портал-диск
+local function portalDisc(pos, r, color, life, edge)
+	local cam = workspace.CurrentCamera
+	local look = cam and (cam.CFrame.Position - pos) or V(0, 0, 1)
+	local cf = CFrame.lookAt(pos, pos + V(look.X, 0, look.Z))
+	local disc = part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 0.2, 0.2), CFrame = cf * ANG(0, rad(90), 0), Color = color, Transparency = 0.2 })
+	FX.Tween(disc, 0.25, { Size = V(0.2, r * 2, r * 2) }, Enum.EasingStyle.Back)
+	local rim = part({ Shape = Enum.PartType.Cylinder, Size = V(0.15, 0.3, 0.3), CFrame = cf * ANG(0, rad(90), 0) * CF(-0.05, 0, 0), Color = edge or COL.Light, Transparency = 0.1 })
+	FX.Tween(rim, 0.25, { Size = V(0.15, r * 2.25, r * 2.25) }, Enum.EasingStyle.Back)
+	plight(disc, color, r * 5, 3, life)
+	task.delay(life * 0.7, function()
+		fade(disc, life * 0.3, { Size = V(0.2, 0.2, 0.2) })
+		fade(rim, life * 0.3, { Size = V(0.15, 0.3, 0.3) })
+	end)
+end
+
+-- птица (ворон) — пара крыльев и тело
+local function bird(color)
+	local m = Instance.new("Model")
+	local body = part({ Size = V(0.5, 0.45, 0.9), Color = color or COL.Black, Material = Enum.Material.SmoothPlastic, Parent = m })
+	for _, s in ipairs({ -1, 1 }) do
+		local w = part({ Class = "WedgePart", Size = V(0.1, 0.5, 1.2), Color = color or COL.Black, Material = Enum.Material.SmoothPlastic, Parent = m })
+		w.Name = s == 1 and "WR" or "WL"
+	end
+	m.PrimaryPart = body
+	m.Parent = workspace:FindFirstChild("VoidTD_FX") or workspace
+	return m, body
+end
+
+local function placeBird(m, cf, flap)
+	local body = m.PrimaryPart
+	body.CFrame = cf
+	m.WR.CFrame = cf * CF(0.55, 0.1, 0) * ANG(0, 0, rad(-60 + flap))
+	m.WL.CFrame = cf * CF(-0.55, 0.1, 0) * ANG(0, 0, rad(60 - flap))
+end
+
+-- вороны кружат вокруг точки
+local function crowCircle(pos, r, n, life, color)
+	if FX.Lite then
+		n = 1
+	end
+	local birds = {}
+	for i = 1, n do
+		birds[i] = { bird(color), i / n * math.pi * 2, rng:NextNumber(2, 4.5) }
+	end
+	local t0 = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		for _, b in ipairs(birds) do
+			local a = b[2] + t * 2.4
+			local p = pos + V(math.cos(a) * r, b[3] + math.sin(t * 3 + b[2]) * 0.4, math.sin(a) * r)
+			local fwd = V(-math.sin(a), 0, math.cos(a))
+			placeBird(b[1], CFrame.lookAt(p, p + fwd), math.sin(t * 18 + b[2]) * 40)
+		end
+		if t >= life then
+			conn:Disconnect()
+			for _, b in ipairs(birds) do
+				b[1]:Destroy()
+			end
+		end
+	end)
+end
+
+-- ворон летит от точки к точке (снаряд пугала)
+local function crowFly(from, getTarget, travel, onHit)
+	local m = bird()
+	local t0 = os.clock()
+	local last = getTarget() or from
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local a = math.clamp((os.clock() - t0) / math.max(travel, 0.05), 0, 1)
+		local target = getTarget() or last
+		last = target
+		local p = from:Lerp(target, a) + V(0, math.sin(a * math.pi) * 2, 0)
+		local dir = target - p
+		placeBird(m, (dir.Magnitude > 0.05) and CFrame.lookAt(p, target) or CF(p), math.sin(os.clock() * 25) * 45)
+		if a >= 1 then
+			conn:Disconnect()
+			m:Destroy()
+			if onHit then
+				onHit(target)
+			end
+		end
+	end)
+end
+
+------------------------------------------------------------------------
+-- СНАРЯДЫ (через FX.ProjectileMakers)
+------------------------------------------------------------------------
+local function installProjectiles()
+	FX.ProjectileMakers = FX.ProjectileMakers or {}
+	FX.ProjectileMakers.CurseBullet = function(lv)
+		local p = part({ Size = V(0.22, 0.22, 1.1), Color = COL.Green })
+		plight(p, COL.Green, 6, 2)
+		return p, COL.Green
+	end
+	FX.ProjectileMakers.Flask = function(lv)
+		local p = part({ Size = V(0.5, 0.7, 0.5), Color = COL.Poison, Material = Enum.Material.Glass, Transparency = 0.2 })
+		local cork = part({ Size = V(0.25, 0.25, 0.25), Color = COL.Dirt, Material = Enum.Material.Wood, Parent = p })
+		cork.Name = "Tip"
+		plight(p, COL.Poison, 6, 1.5)
+		return p, COL.Poison
+	end
+	FX.ProjectileMakers.Card = function(lv)
+		local p = part({ Size = V(0.6, 0.06, 0.9), Color = rgb(245, 240, 250), Material = Enum.Material.SmoothPlastic })
+		local mark = part({ Size = V(0.25, 0.08, 0.25), Color = COL.Purple, Parent = p })
+		mark.Name = "Tip"
+		return p, COL.Purple
+	end
+	FX.ProjectileMakers.Pumpkin = function(lv)
+		local s = 1 + lv * 0.08
+		local p = part({ Size = V(1.1 * s, 0.9 * s, 1.1 * s), Color = rgb(230, 110, 30), Material = Enum.Material.SmoothPlastic })
+		local face = part({ Size = V(0.6 * s, 0.25 * s, 0.1), Color = COL.Fire, Parent = p })
+		face.Name = "Tip"
+		plight(p, COL.Orange, 10, 2.5)
+		return p, COL.Ember
+	end
+end
+
+------------------------------------------------------------------------
+-- УДАРЫ И СПОСОБНОСТИ (Impact)
+------------------------------------------------------------------------
+local IMPACT = {}
+
+IMPACT.LightFlash = function(p)
+	local g = ground(p.P)
+	flash(g + V(0, 1.5, 0), COL.Light, p.R * 0.6, 0.3)
+	FX.Ring(g, p.R, COL.Light, 0.35, 0.2, 0.5, 0.3)
+	FX.Sound("Magic", 0.6, 1.6, g)
+end
+
+IMPACT.LanternBeam = function(p)
+	local g = ground(p.P)
+	local beam = part({ Shape = Enum.PartType.Cylinder, Size = V(30, 0.5, 0.5), CFrame = CF(g + V(0, 15, 0)) * ANG(0, 0, rad(90)), Color = COL.Light, Transparency = 0.2 })
+	FX.Tween(beam, 0.15, { Size = V(30, p.R * 1.2, p.R * 1.2) })
+	task.delay(0.2, function()
+		fade(beam, 0.4, { Size = V(30, 0.2, 0.2) })
+	end)
+	FX.Ring(g, p.R, COL.Fire, 0.5, 0.3, 1, 0.1)
+	flash(g + V(0, 2, 0), COL.Light, p.R * 0.7, 0.45)
+	FX.Burst(g + V(0, 1, 0), COL.Fire, 12, 0.35, 9)
+	FX.Sound("Laser", 0.8, 1.4, g)
+end
+
+IMPACT.DirtBurst = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, p.R, COL.Dirt, 0.45, 0.4, 1, 0.1)
+	FX.Cracks(g, p.R, rgb(70, 50, 36), 6, 1.1)
+	debris(g + V(0, 0.5, 0), COL.Stone, 8, 0.6, 9, 0.9)
+	debris(g + V(0, 0.5, 0), COL.Dirt, 6, 0.45, 7, 0.8, Enum.Material.Ground)
+	smoke(g + V(0, 1, 0), rgb(120, 100, 80), 4, 3, 0.9, 2.5)
+	FX.Sound("HeavyHit", 0.8, 0.8, g)
+end
+
+IMPACT.LeafStorm = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, p.R, COL.Leaf, 0.6, 0.25, 1, 0.3)
+	local n = FX.Lite and 6 or 18
+	local leaves = {}
+	for i = 1, n do
+		leaves[i] = { part({ Size = V(0.5, 0.06, 0.35), Color = (i % 3 == 0) and COL.Ember or COL.Leaf, Material = Enum.Material.SmoothPlastic }), rng:NextNumber(0, 6.28), rng:NextNumber(0.5, 1) }
+	end
+	local t0 = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		for _, l in ipairs(leaves) do
+			local a = l[2] + t * 7
+			local r = p.R * l[3] * (0.4 + t * 0.5)
+			l[1].CFrame = CF(g + V(math.cos(a) * r, t * 4 * l[3] + 0.5, math.sin(a) * r)) * ANG(t * 9, a, 0)
+			l[1].Transparency = math.clamp((t - 0.9) / 0.4, 0, 1)
+		end
+		if t >= 1.3 then
+			conn:Disconnect()
+			for _, l in ipairs(leaves) do
+				l[1]:Destroy()
+			end
+		end
+	end)
+	crowCircle(g, p.R * 0.6, 2, 1.3)
+	FX.Sound("Slash", 0.6, 0.6, g)
+end
+
+IMPACT.CurseMark = function(p)
+	local id = p.I
+	local c = Renderer.EnemyCenter(id) or p.P
+	flash(c, COL.Green, 2.5, 0.3)
+	FX.Burst(c, COL.Green, 10, 0.35, 8)
+	-- знак проклятия над врагом: ромб и череп-рамка, держится DUR
+	local mark = part({ Size = V(1, 1, 0.15), Color = COL.Green })
+	local inner = part({ Size = V(0.45, 0.45, 0.2), Color = COL.Black, Material = Enum.Material.SmoothPlastic })
+	local t0 = os.clock()
+	local dur = p.DUR or 3
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		local view = Renderer.EnemyViews[id]
+		if t >= dur or not view then
+			conn:Disconnect()
+			fade(mark, 0.2)
+			fade(inner, 0.2)
+			return
+		end
+		local top = view.Rig.Root.Position + V(0, view.Rig.Height - view.Rig.HipHeight + 1.2, 0)
+		local cf = CF(top) * ANG(0, t * 3, rad(45))
+		mark.CFrame = cf
+		inner.CFrame = cf
+	end)
+	FX.Sound("Magic", 0.8, 0.6, c)
+end
+
+IMPACT.BellWave = function(p)
+	local g = ground(p.P)
+	FX.Ring(g + V(0, 0.2, 0), p.R, COL.Bell, 0.55, 0.5, 1, 0.25)
+	task.delay(0.12, function()
+		FX.Ring(g + V(0, 0.6, 0), p.R * 0.8, rgb(230, 220, 255), 0.45, 0.3, 1, 0.4)
+	end)
+	FX.Sound("Magic", 0.8, 0.45, g)
+end
+
+IMPACT.MidnightToll = function(p)
+	local g = ground(p.P)
+	for i = 0, 2 do
+		task.delay(i * 0.15, function()
+			FX.Ring(g + V(0, 0.3 + i * 0.4, 0), p.R * (1 - i * 0.12), i == 1 and COL.Purple or COL.Bell, 0.7, 0.6, 1, 0.15)
+		end)
+	end
+	flash(g + V(0, 3, 0), COL.Bell, 4, 0.5)
+	if FX.TinyClock then
+		for i = 0, 2 do
+			local a = i / 3 * math.pi * 2
+			FX.TinyClock(g + V(math.cos(a) * p.R * 0.5, 3.5, math.sin(a) * p.R * 0.5), 1.4, 1.4, 4)
+		end
+	end
+	FX.Shake(0.15, 0.3)
+	FX.Sound("Boss", 0.5, 1.6, g)
+end
+
+IMPACT.FlaskSplash = function(p)
+	local g = ground(p.P)
+	FX.Burst(g + V(0, 1, 0), COL.Poison, 10, 0.35, 8)
+	FX.Ring(g, p.R, COL.Poison, 0.4, 0.25, 0.5, 0.3)
+	debris(g + V(0, 1, 0), rgb(200, 255, 200), 4, 0.25, 6, 0.5, Enum.Material.Glass)
+	FX.Sound("Magic", 0.6, 1.2, g)
+end
+
+local function poisonCloud(p, big)
+	local g = ground(p.P)
+	local dur = p.DUR or 3
+	local pool = part({ Shape = Enum.PartType.Cylinder, Size = V(0.1, 0.5, 0.5), CFrame = CF(g + V(0, 0.05, 0)) * ANG(0, 0, rad(90)), Color = COL.PoisonDark, Transparency = 0.35 })
+	FX.Tween(pool, 0.3, { Size = V(0.1, p.R * 2, p.R * 2) })
+	local balls = {}
+	local n = FX.Lite and 2 or (big and 8 or 3)
+	for i = 1, n do
+		local a = i / n * math.pi * 2
+		local s = p.R * (big and 0.9 or 0.7)
+		local b = part({ Shape = Enum.PartType.Ball, Size = V(s, s * 0.6, s), CFrame = CF(g + V(math.cos(a) * p.R * 0.45, s * 0.25, math.sin(a) * p.R * 0.45)), Color = big and rgb(120, 200, 70) or COL.Poison, Material = Enum.Material.SmoothPlastic, Transparency = 0.6 })
+		balls[i] = b
+	end
+	local em
+	if not FX.Lite then
+		em = Instance.new("ParticleEmitter")
+		em.Color = ColorSequence.new(COL.Poison)
+		em.LightEmission = 0.6
+		em.Rate = big and 30 or 12
+		em.Lifetime = NumberRange.new(0.6, 1.2)
+		em.Speed = NumberRange.new(1, 3)
+		em.SpreadAngle = Vector2.new(30, 30)
+		em.EmissionDirection = Enum.NormalId.Right
+		em.Size = NumberSequence.new(0.35, 0)
+		em.Parent = pool
+	end
+	if big then
+		crowCircle(g, p.R * 0.8, 3, dur)
+	end
+	task.delay(dur, function()
+		if em then
+			em.Enabled = false
+		end
+		fade(pool, 0.5)
+		for _, b in ipairs(balls) do
+			fade(b, 0.5, { Size = b.Size * 1.3 })
+		end
+	end)
+end
+
+IMPACT.Poison = function(p)
+	poisonCloud(p, false)
+end
+
+IMPACT.PlagueCloud = function(p)
+	poisonCloud(p, true)
+	FX.Sound("Magic", 0.8, 0.5, p.P)
+end
+
+IMPACT.PlagueCloudBurst = function(p)
+	FX.Sphere(ground(p.P) + V(0, 1, 0), p.R * 0.8, COL.Poison, 0.45, nil, 0.3)
+	FX.Burst(ground(p.P) + V(0, 1, 0), COL.Poison, 14, 0.4, 10)
+end
+
+IMPACT.GhostSlash = function(p)
+	local from, to = p.P + V(0, 1.5, 0), V(p.E.X, p.P.Y + 1.5, p.E.Z)
+	FX.Beam(from, to, 1.1, COL.Blue, 0.35)
+	local mid = (from + to) / 2
+	local cf = CFrame.lookAt(mid, to)
+	local crescent = part({ Size = V(3.5, 0.2, 1.2), CFrame = CFrame.lookAt(from, to), Color = COL.Ghost, Transparency = 0.2 })
+	FX.Tween(crescent, 0.25, { CFrame = CFrame.lookAt(to, to + (to - from)) })
+	task.delay(0.25, function()
+		fade(crescent, 0.2)
+	end)
+	FX.Sound("Slash", 1, 0.9, mid)
+	FX.Sphere(from, 1.6, COL.Blue, 0.25)
+	local _ = cf
+end
+
+IMPACT.GhostSword = function(p)
+	local g = ground(p.P)
+	local h = 14
+	local blade = part({ Size = V(1.4, h, 0.4), CFrame = CF(g + V(0, h / 2 + 18, 0)), Color = COL.Ghost, Transparency = 0.35 })
+	local guard = part({ Size = V(5, 0.6, 0.8), CFrame = CF(g + V(0, h + 18, 0)), Color = COL.Blue, Transparency = 0.3 })
+	local hilt = part({ Size = V(0.6, 3, 0.6), CFrame = CF(g + V(0, h + 19.8, 0)), Color = COL.Blue, Transparency = 0.3 })
+	local list = { blade, guard, hilt }
+	for _, q in ipairs(list) do
+		FX.Tween(q, 0.3, { CFrame = q.CFrame - V(0, 18 + h * 0.3, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	end
+	task.delay(0.3, function()
+		FX.Ring(g, p.R, COL.Blue, 0.6, 0.5, 1, 0.1)
+		FX.Cracks(g, p.R, COL.Blue, 8, 1.2)
+		flash(g + V(0, 2, 0), COL.Ghost, p.R * 0.6, 0.45)
+		FX.Burst(g + V(0, 1, 0), COL.Ghost, 16, 0.4, 12)
+		FX.Shake(0.35, 0.35)
+		FX.Sound("Explosion", 1, 0.8, g)
+		for _, q in ipairs(list) do
+			task.delay(0.35, function()
+				fade(q, 0.4)
+			end)
+		end
+	end)
+end
+
+IMPACT.MirrorShatter = function(p)
+	local g = ground(p.P)
+	portalDisc(g + V(0, 3.5, 0), 2.6, COL.Purple, 0.8, rgb(230, 200, 255))
+	FX.Ring(g, p.R, COL.Purple, 0.5, 0.3, 1, 0.15)
+	debris(g + V(0, 3, 0), rgb(220, 210, 255), 10, 0.5, 11, 0.9, Enum.Material.Glass)
+	FX.Burst(g + V(0, 2, 0), COL.Purple, 10, 0.35, 10)
+	FX.Sound("Explosion", 0.7, 1.3, g)
+end
+
+IMPACT.ThreadSnap = function(p)
+	local g = ground(p.P) + V(0, 2.5, 0)
+	for i = 1, (FX.Lite and 4 or 8) do
+		local a = i / 8 * math.pi * 2
+		local to = g + V(math.cos(a) * p.R, rng:NextNumber(-2, 1), math.sin(a) * p.R)
+		FX.Thread(g + V(0, 6, 0), to, COL.Red)
+	end
+	FX.Ring(ground(p.P), p.R, COL.Red, 0.4, 0.2, 1, 0.2)
+	FX.Burst(g, COL.Red, 14, 0.3, 10)
+	FX.Sound("Slash", 1, 1.4, g)
+end
+
+IMPACT.FireCrack = function(p)
+	local g = ground(p.P)
+	FX.Cracks(g, p.R, COL.Ember, 6, 1.2)
+	FX.Ring(g, p.R, COL.Orange, 0.4, 0.3, 1, 0.2)
+	FX.Burst(g + V(0, 1, 0), COL.Fire, 10, 0.4, 8)
+	smoke(g + V(0, 1, 0), rgb(60, 40, 36), 3, 2.5, 0.8, 3)
+	FX.Sound("HeavyHit", 1, 0.6, g)
+end
+
+IMPACT.Execution = function(p)
+	local g = ground(p.P)
+	FX.Cracks(g, p.R, COL.Ember, 12, 1.6)
+	FX.Ring(g, p.R, COL.Ember, 0.6, 0.6, 1, 0.05)
+	flash(g + V(0, 2, 0), COL.Fire, p.R * 0.5, 0.4)
+	for i = 1, (FX.Lite and 2 or 5) do
+		local a = i / 5 * math.pi * 2
+		local q = g + V(math.cos(a) * p.R * 0.6, 0, math.sin(a) * p.R * 0.6)
+		local pillar = part({ Size = V(1.2, 0.5, 1.2), CFrame = CF(q), Color = COL.Orange, Transparency = 0.2 })
+		FX.Tween(pillar, 0.25, { Size = V(1.2, 7, 1.2), CFrame = CF(q + V(0, 3.5, 0)) })
+		task.delay(0.3, function()
+			fade(pillar, 0.4, { Size = V(0.2, 9, 0.2) })
+		end)
+	end
+	debris(g + V(0, 0.5, 0), COL.Stone, 8, 0.6, 10, 0.9)
+	FX.Shake(0.45, 0.4)
+	FX.Sound("Explosion", 1, 0.55, g)
+end
+
+IMPACT.PumpkinBlast = function(p)
+	local g = ground(p.P) + V(0, 1, 0)
+	FX.Sphere(g, p.R * 0.8, COL.Orange, 0.35)
+	FX.Burst(g, COL.Ember, 10, 0.4, 9)
+	debris(g, rgb(230, 110, 30), 5, 0.5, 8, 0.7, Enum.Material.SmoothPlastic)
+	FX.Sound("Explosion", 0.6, 1.1, g)
+end
+
+IMPACT.GhostPumpkin = function(p)
+	local g = ground(p.P)
+	local s = 6
+	local top = g + V(0, 22, 0)
+	local pk = part({ Size = V(s, s * 0.85, s), CFrame = CF(top), Color = COL.Ghost, Transparency = 0.4 })
+	local face = part({ Size = V(s * 0.6, s * 0.25, 0.2), CFrame = CF(top + V(0, -0.3, -s / 2)), Color = COL.Orange })
+	local eyeL = part({ Size = V(0.9, 0.9, 0.2), CFrame = CF(top + V(-1.2, 1, -s / 2)) * ANG(0, 0, rad(45)), Color = COL.Orange })
+	local eyeR = part({ Size = V(0.9, 0.9, 0.2), CFrame = CF(top + V(1.2, 1, -s / 2)) * ANG(0, 0, rad(45)), Color = COL.Orange })
+	local list = { pk, face, eyeL, eyeR }
+	plight(pk, COL.Orange, 30, 3)
+	for _, q in ipairs(list) do
+		FX.Tween(q, 0.45, { CFrame = q.CFrame - V(0, 19, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	end
+	task.delay(0.45, function()
+		for _, q in ipairs(list) do
+			q:Destroy()
+		end
+		FX.Sphere(g + V(0, 2, 0), p.R, COL.Orange, 0.6, nil, 0.05)
+		FX.Sphere(g + V(0, 2, 0), p.R * 0.7, COL.Ghost, 0.5, nil, 0.3)
+		FX.Ring(g, p.R * 1.2, COL.Ember, 0.7, 0.6, 1, 0.05)
+		FX.Cracks(g, p.R, COL.Ember, 10, 1.6)
+		FX.Burst(g + V(0, 2, 0), COL.Fire, 24, 0.6, 16, 0.8)
+		debris(g + V(0, 1, 0), rgb(230, 110, 30), 8, 0.8, 12, 1.0, Enum.Material.SmoothPlastic)
+		flash(g + V(0, 3, 0), COL.Fire, p.R, 0.6)
+		FX.Shake(0.6, 0.5)
+		FX.Sound("Explosion", 1, 0.45, g)
+	end)
+end
+
+-- РУНЫ
+IMPACT.LanternHeart = function(p)
+	local g = ground(p.P) + V(0, 1.2, 0)
+	FX.Sphere(g, p.R, COL.Orange, 0.35, nil, 0.15)
+	FX.Ring(ground(p.P), p.R, COL.Ember, 0.35, 0.25, 0.5, 0.2)
+	FX.Burst(g, COL.Fire, 8, 0.3, 7)
+	FX.Sound("Explosion", 0.4, 1.4, g)
+end
+
+IMPACT.CursedThreads = function(p)
+	local c = p.P + V(0, 7, 0)
+	for _, id in ipairs(p.A or {}) do
+		local e = Renderer.EnemyCenter(id)
+		if e then
+			FX.Thread(c, e, COL.Red)
+			FX.Ring(ground(e), 1.6, COL.Red, 0.5, 0.2, 0.3, 0.2)
+		end
+	end
+	FX.Sound("Magic", 0.7, 0.5, p.P)
+end
+
+IMPACT.PhantomEcho = function(p)
+	-- сама копия рисуется по событию атаки с флагом EC; здесь — синий отблеск у юнита
+	FX.Burst(p.P + V(0, 2, 0), COL.Ghost, 5, 0.25, 4)
+end
+
+IMPACT.CursedCircle = function(p)
+	local g = ground(p.P)
+	runeRing(g, 4, COL.Red, 2.2)
+	flash(g + V(0, 1.5, 0), COL.Red, 3, 0.5)
+	FX.Burst(g + V(0, 1, 0), COL.Red, 12, 0.35, 6)
+	FX.Sound("Magic", 0.8, 0.4, g)
+end
+
+IMPACT.SummonPortal = function(p)
+	local g = ground(p.P)
+	if p.S == "Illusion" then
+		portalDisc(g + V(0, 4, 0), 3.4, COL.Purple, 1.4, rgb(230, 200, 255))
+		runeRing(g, 3.5, COL.Purple, 1.6)
+		debris(g + V(0, 3, 0), rgb(220, 210, 255), 6, 0.35, 6, 0.8, Enum.Material.Glass)
+	else
+		-- кукловод: красные нити опускают марионеток сверху
+		for i = 1, 5 do
+			local a = i / 5 * math.pi * 2
+			FX.Thread(g + V(math.cos(a) * 1.5, 14, math.sin(a) * 1.5), g + V(math.cos(a) * 1.2, 2, math.sin(a) * 1.2), COL.Red)
+		end
+		runeRing(g, 3, COL.Red, 1.4)
+		if p.G then
+			flash(g + V(0, 3, 0), COL.Gold, 5, 0.7)
+			FX.Burst(g + V(0, 2, 0), COL.Gold, 20, 0.4, 10, 0.8)
+		end
+	end
+	FX.Sound("Portal", 0.8, 1.2, g)
+end
+
+IMPACT.AllyHit = function(p)
+	local pos = p.P + V(0, 2, 0)
+	FX.Burst(pos, p.F and COL.Orange or COL.Light, 6, 0.3, 7)
+	FX.Sphere(pos, 1.4, p.F and COL.Ember or rgb(255, 255, 255), 0.18)
+	FX.Sound("Slash", 0.5, 1.2, pos)
+	local av = HFX.Allies[p.I]
+	if av then
+		av.HitT = os.clock()
+	end
+end
+
+IMPACT.Fog = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, p.R, COL.FogC, 0.9, 0.2, 1, 0.5)
+	smoke(g + V(0, 1, 0), COL.FogC, 5, p.R * 0.6, 1.4, 1)
+	local view = Renderer.EnemyViews[p.I]
+	if view then
+		for _, d in ipairs(view.Rig.Model:GetDescendants()) do
+			if d.Name == "FogFX" and d:IsA("ParticleEmitter") then
+				d:Emit(18)
+			end
+		end
+	end
+end
+
+IMPACT.Straw = function(p)
+	local g = ground(p.P)
+	debris(g + V(0, 1.5, 0), COL.Straw, 10, 0.35, 8, 0.9, Enum.Material.Fabric)
+	FX.Burst(g + V(0, 1.5, 0), COL.Straw, 8, 0.3, 6)
+end
+
+IMPACT.Fire = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, 7, COL.Ember, 0.6, 0.4, 1, 0.1)
+	FX.Burst(g + V(0, 2, 0), COL.Fire, 18, 0.5, 10)
+	flash(g + V(0, 3, 0), COL.Orange, 6, 0.5)
+end
+
+------------------------------------------------------------------------
+-- СОСТОЯНИЯ ВРАГОВ
+------------------------------------------------------------------------
+local function setPhased(view, on)
+	local model = view.Rig.Model
+	if on then
+		view.PhaseSave = view.PhaseSave or {}
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") and d.Transparency < 1 and not view.PhaseSave[d] then
+				view.PhaseSave[d] = { d.Transparency, d.Color, d.Material }
+				if d:GetAttribute("Outline") then
+					d.Color = COL.Ghost
+					d.Material = Enum.Material.Neon
+				else
+					d.Transparency = 0.9
+				end
+			end
+		end
+	elseif view.PhaseSave then
+		for d, s in pairs(view.PhaseSave) do
+			if d.Parent then
+				d.Transparency, d.Color, d.Material = s[1], s[2], s[3]
+			end
+		end
+		view.PhaseSave = nil
+	end
+end
+
+local function setShield(view, on)
+	for _, d in ipairs(view.Rig.Model:GetDescendants()) do
+		if d.Name == "ShieldFX" and d:IsA("BasePart") then
+			FX.Tween(d, 0.25, { Transparency = on and (d:GetAttribute("PT") or 0.6) or 1 })
+		end
+	end
+end
+
+IMPACT.EnemyState = function(p)
+	local view = Renderer.EnemyViews[p.I]
+	if not view then
+		return
+	end
+	local c = Renderer.EnemyCenter(p.I) or p.P
+	local s = p.S
+	if s == "Phase" then
+		setPhased(view, true)
+		FX.Burst(c, COL.Ghost, 6, 0.25, 4)
+		task.delay(p.DUR or 1.5, function()
+			if view.Rig.Model.Parent then
+				setPhased(view, false)
+			end
+		end)
+	elseif s == "Shield" then
+		setShield(view, true)
+		FX.Sphere(c, 3 * (view.Rig.Scale or 1), COL.Purple, 0.35, nil, 0.4)
+		task.delay(p.DUR or 3, function()
+			if view.Rig.Model.Parent then
+				setShield(view, false)
+			end
+		end)
+	elseif s == "Haste" then
+		view.HasteUntil = os.clock() + (p.DUR or 3)
+		FX.Burst(c, COL.Red, 10, 0.3, 10)
+		FX.Ring(ground(c), 4, COL.Red, 0.4, 0.2, 1, 0.2)
+	elseif s == "Enrage" then
+		flash(c, COL.Red, 6, 0.6)
+		FX.Ring(ground(c), 10, COL.Red, 0.7, 0.5, 1, 0.1)
+		FX.Shake(0.5, 0.6)
+		FX.Sound("Boss", 1, 0.9, c)
+	elseif s == "ArmorBreak" then
+		debris(c, COL.Bone, 8, 0.45, 9, 0.9, Enum.Material.SmoothPlastic)
+		debris(c, rgb(90, 88, 100), 5, 0.5, 8, 0.9, Enum.Material.Metal)
+		FX.Sound("HeavyHit", 0.8, 1.3, c)
+	end
+end
+
+-- Смерть врага: дополнительный эффект по rig.DeathFX
+local DEATH = {
+	GreenSmoke = function(pos, s)
+		smoke(pos, rgb(90, 200, 100), 5, 2.4 * s, 1.1, 3)
+		FX.Burst(pos, COL.Green, 6, 0.3, 4)
+	end,
+	PumpkinBurst = function(pos, s)
+		debris(pos, rgb(230, 110, 30), 7, 0.5 * s, 9, 0.9, Enum.Material.SmoothPlastic)
+		FX.Burst(pos, COL.Fire, 10, 0.35, 8)
+		FX.Sphere(pos, 1.6 * s, COL.Orange, 0.3)
+	end,
+	Ghost = function(pos, s)
+		smoke(pos, COL.Ghost, 4, 2 * s, 0.9, 4)
+		FX.Burst(pos, COL.Ghost, 8, 0.3, 5)
+	end,
+	BoneShards = function(pos, s)
+		debris(pos, COL.Bone, 9, 0.4 * s, 9, 1.0, Enum.Material.SmoothPlastic)
+	end,
+	Straw = function(pos, s)
+		debris(pos, COL.Straw, 10, 0.35 * s, 8, 1.0, Enum.Material.Fabric)
+	end,
+	Fog = function(pos, s)
+		smoke(pos, COL.FogC, 6, 2.6 * s, 1.3, 2)
+	end,
+	Reaper = function(pos, s)
+		smoke(pos, rgb(70, 40, 110), 6, 2.6 * s, 1.2, 4)
+		FX.Burst(pos, COL.Purple, 14, 0.4, 9)
+		FX.Ring(ground(pos), 6, COL.Purple, 0.6, 0.3, 1, 0.2)
+	end,
+	GraveBreak = function(pos, s)
+		debris(pos, COL.Stone, 14, 0.9, 11, 1.2)
+		smoke(pos, rgb(110, 105, 100), 6, 3.5, 1.4, 3)
+		FX.Ring(ground(pos), 12, rgb(150, 255, 140), 0.8, 0.5, 1, 0.1)
+		FX.Shake(0.5, 0.6)
+	end,
+	MonarchDeath = function(pos, s)
+		-- корона трескается, оранжевый свет, монарх рассыпается
+		flash(pos + V(0, 4, 0), COL.Fire, 14, 1.2)
+		FX.Ring(ground(pos), 20, COL.Ember, 1.2, 0.8, 1, 0.05)
+		FX.Burst(pos + V(0, 4, 0), COL.Gold, 24, 0.5, 12, 1)
+		debris(pos + V(0, 6, 0), COL.Gold, 10, 0.6, 9, 1.4, Enum.Material.Metal)
+		smoke(pos, rgb(60, 30, 20), 8, 5, 2.2, 6)
+		FX.Shake(0.9, 1.2)
+		FX.Sound("Secret", 0.8, 0.8, pos)
+	end,
+}
+
+function HFX.EnemyDeath(view, reason)
+	local fxName = view.Rig.DeathFX
+	local fn = fxName and DEATH[fxName]
+	if fn and reason ~= "clear" then
+		local s = (Config.Enemies[view.Type] or {}).Scale or 1
+		local pos = view.Rig.Root.Position
+		if fxName == "MonarchDeath" then
+			-- детали короны отрываются и падают
+			for _, d in ipairs(view.Rig.Model:GetDescendants()) do
+				if d:IsA("BasePart") and d:GetAttribute("Crown") and d.Transparency < 1 then
+					local c = d:Clone()
+					c.Anchored = true
+					c.Parent = workspace:FindFirstChild("VoidTD_FX") or workspace
+					d.Transparency = 1
+					fade(c, 1.4, { CFrame = c.CFrame * CF(rng:NextNumber(-3, 3), -4, rng:NextNumber(-3, 3)) * ANG(rng:NextNumber(-2, 2), 0, rng:NextNumber(-2, 2)) })
+				end
+			end
+		end
+		fn(pos, s)
+	end
+end
+
+-- Появление: особые входы боссов
+function HFX.EnemySpawn(view, atStart)
+	local fxName = view.Rig.SpawnFX
+	if not fxName or not atStart then
+		return
+	end
+	local pos = view.Rig.Root.Position
+	local g = ground(pos)
+	if fxName == "GraveBreak" then
+		-- плита могилы поднимается и раскалывается, страж выходит из могилы
+		local slab = part({ Size = V(6, 0.8, 9), CFrame = CF(g + V(0, 0.4, 0)), Color = COL.Stone, Material = Enum.Material.Slate })
+		FX.Tween(slab, 0.5, { CFrame = CF(g + V(0, 2.5, 0)) * ANG(rad(25), 0, rad(-10)) })
+		task.delay(0.55, function()
+			slab:Destroy()
+			debris(g + V(0, 2.5, 0), COL.Stone, 12, 1.1, 12, 1.3)
+			smoke(g + V(0, 1, 0), rgb(110, 105, 100), 6, 4, 1.4, 3)
+			FX.Ring(g, 10, rgb(150, 255, 140), 0.7, 0.4, 1, 0.1)
+			FX.Shake(0.6, 0.6)
+		end)
+	elseif fxName == "FogVortex" then
+		-- вихрь тумана сгущается в жнеца
+		local n = FX.Lite and 4 or 12
+		local balls = {}
+		for i = 1, n do
+			balls[i] = { part({ Shape = Enum.PartType.Ball, Size = V(3, 3, 3), Color = COL.FogC, Material = Enum.Material.SmoothPlastic, Transparency = 0.6 }), i / n * math.pi * 2, rng:NextNumber(0, 6) }
+		end
+		local t0 = os.clock()
+		local conn
+		conn = RunService.RenderStepped:Connect(function()
+			local t = os.clock() - t0
+			for _, b in ipairs(balls) do
+				local a = b[2] + t * 5
+				local r = math.max(0.5, 10 - t * 7)
+				b[1].CFrame = CF(g + V(math.cos(a) * r, 1 + b[3] * 0.6 + t * 2, math.sin(a) * r))
+				b[1].Transparency = 0.6 + math.clamp((t - 1) / 0.4, 0, 0.4)
+			end
+			if t >= 1.4 then
+				conn:Disconnect()
+				for _, b in ipairs(balls) do
+					b[1]:Destroy()
+				end
+				FX.Sphere(g + V(0, 4, 0), 7, COL.Red, 0.4, nil, 0.4)
+			end
+		end)
+	elseif fxName == "MonarchPortal" then
+		-- монарх выходит из огненного портала и втыкает посох в землю
+		portalDisc(g + V(0, 9, 0), 8, rgb(150, 50, 15), 2.0, COL.Fire)
+		task.delay(1.1, function()
+			FX.Cracks(g, 12, COL.Ember, 12, 2)
+			FX.Ring(g, 16, COL.Ember, 0.8, 0.6, 1, 0.05)
+			FX.Burst(g + V(0, 1, 0), COL.Fire, 20, 0.5, 12)
+			FX.Shake(0.7, 0.7)
+			FX.Sound("Explosion", 1, 0.4, g)
+		end)
+	end
+end
+
+-- Ускорение (Fog Reaper) и туман: клиентское предсказание скорости
+function HFX.SpeedMult(view)
+	if view.HasteUntil and os.clock() < view.HasteUntil then
+		return 1.6
+	end
+	return 1
+end
+
+------------------------------------------------------------------------
+-- АТАКИ ЮНИТОВ (визуал вылета; урон и области — по Impact)
+------------------------------------------------------------------------
+function HFX.OnAttack(view, def, p, h, lv)
+	if def.Event ~= "Halloween" or def.AttackType == "Chrono" then
+		return false
+	end
+	local muzzle = Renderer.MuzzlePos(view)
+	local firstId = p.T and p.T[1]
+	local id = view.UnitId
+	local function at(d, fn)
+		task.delay(d, function()
+			if view.Rig and view.Rig.Model.Parent then
+				fn()
+			end
+		end)
+	end
+	if def.AttackType == "Melee" then
+		at(h, function()
+			local target = Renderer.EnemyCenter(firstId)
+			if not target then
+				return
+			end
+			local origin = view.Rig.Root.Position + V(0, 1, 0)
+			local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z))
+			FX.Arc(cf, math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3), rad(20), rad(150), COL.Dirt, 0.6, 0.3)
+			debris(ground(target) + V(0, 0.5, 0), COL.Dirt, 3, 0.35, 5, 0.6, Enum.Material.Ground)
+			FX.Sound("HeavyHit", 0.8, 1, target)
+		end)
+		return true
+	elseif def.AttackType == "Pulse" then
+		at(h, function()
+			flash(muzzle, COL.Bell, 1.6, 0.25)
+		end)
+		return true
+	elseif def.AttackType == "Flask" then
+		at(h, function()
+			local from = Renderer.MuzzlePos(view)
+			FX.Projectile("Flask", from, function()
+				return Renderer.EnemyCenter(firstId)
+			end, p.TR or 0.4, nil, lv)
+		end)
+		return true
+	elseif def.AttackType == "Pierce" then
+		at(h, function()
+			FX.Sphere(Renderer.MuzzlePos(view), 1.8, COL.Blue, 0.25)
+		end)
+		return true
+	elseif def.AttackType == "Thread" then
+		at(h, function()
+			for _, tid in ipairs(p.T or {}) do
+				local target = Renderer.EnemyCenter(tid)
+				if target then
+					FX.Thread(Renderer.MuzzlePos(view), target, def.ThreadColor or COL.Red)
+				end
+			end
+			FX.Sound("Magic", 0.8, 0.7, view.Pos)
+		end)
+		return true
+	elseif def.AttackType == "AOE" then
+		at(h, function()
+			local m = Renderer.MuzzlePos(view)
+			if id == "NightWatchman" then
+				flash(m, COL.Light, 1.5, 0.2)
+			elseif id == "HeadlessExecutioner" then
+				local target = Renderer.EnemyCenter(firstId)
+				if target then
+					local origin = view.Rig.Root.Position + V(0, 2, 0)
+					local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z))
+					FX.Arc(cf, math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.7, 4), rad(10), rad(160), COL.Ember, 1.1, 0.35)
+				end
+			end
+		end)
+		return true
+	elseif def.AttackType == "Projectile" and def.Projectile == "Crow" then
+		for si, tid in ipairs(p.T or { firstId }) do
+			local travel = (p.TRS and p.TRS[si]) or p.TR or 0.3
+			at(h + (si - 1) * (p.SG or 0.12), function()
+				crowFly(Renderer.MuzzlePos(view), function()
+					return Renderer.EnemyCenter(tid)
+				end, travel, function(pos)
+					FX.Burst(pos, COL.Black, 5, 0.3, 5)
+				end)
+			end)
+		end
+		return true
+	end
+	return false
+end
+
+-- «Призрачная корона»: синяя копия юнита за его спиной повторяет атаку
+function HFX.EchoGhost(view)
+	if not view.Rig or FX.Lite and math.random() < 0.5 then
+		return
+	end
+	local ok, clone = pcall(function()
+		return view.Rig.Model:Clone()
+	end)
+	if not ok or not clone then
+		return
+	end
+	local root = view.Rig.Root
+	local back = root.CFrame * CF(0, 0.3, 2.4)
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanQuery = false
+			d.CastShadow = false
+			if d.Transparency < 1 then
+				d.Color = COL.Ghost
+				d.Material = Enum.Material.Neon
+				d.Transparency = 0.55
+			end
+		elseif d:IsA("ParticleEmitter") or d:IsA("BillboardGui") or d:IsA("PointLight") or d:IsA("Trail") or d:IsA("Motor6D") then
+			d:Destroy()
+		end
+	end
+	clone:PivotTo(back)
+	clone.Parent = workspace:FindFirstChild("VoidTD_FX") or workspace
+	local fwd = root.CFrame * CF(0, 0.3, -0.6)
+	local t0 = os.clock()
+	local parts = {}
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1 then
+			parts[#parts + 1] = d
+		end
+	end
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		local a = math.clamp(t / 0.25, 0, 1)
+		clone:PivotTo(back:Lerp(fwd, a * 0.7))
+		local tr = 0.55 + math.clamp((t - 0.35) / 0.35, 0, 1) * 0.45
+		for _, d in ipairs(parts) do
+			d.Transparency = tr
+		end
+		if t >= 0.7 then
+			conn:Disconnect()
+			clone:Destroy()
+		end
+	end)
+end
+
+function HFX.OnImpact(p)
+	local fn = IMPACT[p.K]
+	if fn then
+		fn(p)
+		return true
+	end
+	return false
+end
+
+-- Появление Короля фонарей: трон поднимается из огня
+function HFX.ThronePlace(pos)
+	local g = ground(pos)
+	local seat = part({ Size = V(4, 0.6, 3.5), CFrame = CF(g - V(0, 3, 0)), Color = COL.Black, Material = Enum.Material.Slate })
+	local back = part({ Size = V(4, 6, 0.6), CFrame = CF(g + V(0, 0, 1.6) - V(0, 3, 0)), Color = COL.Black, Material = Enum.Material.Slate })
+	local trim = part({ Size = V(4.3, 0.3, 0.7), CFrame = CF(g + V(0, 3, 1.6) - V(0, 3, 0)), Color = COL.Gold })
+	for _, q in ipairs({ seat, back, trim }) do
+		FX.Tween(q, 0.6, { CFrame = q.CFrame + V(0, 3.3, 0) }, Enum.EasingStyle.Back)
+		task.delay(1.6, function()
+			fade(q, 0.6, { CFrame = q.CFrame - V(0, 2, 0) })
+		end)
+	end
+	FX.Ring(g, 6, COL.Ember, 0.8, 0.5, 1, 0.1)
+	FX.Burst(g + V(0, 1, 0), COL.Fire, 20, 0.45, 10, 0.8)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		local q = g + V(math.cos(a) * 4, 0, math.sin(a) * 4)
+		local pk = part({ Size = V(1, 0.8, 1), CFrame = CF(q - V(0, 1, 0)), Color = rgb(230, 110, 30), Material = Enum.Material.SmoothPlastic })
+		FX.Tween(pk, 0.5, { CFrame = CF(q + V(0, 0.4, 0)) }, Enum.EasingStyle.Back)
+		task.delay(1.8, function()
+			fade(pk, 0.5)
+		end)
+	end
+	flash(g + V(0, 3, 0), COL.Orange, 5, 0.8)
+	FX.Sound("Secret", 0.6, 1.2, g)
+end
+
+------------------------------------------------------------------------
+-- СОЮЗНИКИ: модели на дороге, идут от базы к порталу
+------------------------------------------------------------------------
+local allyViews = {}
+HFX.Allies = allyViews
+local allyFolder
+
+local function allyBar(av)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "HPBar"
+	gui.Size = UDim2.fromOffset(60, 8)
+	gui.StudsOffsetWorldSpace = V(0, av.Rig.Height or 5, 0)
+	gui.MaxDistance = 90
+	gui.AlwaysOnTop = true
+	gui.LightInfluence = 0
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.fromScale(1, 1)
+	bg.BackgroundColor3 = rgb(20, 14, 24)
+	bg.BorderSizePixel = 0
+	bg.Parent = gui
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = av.Family == "Cursed" and COL.Red or (av.Family == "Puppet" and COL.Orange or COL.Purple)
+	fill.BorderSizePixel = 0
+	fill.Parent = bg
+	gui.Parent = av.Rig.Root
+	av.Fill = fill
+end
+
+local function addAlly(id, dist, hp, typeIndex, maxHp)
+	local allyId = Config.AllyOrder[typeIndex]
+	if not allyId or not UnitModels.BuildAlly then
+		return
+	end
+	local ok, rig = pcall(UnitModels.BuildAlly, allyId)
+	if not ok or not rig then
+		warn(rig)
+		return
+	end
+	local def = Config.Allies[allyId]
+	local av = {
+		Id = id, AllyId = allyId, Family = def.Family, Rig = rig, Dist = dist, ServerDist = dist,
+		HP = hp, MaxHP = maxHp or hp, LastSync = os.clock(), Phase = rng:NextNumber(0, 6),
+		Lateral = rng:NextNumber(-1.4, 1.4), SpawnT = os.clock(),
+	}
+	rig.Height = rig.Height or (5 * (rig.Scale or 1))
+	for _, d in ipairs(rig.Model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = false
+			d.CanTouch = false
+			d.CanCollide = false
+		end
+	end
+	local pos, dir = PathUtil.OffsetPositionAt(dist, av.Lateral)
+	rig.Root.CFrame = CFrame.lookAt(pos + V(0, rig.HipHeight, 0), pos - dir + V(0, rig.HipHeight, 0))
+	allyBar(av)
+	rig.Model.Parent = allyFolder
+	allyViews[id] = av
+end
+
+local function removeAlly(id, reason)
+	local av = allyViews[id]
+	if not av then
+		return
+	end
+	allyViews[id] = nil
+	local pos = av.Rig.Root.Position
+	local color = av.Family == "Cursed" and COL.Red or (av.Family == "Puppet" and (av.AllyId == "GoldenMarionette" and COL.Gold or COL.Orange) or COL.Purple)
+	if reason == "dead" then
+		FX.Burst(pos, color, 10, 0.35, 8)
+		if av.Family == "Puppet" then
+			debris(pos, rgb(150, 110, 70), 6, 0.4, 7, 0.8, Enum.Material.Wood)
+		elseif av.Family == "Illusion" then
+			debris(pos, rgb(220, 210, 255), 6, 0.35, 7, 0.8, Enum.Material.Glass)
+		else
+			smoke(pos, rgb(120, 20, 30), 3, 2, 0.8, 3)
+		end
+	else
+		FX.Poof(pos, color, 1)
+	end
+	av.Rig.Model:Destroy()
+end
+
+function HFX.SyncAllies(list, removed)
+	local nowc = os.clock()
+	local seen = {}
+	if list then
+		for i = 1, #list, 5 do
+			local id = list[i]
+			seen[id] = true
+			local av = allyViews[id]
+			if av then
+				av.ServerDist = list[i + 1]
+				av.HP = list[i + 2]
+				av.MaxHP = list[i + 4] or av.MaxHP
+				av.LastSync = nowc
+			else
+				addAlly(id, list[i + 1], list[i + 2], list[i + 3], list[i + 4])
+			end
+		end
+		-- союзники, пропавшие из списка без причины (например, после переподключения)
+		for id in pairs(allyViews) do
+			if not seen[id] then
+				removeAlly(id, "clear")
+			end
+		end
+	end
+	for _, r in ipairs(removed or {}) do
+		removeAlly(r[1], r[2])
+	end
+end
+
+function HFX.ClearAllies()
+	for id in pairs(allyViews) do
+		removeAlly(id, "clear")
+	end
+end
+
+function HFX.Update(dt)
+	local t = os.clock()
+	local speed = Config.Settings.AllySpeed or 6
+	for _, av in pairs(allyViews) do
+		local rig = av.Rig
+		local predicted = av.ServerDist - speed * math.min(t - av.LastSync, 0.35)
+		av.Dist = av.Dist - speed * dt
+		av.Dist = av.Dist + (predicted - av.Dist) * math.min(1, dt * 5)
+		local pos, dir = PathUtil.OffsetPositionAt(math.max(av.Dist, 0), av.Lateral)
+		local rise = math.clamp((t - av.SpawnT) / 0.4, 0, 1)
+		local hip = rig.HipHeight
+		local bob = math.abs(math.sin(t * 7 + av.Phase)) * 0.15
+		rig.Root.CFrame = CFrame.lookAt(pos + V(0, hip + bob - (1 - rise) * 2, 0), pos - dir + V(0, hip + bob - (1 - rise) * 2, 0))
+		-- ходьба: руки и ноги машут навстречу
+		local swing = math.sin(t * 7 + av.Phase) * 32
+		local base = rig.Base
+		local m = rig.Motors
+		if m.RH and base.RH then
+			m.RH.C0 = base.RH * ANG(rad(swing), 0, 0)
+			m.LH.C0 = base.LH * ANG(rad(-swing), 0, 0)
+		end
+		if m.RS and base.RS then
+			m.RS.C0 = base.RS * ANG(rad(-swing * 0.7), 0, 0)
+			m.LS.C0 = base.LS * ANG(rad(swing * 0.7), 0, 0)
+		end
+		if av.Fill then
+			av.Fill.Size = UDim2.fromScale(math.clamp(av.HP / math.max(av.MaxHP, 1), 0, 1), 1)
+		end
+	end
+end
+
+function HFX.Init(c, renderer)
+	ctx = c
+	Config, PathUtil, UnitModels, FX = c.Config, c.PathUtil, c.UnitModels, c.FX
+	Renderer = renderer
+	allyFolder = Instance.new("Folder")
+	allyFolder.Name = "VoidTD_Allies"
+	allyFolder.Parent = workspace
+	installProjectiles()
+end
+
+return HFX
+]======] }
+FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "HalloweenAnims" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenAnims (клиент)
+-- Анимации хэллоуинских юнитов в формате Renderer: function(h) -> { { время, { Сустав = { x, y, z, dy } } }, ... }
+-- Подключение: require(HalloweenAnims)(Anims, FIDGETS)
+
+return function(Anims, FIDGETS)
+	------------------------------------------------------------------------
+	-- ОБЫЧНЫЕ АТАКИ (h = HitDelay)
+	------------------------------------------------------------------------
+	-- Ночной сторож: фонарь вперёд и вверх — вспышка
+	Anims.Lantern = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 125, 0, 0 }, LS = { 20, 0, -10 }, Root = { -4, 0, 0 } } },
+			{ h, { RS = { 100, 0, 0 }, Root = { 4, 0, 0 } } },
+			{ h + 0.25, { RS = { 80, 0, 0 } } },
+			{ h + 0.55, {} },
+		}
+	end
+
+	-- Могильщик: удар лопатой сверху вниз
+	Anims.Shovel = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.75, { RS = { 172, 0, 10 }, LS = { 40, 0, -10 }, Root = { -8, -10, 0, 0.1 } } },
+			{ h, { RS = { 40, 0, -5 }, LS = { 25, 0, 0 }, Root = { 14, 10, 0, -0.2 } } },
+			{ h + 0.3, { RS = { 30, 0, 0 }, Root = { 6, 0, 0 } } },
+			{ h + 0.65, {} },
+		}
+	end
+
+	-- Пугало: взмах рукой — вороны срываются с плеч
+	Anims.Crows = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 135, 0, 35 }, LS = { 60, 0, -40 }, Neck = { -10, 0, 0 }, Root = { 0, -15, 0 } } },
+			{ h, { RS = { 95, 0, -25 }, LS = { 50, 0, -20 }, Root = { 4, 15, 0 } } },
+			{ h + 0.3, { RS = { 60, 0, -10 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Звонарь: колокол раскачивается — звон
+	Anims.Bell = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.5, { RS = { 95, 0, 35 }, Root = { 0, -8, 0 } } },
+			{ h, { RS = { 112, 0, -25 }, Root = { 3, 8, 0 } } },
+			{ h + 0.15, { RS = { 92, 0, 25 } } },
+			{ h + 0.3, { RS = { 100, 0, -10 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Чумной доктор: бросок колбы из-за плеча
+	Anims.Flask = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 165, 0, 15 }, LS = { 30, 0, -15 }, Root = { -6, -18, 0 } } },
+			{ h, { RS = { 60, 0, -15 }, Root = { 8, 15, 0 } } },
+			{ h + 0.3, { RS = { 45, 0, 0 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Призрачный рыцарь: широкий горизонтальный разрез
+	Anims.GhostSlash = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.75, { RS = { 125, 0, 45 }, LS = { 30, 0, -15 }, Root = { -4, -30, 0 } } },
+			{ h, { RS = { 80, 0, -65 }, LS = { 20, 0, -5 }, Root = { 6, 30, 0, -0.1 } } },
+			{ h + 0.25, { RS = { 50, 0, -40 }, Root = { 3, 15, 0 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Иллюзионист: щелчок кистью — веер карт
+	Anims.Cards = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.6, { RS = { 65, 0, 45 }, Root = { 0, -12, 0 } } },
+			{ h, { RS = { 98, 0, -35 }, Root = { 0, 12, 0 } } },
+			{ h + 0.12, { RS = { 92, 0, -40 } } },
+			{ h + 0.45, {} },
+		}
+	end
+
+	-- Палач: двуручный удар топором сверху
+	Anims.ExecAxe = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.8, { RS = { 176, 0, 5 }, LS = { 166, 0, -5 }, Root = { -10, 0, 0, 0.2 } } },
+			{ h, { RS = { 35, 0, 0 }, LS = { 35, 0, 0 }, Root = { 20, 0, 0, -0.4 } } },
+			{ h + 0.35, { RS = { 30, 0, 0 }, LS = { 30, 0, 0 }, Root = { 14, 0, 0, -0.3 } } },
+			{ h + 0.8, {} },
+		}
+	end
+
+	-- Король фонарей: посох вверх и вперёд — огненная тыква
+	Anims.LanternStaff = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 145, 0, 5 }, LS = { 30, 0, -20 }, Neck = { -8, 0, 0 } } },
+			{ h, { RS = { 95, 0, 0 }, LS = { 25, 0, -10 }, Root = { 5, 0, 0 } } },
+			{ h + 0.3, { RS = { 80, 0, 0 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	------------------------------------------------------------------------
+	-- СПОСОБНОСТИ (удар — в указанное время)
+	------------------------------------------------------------------------
+	-- Луч фонаря: фонарь высоко над головой (вспышка ~0.45 с)
+	Anims.LanternBeam = function()
+		return {
+			{ 0, {} },
+			{ 0.35, { RS = { 172, 0, 0 }, LS = { 30, 0, -20 }, Neck = { -15, 0, 0 }, Root = { -4, 0, 0, 0.15 } } },
+			{ 0.8, { RS = { 168, 0, 0 }, LS = { 30, 0, -20 }, Neck = { -12, 0, 0 }, Root = { -3, 0, 0, 0.1 } } },
+			{ 1.1, {} },
+		}
+	end
+
+	-- Взрыв земли: прыжок и удар лопатой в землю (~0.45 с)
+	Anims.DirtBurst = function()
+		return {
+			{ 0, {} },
+			{ 0.3, { RS = { 176, 0, 8 }, LS = { 150, 0, -8 }, Root = { -10, 0, 0, 0.45 } } },
+			{ 0.45, { RS = { 15, 0, 0 }, LS = { 25, 0, 0 }, Root = { 22, 0, 0, -0.45 } } },
+			{ 0.85, { RS = { 15, 0, 0 }, LS = { 25, 0, 0 }, Root = { 18, 0, 0, -0.35 } } },
+			{ 1.2, {} },
+		}
+	end
+
+	-- Вихрь листьев: руки в стороны, разворот корпусом (~0.5 с)
+	Anims.LeafStorm = function()
+		return {
+			{ 0, {} },
+			{ 0.25, { RS = { 95, 0, 70 }, LS = { 95, 0, -70 }, Root = { 0, -45, 0 } } },
+			{ 0.5, { RS = { 110, 0, 60 }, LS = { 110, 0, -60 }, Neck = { -15, 0, 0 }, Root = { 0, 45, 0, 0.15 } } },
+			{ 0.8, { RS = { 100, 0, 65 }, LS = { 100, 0, -65 }, Root = { 0, 0, 0, 0.1 } } },
+			{ 1.1, {} },
+		}
+	end
+
+	-- Метка проклятия: долгий прицел и выстрел (~0.45 с)
+	Anims.CurseMark = function()
+		return {
+			{ 0, {} },
+			{ 0.3, { RS = { 92, 0, 0 }, LS = { 88, 0, 15 }, Neck = { 5, 0, 0 }, Root = { 0, -10, 0 } } },
+			{ 0.45, { RS = { 125, 0, 0 }, LS = { 95, 0, 15 }, Root = { -6, -10, 0 } } },
+			{ 0.7, { RS = { 95, 0, 0 }, LS = { 70, 0, 10 } } },
+			{ 1.0, {} },
+		}
+	end
+
+	-- Полночный звон: колокол над головой и мощный удар вниз (~0.5 с)
+	Anims.MidnightToll = function()
+		return {
+			{ 0, {} },
+			{ 0.35, { RS = { 176, 0, 0 }, LS = { 120, 0, -20 }, Neck = { -20, 0, 0 }, Root = { -6, 0, 0, 0.2 } } },
+			{ 0.5, { RS = { 55, 0, -20 }, LS = { 40, 0, 0 }, Neck = { 12, 0, 0 }, Root = { 16, 0, 0, -0.3 } } },
+			{ 0.9, { RS = { 70, 0, 20 }, Root = { 8, 0, 0, -0.15 } } },
+			{ 1.25, {} },
+		}
+	end
+
+	-- Чумное облако: обе руки вверх и бросок двух колб (~0.55 с)
+	Anims.PlagueCloud = function()
+		return {
+			{ 0, {} },
+			{ 0.4, { RS = { 170, 0, 15 }, LS = { 170, 0, -15 }, Neck = { -15, 0, 0 }, Root = { -6, 0, 0, 0.1 } } },
+			{ 0.55, { RS = { 75, 0, -10 }, LS = { 75, 0, 10 }, Root = { 10, 0, 0, -0.1 } } },
+			{ 0.9, { RS = { 55, 0, 0 }, LS = { 45, 0, 0 } } },
+			{ 1.2, {} },
+		}
+	end
+
+	-- Призрачный меч: клинок к небу (призыв), затем удар вниз (~0.55 с)
+	Anims.GhostSword = function()
+		return {
+			{ 0, {} },
+			{ 0.4, { RS = { 178, 0, 0 }, LS = { 40, 0, -20 }, Neck = { -20, 0, 0 }, Root = { -6, 0, 0, 0.25 } } },
+			{ 0.55, { RS = { 45, 0, 0 }, LS = { 30, 0, -10 }, Neck = { 10, 0, 0 }, Root = { 14, 0, 0, -0.25 } } },
+			{ 0.95, { RS = { 40, 0, 0 }, Root = { 10, 0, 0, -0.2 } } },
+			{ 1.3, {} },
+		}
+	end
+
+	-- Зеркальный разлом: толчок обеими руками вперёд (~0.45 с)
+	Anims.MirrorShatter = function()
+		return {
+			{ 0, {} },
+			{ 0.3, { RS = { 80, 0, 35 }, LS = { 80, 0, -35 }, Root = { -5, 0, 0 } } },
+			{ 0.45, { RS = { 96, 0, -8 }, LS = { 96, 0, 8 }, Root = { 8, 0, 0, -0.05 } } },
+			{ 0.75, { RS = { 90, 0, -5 }, LS = { 90, 0, 5 } } },
+			{ 1.0, {} },
+		}
+	end
+
+	-- Разрыв нитей: руки широко вверх и резкий рывок вниз (~0.5 с)
+	Anims.ThreadSnap = function()
+		return {
+			{ 0, {} },
+			{ 0.35, { RS = { 155, 0, 45 }, LS = { 155, 0, -45 }, Neck = { -12, 0, 0 }, Root = { -5, 0, 0, 0.15 } } },
+			{ 0.5, { RS = { 40, 0, 15 }, LS = { 40, 0, -15 }, Neck = { 10, 0, 0 }, Root = { 10, 0, 0, -0.15 } } },
+			{ 0.8, { RS = { 55, 0, 20 }, LS = { 55, 0, -20 } } },
+			{ 1.1, {} },
+		}
+	end
+
+	-- Казнь: долгий замах с отклонением назад и страшный удар (~0.65 с)
+	Anims.Execution = function()
+		return {
+			{ 0, {} },
+			{ 0.5, { RS = { 178, 0, 5 }, LS = { 170, 0, -5 }, Neck = { -15, 0, 0 }, Root = { -14, 0, 0, 0.25 } } },
+			{ 0.65, { RS = { 25, 0, 0 }, LS = { 25, 0, 0 }, Neck = { 15, 0, 0 }, Root = { 26, 0, 0, -0.55 } } },
+			{ 1.1, { RS = { 25, 0, 0 }, LS = { 25, 0, 0 }, Root = { 22, 0, 0, -0.5 } } },
+			{ 1.5, {} },
+		}
+	end
+
+	-- Призрачная тыква: посох медленно вверх, затем вперёд (~0.8 с)
+	Anims.GhostPumpkin = function()
+		return {
+			{ 0, {} },
+			{ 0.55, { RS = { 176, 0, 0 }, LS = { 120, 0, -25 }, Neck = { -22, 0, 0 }, Root = { -8, 0, 0, 0.35 } } },
+			{ 0.7, { RS = { 178, 0, 0 }, LS = { 125, 0, -25 }, Neck = { -24, 0, 0 }, Root = { -9, 0, 0, 0.4 } } },
+			{ 0.8, { RS = { 100, 0, 0 }, LS = { 40, 0, -15 }, Neck = { 8, 0, 0 }, Root = { 12, 0, 0, -0.1 } } },
+			{ 1.15, { RS = { 90, 0, 0 }, Root = { 6, 0, 0 } } },
+			{ 1.45, {} },
+		}
+	end
+
+	-- Призыв союзников: руки вверх над порталом (~1.2 с)
+	Anims.Summon = function()
+		return {
+			{ 0, {} },
+			{ 0.4, { RS = { 160, 0, 30 }, LS = { 160, 0, -30 }, Neck = { -18, 0, 0 }, Root = { -4, 0, 0, 0.2 } } },
+			{ 0.9, { RS = { 165, 0, 25 }, LS = { 165, 0, -25 }, Neck = { -20, 0, 0 }, Root = { -4, 0, 0, 0.25 } } },
+			{ 1.05, { RS = { 70, 0, 25 }, LS = { 70, 0, -25 }, Neck = { 8, 0, 0 }, Root = { 6, 0, 0, -0.05 } } },
+			{ 1.3, {} },
+		}
+	end
+
+	------------------------------------------------------------------------
+	-- ДВИЖЕНИЯ В ПРОСТОЕ
+	------------------------------------------------------------------------
+	FIDGETS.Lantern = { "LookAround", "StaffTap" }
+	FIDGETS.Shovel = { "Flex", "LookAround", "Stretch" }
+	FIDGETS.Crows = { "LookAround", "Twirl" }
+	FIDGETS.Bell = { "LookAround", "Stretch" }
+	FIDGETS.Flask = { "LookAround", "Reload" }
+	FIDGETS.GhostSlash = { "Twirl", "LookAround", "Flex" }
+	FIDGETS.Cards = { "Twirl", "LookAround" }
+	FIDGETS.ExecAxe = { "Flex", "LookAround" }
+	FIDGETS.LanternStaff = { "StaffTap", "LookAround", "Stretch" }
+end
+]======] }
 FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "Renderer" }, "ModuleScript", [======[
 --!nocheck
 -- VOID TD :: Renderer (клиент)
@@ -1491,6 +3027,7 @@ local ANG = CFrame.Angles
 local rad = math.rad
 
 local ctx, Config, PathUtil, UnitModels, EnemyModels, FX
+local HFX -- эффекты Хэллоуина (HalloweenFX)
 local enemyFolder, unitFolder
 local enemyViews = {}
 local unitViews = {}
@@ -2139,8 +3676,13 @@ end
 -- ПОЯВЛЕНИЕ
 ------------------------------------------------------------------------
 -- Вступление босса: портал вспыхивает, по земле идёт волна энергии
+local function activeMap()
+	return workspace:FindFirstChild(PathUtil.MapKey == "Halloween" and "VoidTDHalloweenMap" or "VoidTDMap")
+end
+Renderer.ActiveMap = activeMap
+
 local function portalSurge(isFinal)
-	local map = workspace:FindFirstChild("VoidTDMap")
+	local map = activeMap()
 	local portal = map and map:FindFirstChild("VoidPortal")
 	if not portal then
 		return
@@ -2158,7 +3700,7 @@ local function portalSurge(isFinal)
 		disc.Color = Color3.fromRGB(235, 200, 255)
 		FX.Tween(disc, 1.2, { Color = col })
 		local pos = disc.Position
-		local gy = Config.Map.GroundY
+		local gy = PathUtil.Map.GroundY
 		FX.Sphere(pos, isFinal and 16 or 11, FX.Colors.Neon, 0.8, nil, 0.3)
 		FX.Ring(V(pos.X, gy + 0.3, pos.Z), isFinal and 45 or 30, FX.Colors.Neon, 1.1, 0.6, 3, 0.05)
 		task.delay(0.15, function()
@@ -2228,6 +3770,9 @@ function Renderer.SpawnEnemy(data)
 	makeHealthBar(view)
 	rig.Model.Parent = enemyFolder
 	enemyViews[id] = view
+	if rig.SpawnFX then
+		HFX.EnemySpawn(view, dist <= 1)
+	end
 	if dist <= 1 then
 		FX.Burst(pos + V(0, 2, 0), FX.Colors.Neon, 6, 0.3, 5)
 		if rig.SpawnStyle == "Titan" then
@@ -2402,6 +3947,9 @@ function Renderer.RemoveEnemy(id, reason)
 		FX.Poof(view.Rig.Root.Position, FX.Colors.Neon, 0.8)
 		view.Rig.Model:Destroy()
 	else
+		if view.Rig.DeathFX and reason ~= "core" then
+			HFX.EnemyDeath(view, reason)
+		end
 		deathAnim(view, reason)
 	end
 end
@@ -2430,6 +3978,9 @@ function Renderer.OnSync(payload)
 	end
 	for _, r in ipairs(payload.RM or {}) do
 		Renderer.RemoveEnemy(r[1], r[2])
+	end
+	if payload.AL or payload.RA then
+		HFX.SyncAllies(payload.AL, payload.RA)
 	end
 end
 
@@ -2583,7 +4134,7 @@ local function updateEnemies(t, dt)
 	local cam = workspace.CurrentCamera
 	local camPos = cam and cam.CFrame.Position or V()
 	for _, v in pairs(enemyViews) do
-		local speed = v.Speed * (v.Frozen and 0 or (v.Slowed and 0.5 or 1))
+		local speed = v.Speed * (v.Frozen and 0 or (v.Slowed and 0.5 or 1)) * (v.HasteUntil and HFX.SpeedMult(v) or 1)
 		local predicted = v.ServerDist + speed * math.min(nowc - v.LastSync, 0.35)
 		v.Dist = v.Dist + speed * dt
 		v.Dist = v.Dist + (predicted - v.Dist) * math.min(1, dt * 5)
@@ -2738,7 +4289,11 @@ function Renderer.AddUnit(folder, isNew)
 	end
 	view.NextFidget = os.clock() + 4 + math.random() * 8
 	local placeFx = Config.Units[view.UnitId].PlaceFX
-	if isNew and placeFx == "Clock" then
+	if isNew and placeFx == "Throne" then
+		-- Король фонарей: трон поднимается из огня, вокруг вырастают тыквы
+		view.DropT = os.clock()
+		HFX.ThronePlace(view.Pos)
+	elseif isNew and placeFx == "Clock" then
 		-- часовщик поднимается из золотого механического портала, стрелки идут назад
 		view.RiseT = os.clock()
 		FX.ClockPortal(view.Pos, 1.3)
@@ -2794,6 +4349,7 @@ local function muzzlePos(view)
 	end
 	return view.Rig.Root.Position + V(0, 1, 0)
 end
+Renderer.MuzzlePos = muzzlePos
 
 local function playAnim(view, name, h, hits, interval)
 	local builder = Anims[name]
@@ -2860,9 +4416,17 @@ function Renderer.OnAttack(p)
 	end
 
 	local hits = p.T and #p.T or 1
-	playAnim(view, def.Anim, h, hits, p.I)
-	view.GustT = os.clock()
-	view.NextFidget = os.clock() + 6 + math.random() * 6
+	if p.EC then
+		-- повтор «Призрачной короны»: атакует синяя копия за спиной, сам юнит не дёргается
+		HFX.EchoGhost(view)
+	else
+		playAnim(view, def.Anim, h, hits, p.I)
+		view.GustT = os.clock()
+		view.NextFidget = os.clock() + 6 + math.random() * 6
+	end
+	if HFX.OnAttack(view, def, p, h, lv) then
+		return
+	end
 
 	local function at(delay, fn)
 		task.delay(delay, fn)
@@ -3094,6 +4658,8 @@ function Renderer.OnImpact(p)
 		FX.TimeHaste(p.P, p.R, list, p.DUR or 2)
 	elseif k == "TimeStorm" then
 		FX.TimeStorm(p.P, p.DL or 1.3)
+	else
+		HFX.OnImpact(p)
 	end
 end
 
@@ -3189,6 +4755,7 @@ function Renderer.Update(dt)
 	local t = os.clock()
 	updateEnemies(t, dt)
 	updateUnits(t, dt)
+	HFX.Update(dt)
 end
 
 function Renderer.ClearEnemies()
@@ -3208,6 +4775,12 @@ function Renderer.Init(c)
 	unitFolder.Parent = workspace
 	Renderer.UnitFolder = unitFolder
 	Renderer.EnemyFolder = enemyFolder
+	HFX = c.HFX
+	HFX.Init(c, Renderer)
+	-- анимации хэллоуинских юнитов (атаки, способности, разминки)
+	if c.HalloweenAnims then
+		c.HalloweenAnims(Anims, FIDGETS)
+	end
 end
 
 return Renderer
@@ -3250,6 +4823,7 @@ local refs = {}
 local state -- текущее открытие: { Id, Level, Rig, Yaw, Pitch, Dist, ... }
 local conns = {} -- соединения, живущие только пока окно открыто
 local previewFx -- эффекты способностей в предпросмотре (определены ниже)
+local showGallery -- галерея призыва (определена ниже)
 
 ------------------------------------------------------------------------
 -- 3D-сцена
@@ -3377,8 +4951,15 @@ local function refreshInfo()
 	local st = def.Levels[lv]
 	local rc = Config.Rarities[def.Rarity].Color
 	refs.Name.Text = def.Name
-	refs.Rarity.Text = def.Rarity:upper()
+	-- основная редкость + тег события (оба тега видны)
+	local ev = def.Event and Config.Events[def.Event]
+	refs.Rarity.RichText = true
+	refs.Rarity.Text = def.Rarity:upper() .. (ev and string.format('  <font color="#%s">%s</font>', ev.Color:ToHex(), ev.Tag) or "")
 	refs.Rarity.TextColor3 = rc
+	local runeId = ctx.Profile and ctx.Profile.RuneSlots and ctx.Profile.RuneSlots[id]
+	if runeId then
+		refs.Rarity.Text = refs.Rarity.Text .. string.format('  <font color="#%s">• РУНА %s</font>', Config.RuneRarity.Color:ToHex(), Config.Runes[runeId].Name)
+	end
 	refs.RarityBar.BackgroundColor3 = rc
 	refs.Desc.Text = def.Description or ""
 	refs.StatDamage.Text = fmt(st.Damage) .. ((st.Hits and st.Hits > 1) and ("  x" .. st.Hits) or "")
@@ -3486,12 +5067,22 @@ local function applyRarityFx(first)
 	local rarity = Config.Units[state.Id].Rarity
 	local glow = GLOW[rarity] or THEME.Accent
 	setGlow(glow)
-	if rarity == "Mythic" then
-		spawnParticles(glow, 14)
-	elseif rarity == "Secret" then
-		spawnParticles(glow, 10)
-	else
-		spawnParticles(glow, 0)
+	-- Mythic — фиолетовые частицы, Legendary — золотые, Epic — синие, Secret — кинематографичное появление
+	local counts = { Mythic = 14, Secret = 10, Legendary = 9, Epic = 6 }
+	spawnParticles(glow, counts[rarity] or 0)
+	-- Хэллоуин: тыква и оранжевые искры поверх основного свечения (не заменяют его)
+	local ev = Config.Units[state.Id].Event
+	refs.EventPumpkin.Visible = ev == "Halloween"
+	for _, p in ipairs(refs.EventSparks) do
+		p:Destroy()
+	end
+	refs.EventSparks = {}
+	if ev == "Halloween" then
+		for i = 1, 8 do
+			local p = K.new("Frame", { Parent = refs.Scene, Size = UDim2.fromOffset(4, 4), BackgroundColor3 = Color3.fromRGB(255, 150, 50), BackgroundTransparency = 0.3, BorderSizePixel = 0, Rotation = 45, ZIndex = 24 })
+			p:SetAttribute("Seed", (i * 0.37 + 0.11) % 1)
+			refs.EventSparks[#refs.EventSparks + 1] = p
+		end
 	end
 	if first and rarity == "Secret" then
 		secretIntro()
@@ -3564,6 +5155,17 @@ local function build()
 			state.Idle = 0
 		end
 	end)
+	-- галерея призыва / проклятых людей
+	refs.GalleryButton = K.button({ Parent = scene, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -56, 0, 10), Size = UDim2.fromOffset(190, 32), Text = "", BackgroundColor3 = Color3.fromRGB(110, 40, 30), StrokeColor = Color3.fromRGB(255, 130, 40), Visible = false, ZIndex = 25 }, function()
+		if state then
+			showGallery(state.GalleryKind)
+		end
+	end)
+	refs.GalleryInfo = K.label({ Parent = scene, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 10, 1, -30), Size = UDim2.new(1, -20, 0, 120), Text = "", TextScaled = false, TextSize = 13, TextWrapped = true, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Bottom, Visible = false, ZIndex = 25 })
+	-- хэллоуинская тыква в углу сцены
+	refs.EventPumpkin = K.new("Frame", { Parent = scene, Size = UDim2.fromOffset(40, 40), Position = UDim2.new(1, -54, 1, -64), BackgroundTransparency = 1, Visible = false, ZIndex = 25 })
+	UI.Icon("Pumpkin", refs.EventPumpkin, { Size = UDim2.fromScale(1, 1), ZIndex = 25 })
+	refs.EventSparks = {}
 	-- вступление секретного юнита
 	refs.Intro = K.new("Frame", { Parent = scene, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), Visible = false, ZIndex = 30 })
 	refs.IntroRing = K.new("Frame", { Parent = refs.Intro, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.05, 0.05), BackgroundColor3 = GLOW.Secret, BorderSizePixel = 0, ZIndex = 31 })
@@ -3659,7 +5261,7 @@ local function bindInput()
 end
 
 local function step(dt)
-	if not state or not state.Rig then
+	if not state or (not state.Rig and not state.Gallery) then
 		return
 	end
 	local t = os.clock()
@@ -3671,10 +5273,114 @@ local function step(dt)
 	state.Dist = state.Dist + (state.BaseDist * state.Zoom - state.Dist) * math.min(1, dt * 8)
 	updateCamera()
 	-- анимация модели (те же позы, что в бою)
-	Renderer.PreviewStep(state, t)
+	if state.Rig then
+		Renderer.PreviewStep(state, t)
+	end
 	if #refs.Particles > 0 then
 		stepParticles(t)
 	end
+	-- хэллоуинские искры и подпрыгивающая тыква
+	for i, p in ipairs(refs.EventSparks) do
+		local seed = p:GetAttribute("Seed") or 0
+		local a = (t * (0.12 + seed * 0.1) + seed) % 1
+		p.Position = UDim2.new(0.08 + seed * 0.84 + math.sin(t * 2 + i) * 0.03, 0, 1 - a, 0)
+		p.BackgroundTransparency = 0.25 + a * 0.75
+	end
+	if refs.EventPumpkin.Visible then
+		refs.EventPumpkin.Position = UDim2.new(1, -54, 1, -64 - math.abs(math.sin(t * 3)) * 10)
+		refs.EventPumpkin.Rotation = math.sin(t * 3) * 8
+	end
+	-- союзники в галерее призыва идут на месте
+	if state.Gallery then
+		for i, g in ipairs(state.Gallery) do
+			local rig = g.Rig
+			local sw = math.sin(t * 6 + i) * 28
+			local m, b = rig.Motors, rig.Base
+			if m.RH and b.RH then
+				m.RH.C0 = b.RH * ANG(rad(sw), 0, 0)
+				m.LH.C0 = b.LH * ANG(rad(-sw), 0, 0)
+				m.RS.C0 = b.RS * ANG(rad(-sw * 0.7), 0, 0)
+				m.LS.C0 = b.LS * ANG(rad(sw * 0.7), 0, 0)
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------
+-- ГАЛЕРЕЯ ПРИЗЫВА: все союзники юнита (или «проклятые люди» руны) в ряд с HP
+------------------------------------------------------------------------
+local function galleryList(kind)
+	local def = Config.Units[state.Id]
+	local list = {}
+	if kind == "Rune" then
+		for i, lv in ipairs(Config.Runes.CursedThreads.Summon.Levels) do
+			list[#list + 1] = { Ally = lv.Ally, HP = lv.HP, Text = string.format("LVL %d • x%d • %d HP • каждые 60 с", i, lv.Count, lv.HP) }
+		end
+	elseif def.Summon then
+		for i, lv in ipairs(def.Summon.Levels) do
+			list[#list + 1] = { Ally = lv.Ally, HP = lv.HP, Text = string.format("%s • x%d • %d HP • %d с", i == 5 and "MAX" or ("LVL " .. i), lv.Count, lv.HP, lv.Interval) }
+		end
+		if def.Summon.Golden then
+			local g = def.Summon.Golden
+			list[#list + 1] = { Ally = g.Ally, HP = g.HP, Text = string.format("MAX • каждый %d-й призыв • %d HP", g.Every, g.HP) }
+		end
+	end
+	return list
+end
+
+local function clearGallery()
+	if state and state.Gallery then
+		for _, g in ipairs(state.Gallery) do
+			g.Rig.Model:Destroy()
+		end
+		state.Gallery = nil
+	end
+	if refs.GalleryInfo then
+		refs.GalleryInfo.Visible = false
+	end
+end
+
+showGallery = function(kind)
+	if not UnitModels.BuildAlly then
+		return
+	end
+	if state.Gallery then
+		clearGallery()
+		buildModel(true)
+		refs.GalleryButton.Text = state.GalleryLabel
+		return
+	end
+	clearScene()
+	local list = galleryList(kind)
+	state.Gallery = {}
+	local n = #list
+	local lines = {}
+	for i, it in ipairs(list) do
+		local ok, rig = pcall(UnitModels.BuildAlly, it.Ally)
+		if ok and rig then
+			for _, d in ipairs(rig.Model:GetDescendants()) do
+				if d:IsA("ParticleEmitter") or d:IsA("PointLight") or d:IsA("Trail") then
+					d:Destroy()
+				end
+			end
+			local x = (i - (n + 1) / 2) * 3.4
+			rig.Root.CFrame = CF(x, rig.HipHeight, math.abs(x) * 0.25) * ANG(0, math.pi, 0)
+			rig.Model.Parent = refs.World
+			state.Gallery[#state.Gallery + 1] = { Rig = rig }
+		end
+		lines[#lines + 1] = string.format("%d. %s — %s", i, Config.Allies[it.Ally].Name, it.Text)
+	end
+	local glow = GLOW[Config.Units[state.Id].Rarity] or THEME.Accent
+	buildPlatform(0, n * 1.9 + 2, glow)
+	state.Center = V(0, 2.4, 0)
+	state.BaseDist = n * 3.6 + 8
+	state.Zoom = 1
+	state.Dist = state.BaseDist
+	state.Yaw, state.Pitch = math.rad(180), math.rad(10)
+	updateCamera()
+	refs.GalleryInfo.Text = (kind == "Rune" and "ПРОКЛЯТЫЕ НИТИ — проклятые люди:\n" or "ПРИЗЫВ — союзники идут по дороге навстречу врагам, HP = запас урона:\n") .. table.concat(lines, "\n")
+	refs.GalleryInfo.Visible = true
+	refs.GalleryButton.Text = "← К ЮНИТУ"
 end
 
 ------------------------------------------------------------------------
@@ -3715,8 +5421,21 @@ local function previewStorm(on)
 	end
 end
 
+local POWER_FX = {
+	LanternBeam = Color3.fromRGB(255, 230, 150), DirtBurst = Color3.fromRGB(140, 110, 80), LeafStorm = Color3.fromRGB(230, 140, 40),
+	CurseMark = Color3.fromRGB(120, 255, 110), MidnightToll = Color3.fromRGB(190, 160, 255), PlagueCloud = Color3.fromRGB(140, 230, 80),
+	GhostSword = Color3.fromRGB(110, 190, 255), MirrorShatter = Color3.fromRGB(180, 90, 255), ThreadSnap = Color3.fromRGB(230, 30, 50),
+	Execution = Color3.fromRGB(255, 110, 30), GhostPumpkin = Color3.fromRGB(255, 140, 40), Summon = Color3.fromRGB(200, 90, 255),
+}
+
 previewFx = function(kind)
 	local s = state.Rig.Scale or 1
+	if POWER_FX[kind] then
+		local col = POWER_FX[kind]
+		previewRing(0.08, 1, 7 * s, col, 0.8, 0.5)
+		previewRing(0.12, 0.5, 4.5 * s, col:Lerp(Color3.new(1, 1, 1), 0.3), 0.6, 0.6)
+		return
+	end
 	if kind == "TimeBreak" then
 		previewRing(0.05, 1, 6 * s, GOLD, 0.9, 0.5)
 		previewRing(0.1, 0.5, 4 * s, ORANGE, 0.6, 0.55)
@@ -3759,9 +5478,17 @@ function UnitViewer.Open(unitId, level)
 	refs.Dim.Visible = true
 	refs.Scale.Scale = 0.88
 	K.tween(refs.Scale, 0.22, { Scale = 1 }, Enum.EasingStyle.Back)
+	clearGallery()
 	buildModel(false)
 	refreshInfo()
 	applyRarityFx(true)
+	-- «Посмотреть призыв» у Кукловода и Иллюзиониста, «Проклятые люди» у юнитов с руной «Проклятые нити»
+	local def = Config.Units[unitId]
+	local hasThreads = prof.RuneSlots and prof.RuneSlots[unitId] == "CursedThreads"
+	state.GalleryKind = def.Summon and "Summon" or (hasThreads and "Rune" or nil)
+	state.GalleryLabel = def.Summon and "ПОСМОТРЕТЬ ПРИЗЫВ" or "ПРОКЛЯТЫЕ ЛЮДИ"
+	refs.GalleryButton.Visible = state.GalleryKind ~= nil
+	refs.GalleryButton.Text = state.GalleryLabel
 	for _, c in ipairs(refs.AbilityRow:GetChildren()) do
 		if c:IsA("GuiButton") then
 			c:Destroy()
@@ -3789,6 +5516,10 @@ function UnitViewer.SetLevel(lv)
 		return
 	end
 	state.Level = math.clamp(lv, 1, 5)
+	if state.Gallery then
+		clearGallery()
+		refs.GalleryButton.Text = state.GalleryLabel
+	end
 	buildModel(true)
 	refreshInfo()
 	if FX then
@@ -3797,6 +5528,11 @@ function UnitViewer.SetLevel(lv)
 end
 
 function UnitViewer.PlayAnim(kind)
+	if state and state.Gallery then
+		clearGallery()
+		buildModel(true)
+		refs.GalleryButton.Text = state.GalleryLabel
+	end
 	if not state or not state.Rig then
 		return
 	end
@@ -3834,7 +5570,12 @@ function UnitViewer.Close()
 		c:Disconnect()
 	end
 	conns = {}
+	clearGallery()
 	clearScene()
+	for _, p in ipairs(refs.EventSparks) do
+		p:Destroy()
+	end
+	refs.EventSparks = {}
 	spawnParticles(THEME.Accent, 0)
 	refs.Intro.Visible = false
 	state = nil
@@ -3854,6 +5595,496 @@ end
 
 return UnitViewer
 ]======] }
+FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "HalloweenUI" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenUI (клиент)
+-- Интерфейс события: открытие проклятого сундука, руны (3D-иконки, выбор, надеть/снять),
+-- панель очереди на 4 квадратах, бестиарий врагов и боссов.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local HalloweenUI = {}
+
+local ctx, UI, Config, UnitModels, EnemyModels, CaseModels, FX
+local K -- конструкторы UI (UI.Kit)
+local player = Players.LocalPlayer
+local refs = {}
+
+local ORANGE = Color3.fromRGB(255, 130, 30)
+local GOLD = Color3.fromRGB(255, 205, 80)
+local DARK = Color3.fromRGB(26, 12, 16)
+
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+------------------------------------------------------------------------
+-- 3D-ИКОНКА РУНЫ
+------------------------------------------------------------------------
+function HalloweenUI.RuneViewport(parent, runeId, props)
+	props = props or {}
+	local vf = K.new("ViewportFrame", {
+		Parent = parent,
+		BackgroundTransparency = 1,
+		Size = props.Size or UDim2.fromScale(1, 1),
+		Position = props.Position or UDim2.new(),
+		AnchorPoint = props.AnchorPoint or Vector2.new(),
+		Ambient = rgb(170, 140, 130),
+		LightColor = rgb(255, 240, 220),
+		LightDirection = Vector3.new(-0.5, -1, -0.7),
+		ZIndex = props.ZIndex or 1,
+	})
+	if not UnitModels.BuildRune then
+		return vf
+	end
+	local ok, r = pcall(UnitModels.BuildRune, runeId)
+	if not ok or not r then
+		return vf
+	end
+	r.Model.Parent = vf
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = 30
+	cam.CFrame = CFrame.lookAt(Vector3.new(2.2, 1.4, -6.5), Vector3.new(0, 0, 0))
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	vf:SetAttribute("Spin", true)
+	refs.RuneSpins = refs.RuneSpins or {}
+	table.insert(refs.RuneSpins, { Model = r.Model, VF = vf })
+	return vf, r
+end
+
+-- карточка руны в итогах открытия
+function HalloweenUI.RuneCard(grid, r, i)
+	local rd = Config.Runes[r.Rune]
+	local col = Config.RuneRarity.Color
+	local card = K.panel({ Parent = grid, BackgroundColor3 = UI.Theme.BG2, StrokeColor = col, LayoutOrder = i, ZIndex = 23 })
+	K.new("UIGradient", { Parent = card, Rotation = 90, Color = ColorSequence.new(col:Lerp(UI.Theme.BG, 0.55), UI.Theme.BG) })
+	HalloweenUI.RuneViewport(card, r.Rune, { Size = UDim2.new(1, 0, 0, 120), Position = UDim2.fromOffset(0, 8), ZIndex = 24 })
+	K.label({ Parent = card, Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 130), Text = rd.Name, ZIndex = 24 })
+	K.label({ Parent = card, Size = UDim2.new(1, -8, 0, 18), Position = UDim2.fromOffset(4, 154), Text = "РУНА • " .. Config.RuneRarity.Name, TextColor3 = col, ZIndex = 24 })
+	local sc = K.new("UIScale", { Parent = card, Scale = 0 })
+	K.tween(sc, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
+end
+
+------------------------------------------------------------------------
+-- ОТКРЫТИЕ ПРОКЛЯТОГО СУНДУКА
+------------------------------------------------------------------------
+-- Камера приближается, сундук трясётся, глаза и огонь разгораются, цепи рвутся, крышка открывается,
+-- из сундука поднимается награда (3D-модель юнита или 3D-руна), затем имя и редкость. SECRET — отдельная сцена.
+function HalloweenUI.PlayOpening(results, showCards)
+	local r0 = results[1]
+	local isRune = r0.Rune ~= nil
+	local def = r0.Id and Config.Units[r0.Id]
+	local rarity = def and def.Rarity or "Rune"
+	local color = isRune and Config.RuneRarity.Color or Config.Rarities[rarity].Color
+	local secret = rarity == "Secret"
+	local gui = UI.Root
+	local overlay = K.new("Frame", { Parent = gui, Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(8, 2, 4), BackgroundTransparency = 0.1, ZIndex = 20 })
+	local vf = K.new("ViewportFrame", { Parent = overlay, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(620, 620), Position = UDim2.fromScale(0.5, 0.52), Ambient = rgb(120, 80, 70), LightColor = rgb(255, 210, 160), LightDirection = Vector3.new(-0.4, -1, -0.8), ZIndex = 21 })
+	local chest = CaseModels.Build("Halloween")
+	chest.Model.Parent = vf
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = 40
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	local title = K.label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(700, 56), Position = UDim2.new(0.5, 0, 0.05, 0), Text = "HALLOWEEN CASE", TextColor3 = ORANGE, ZIndex = 22, StrokeThickness = 3 })
+	local glow = K.new("Frame", { Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.55), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = ORANGE, BackgroundTransparency = 1, ZIndex = 20 })
+	K.corner(300).Parent = glow
+
+	local base = chest.Base
+	local lid = {}
+	for _, p in ipairs(chest.LidParts or { chest.Lid }) do
+		lid[p] = true
+	end
+	local chains = {}
+	for _, p in ipairs(chest.Chains or {}) do
+		chains[p] = Vector3.new(math.random() - 0.5, math.random() * 0.8 + 0.2, math.random() - 0.5).Unit
+	end
+	local hinge = chest.Hinge or CFrame.new(0, 2.7, 1.4)
+	local eyes = chest.Eyes or {}
+	local eyeColor = {}
+	for _, e in ipairs(eyes) do
+		eyeColor[e] = e.Color
+	end
+
+	local SHAKE, BREAK, OPEN, RISE = 1.6, 0.5, 0.7, 0.9
+	local start = os.clock()
+	local nextTick = 0
+	local reward, rewardBase
+	local done = false
+	local conn
+	FX.Sound("CaseShake", 1, 0.6)
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - start
+		-- камера плавно приближается
+		local k = math.clamp(t / (SHAKE + BREAK), 0, 1)
+		local dist = 15 - k * 4.5
+		cam.CFrame = CFrame.lookAt(Vector3.new(0, 4.5 - k * 0.6, -dist), Vector3.new(0, 2.4, 0))
+		if t < SHAKE then
+			local a = t / SHAKE
+			local shake = CFrame.new((math.random() - 0.5) * a * 0.35, 0, (math.random() - 0.5) * a * 0.35) * CFrame.Angles(0, 0, (math.random() - 0.5) * a * 0.12)
+			for p, b in pairs(base) do
+				p.CFrame = shake * b
+			end
+			for _, e in ipairs(eyes) do
+				e.Color = eyeColor[e]:Lerp(rgb(255, 240, 180), a)
+			end
+			glow.Size = UDim2.fromOffset(60 + a * 300, 60 + a * 300)
+			glow.BackgroundTransparency = 1 - a * 0.25
+			if t >= nextTick then
+				nextTick = t + 0.42 - a * 0.28
+				FX.Sound("CaseShake", 1, 0.6 + a * 0.6)
+			end
+		elseif t < SHAKE + BREAK then
+			-- цепи рвутся и разлетаются
+			local a = (t - SHAKE) / BREAK
+			if not chest.Broke then
+				chest.Broke = true
+				FX.Sound("CaseOpen", 1, 0.7)
+				local flash = K.new("Frame", { Parent = overlay, Size = UDim2.fromScale(1, 1), BackgroundColor3 = ORANGE, BackgroundTransparency = 0.3, ZIndex = 30 })
+				K.tween(flash, 0.5, { BackgroundTransparency = 1 })
+				task.delay(0.55, function()
+					flash:Destroy()
+				end)
+			end
+			for p, b in pairs(base) do
+				if chains[p] then
+					local d = chains[p]
+					p.CFrame = CFrame.new(d * a * 9 + Vector3.new(0, -a * a * 3, 0)) * b * CFrame.Angles(a * 5 * d.X, a * 4, a * 5 * d.Z)
+					p.Transparency = math.min(1, a * 1.2)
+				elseif not lid[p] then
+					p.CFrame = b
+				end
+			end
+		elseif t < SHAKE + BREAK + OPEN then
+			-- крышка открывается на петле
+			local a = (t - SHAKE - BREAK) / OPEN
+			local ang = math.rad(110) * (1 - (1 - a) ^ 3)
+			for p in pairs(lid) do
+				if base[p] then
+					p.CFrame = hinge * CFrame.Angles(ang, 0, 0) * hinge:Inverse() * base[p]
+				end
+			end
+			glow.BackgroundColor3 = color
+			glow.Size = UDim2.fromOffset(360 + a * 200, 360 + a * 200)
+		elseif t < SHAKE + BREAK + OPEN + RISE then
+			-- награда поднимается из сундука
+			local a = (t - SHAKE - BREAK - OPEN) / RISE
+			if not reward then
+				FX.Sound("Reveal", 1, isRune and 1.2 or 0.7 + (Config.Rarities[rarity] and Config.Rarities[rarity].Order or 3) * 0.12)
+				if isRune and UnitModels.BuildRune then
+					local ok, rr = pcall(UnitModels.BuildRune, r0.Rune)
+					if ok and rr then
+						reward = rr.Model
+						reward:ScaleTo(1.2)
+					end
+				elseif def then
+					local ok, rig = pcall(UnitModels.Build, r0.Id, 1)
+					if ok and rig then
+						reward = rig.Model
+						for _, d in ipairs(reward:GetDescendants()) do
+							if d:IsA("ParticleEmitter") or d:IsA("Trail") then
+								d:Destroy()
+							end
+						end
+						rewardBase = rig.HipHeight
+					end
+				end
+				if reward then
+					reward.Parent = vf
+				end
+			end
+			if reward then
+				local y = 1.5 + a * (isRune and 3.8 or 2.2) + (rewardBase or 0) * a
+				reward:PivotTo(CFrame.new(0, y, -0.6) * CFrame.Angles(0, math.pi + a * math.pi * 2, 0))
+			end
+		elseif not done then
+			done = true
+			conn:Disconnect()
+			local function finish()
+				title.Text = isRune and ("РУНА «" .. Config.Runes[r0.Rune].Name .. "»") or def.Name
+				title.TextColor3 = color
+				K.label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(600, 34), Position = UDim2.new(0.5, 0, 0.05, 60), Text = isRune and ("РУНА • " .. Config.RuneRarity.Name) or (rarity:upper() .. "  •  " .. Config.Events.Halloween.Tag), TextColor3 = isRune and color or ORANGE, ZIndex = 22 })
+				if r0.New then
+					local tag = K.label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(160, 34), Position = UDim2.new(0.5, 220, 0.05, 0), Text = "NEW!", TextColor3 = GOLD, ZIndex = 23 })
+					tag.Rotation = -12
+				end
+				K.button({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(200, 54), Position = UDim2.new(0.5, 0, 0.95, 0), Text = "OK", BackgroundColor3 = rgb(110, 50, 20), StrokeColor = ORANGE, ZIndex = 25 }, function()
+					overlay:Destroy()
+				end)
+				-- награда продолжает медленно вращаться
+				local t0 = os.clock()
+				local spin
+				spin = RunService.RenderStepped:Connect(function()
+					if not overlay.Parent then
+						spin:Disconnect()
+						return
+					end
+					if reward and reward.Parent then
+						local y = 1.5 + (isRune and 3.8 or 2.2) + (rewardBase or 0) + math.sin((os.clock() - t0) * 2) * 0.15
+						reward:PivotTo(CFrame.new(0, y, -0.6) * CFrame.Angles(0, math.pi + (os.clock() - t0) * 0.8, 0))
+					end
+				end)
+			end
+			if secret then
+				-- SECRET: чёрный экран, оранжево-красные вспышки, тряска, затем награда
+				FX.Sound("Secret", 1, 0.9)
+				FX.Shake(0.8, 1.4)
+				local black = K.new("Frame", { Parent = overlay, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), ZIndex = 40 })
+				local big = K.label({ Parent = black, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(900, 160), Position = UDim2.fromScale(0.5, 0.45), Text = "SECRET!!", TextColor3 = ORANGE, ZIndex = 41, StrokeThickness = 4 })
+				K.label({ Parent = black, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(700, 50), Position = UDim2.fromScale(0.5, 0.6), Text = def.Name, TextColor3 = Color3.fromRGB(255, 60, 60), ZIndex = 41 })
+				for i = 1, 10 do
+					task.delay(i * 0.12, function()
+						black.BackgroundColor3 = (i % 2 == 0) and rgb(140, 40, 0) or Color3.new(0, 0, 0)
+						big.Rotation = (math.random() - 0.5) * 10
+					end)
+				end
+				task.delay(1.6, function()
+					K.tween(black, 0.5, { BackgroundTransparency = 1 })
+					for _, d in ipairs(black:GetDescendants()) do
+						if d:IsA("TextLabel") then
+							K.tween(d, 0.4, { TextTransparency = 1 })
+						end
+					end
+					task.delay(0.55, function()
+						black:Destroy()
+					end)
+					finish()
+				end)
+			else
+				finish()
+			end
+		end
+	end)
+	local _ = showCards
+end
+
+------------------------------------------------------------------------
+-- РУНЫ: выбор для юнита
+------------------------------------------------------------------------
+local pickerUnit
+
+local function buildRunePicker()
+	local m = K.modal("Runes", "РУНЫ", UDim2.fromOffset(720, 420), "Rune")
+	refs.RuneFor = K.label({ Parent = m, Size = UDim2.new(1, -36, 0, 24), Position = UDim2.fromOffset(18, 58), Text = "", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 6 })
+	refs.RuneRow = K.new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 270), Position = UDim2.fromOffset(18, 88), ZIndex = 6 }, {
+		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+	})
+	refs.RuneRemove = K.button({ Parent = m, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(260, 44), Position = UDim2.new(0.5, 0, 1, -12), Text = "СНЯТЬ РУНУ", BackgroundColor3 = rgb(110, 40, 50), ZIndex = 6 }, function()
+		if pickerUnit then
+			ctx.Request("EquipRune", { Unit = pickerUnit })
+		end
+	end)
+end
+
+local function refreshPicker()
+	local prof = ctx.Profile
+	if not pickerUnit or not prof or not refs.RuneRow then
+		return
+	end
+	local def = Config.Units[pickerUnit]
+	local current = prof.RuneSlots and prof.RuneSlots[pickerUnit]
+	refs.RuneFor.Text = "Юнит: " .. def.Name .. "  •  1 руна на юнита. Руна работает, только когда надета."
+	refs.RuneRemove.Visible = current ~= nil
+	for _, c in ipairs(refs.RuneRow:GetChildren()) do
+		if c:IsA("GuiObject") then
+			c:Destroy()
+		end
+	end
+	for i, runeId in ipairs(Config.RuneOrder) do
+		local rd = Config.Runes[runeId]
+		local have = prof.Runes and prof.Runes[runeId] or 0
+		local used = 0
+		for _, r in pairs(prof.RuneSlots or {}) do
+			if r == runeId then
+				used = used + 1
+			end
+		end
+		local on = current == runeId
+		local card = K.panel({ Parent = refs.RuneRow, Size = UDim2.fromOffset(210, 266), BackgroundColor3 = UI.Theme.BG2, StrokeColor = on and GOLD or (have > 0 and rd.Color or rgb(60, 50, 60)), LayoutOrder = i, ZIndex = 7 })
+		HalloweenUI.RuneViewport(card, runeId, { Size = UDim2.new(1, 0, 0, 96), ZIndex = 8 })
+		K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 22), Position = UDim2.fromOffset(6, 96), Text = rd.Name, TextColor3 = rd.Color, ZIndex = 8 })
+		K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 16), Position = UDim2.fromOffset(6, 118), Text = string.format("есть: %d  •  надето: %d", have, used), TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 8 })
+		K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 76), Position = UDim2.fromOffset(6, 136), Text = rd.Description, TextScaled = false, TextSize = 12, TextWrapped = true, Font = Enum.Font.Gotham, TextColor3 = UI.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 8 })
+		local free = have - used + (on and 1 or 0)
+		K.button({ Parent = card, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1, -16, 0, 38), Position = UDim2.new(0.5, 0, 1, -8), Text = on and "НАДЕТА" or (have == 0 and "НЕТ РУНЫ" or (free > 0 and "НАДЕТЬ" or "ЗАНЯТА")), BackgroundColor3 = on and rgb(90, 70, 20) or (free > 0 and rgb(60, 110, 60) or rgb(60, 50, 60)), ZIndex = 8 }, function()
+			if on or have == 0 then
+				return
+			end
+			ctx.Request("EquipRune", { Unit = pickerUnit, Rune = runeId })
+		end)
+	end
+end
+
+function HalloweenUI.OpenRunePicker(unitId)
+	pickerUnit = unitId
+	UI.Show("Runes", true)
+	refreshPicker()
+end
+
+function HalloweenUI.OnProfile(prof)
+	if UI.Modals.Runes and UI.Modals.Runes.Visible then
+		refreshPicker()
+	end
+end
+
+------------------------------------------------------------------------
+-- ОЧЕРЕДЬ НА 4 КВАДРАТАХ
+------------------------------------------------------------------------
+local function buildQueue()
+	local p = K.panel({ Parent = UI.Root, AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(330, 330), Position = UDim2.new(1, -110, 0.5, 0), StrokeColor = ORANGE, Visible = false, ZIndex = 4 })
+	refs.Queue = p
+	K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 8), Text = "🎃 HALLOWEEN TD", TextColor3 = ORANGE, ZIndex = 5 })
+	refs.QMembers = K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 92), Position = UDim2.fromOffset(10, 44), Text = "", TextScaled = false, TextSize = 17, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 5 })
+	refs.QHost = K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 18), Position = UDim2.fromOffset(10, 140), Text = "", TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 5 })
+	local row = K.new("Frame", { Parent = p, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 44), Position = UDim2.fromOffset(10, 164), ZIndex = 5 }, {
+		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }),
+	})
+	refs.QDiff = {}
+	for i, key in ipairs(Config.Halloween.Difficulties) do
+		local d = Config.Difficulties[key]
+		refs.QDiff[key] = K.button({ Parent = row, Size = UDim2.fromOffset(98, 44), Text = d.Name .. "\n" .. Config.Halloween.Coins[key] .. "🎃", TextColor3 = d.Color, BackgroundColor3 = UI.Theme.BG2, StrokeColor = d.Color, LayoutOrder = i, ZIndex = 6 }, function()
+			ctx.Request("QueueDifficulty", { Difficulty = key })
+		end)
+	end
+	refs.QTimer = K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 30), Position = UDim2.fromOffset(10, 214), Text = "", TextColor3 = GOLD, ZIndex = 5 })
+	refs.QStart = K.button({ Parent = p, Size = UDim2.new(0.5, -14, 0, 44), Position = UDim2.new(0, 10, 1, -54), Text = "СТАРТ", BackgroundColor3 = rgb(140, 70, 20), StrokeColor = ORANGE, ZIndex = 6 }, function()
+		ctx.Request("QueueStart")
+	end)
+	K.button({ Parent = p, Size = UDim2.new(0.5, -14, 0, 44), Position = UDim2.new(0.5, 4, 1, -54), Text = "ВЫЙТИ", BackgroundColor3 = rgb(110, 30, 40), StrokeColor = UI.Theme.Bad, ZIndex = 6 }, function()
+		ctx.Request("QueueLeave")
+	end)
+end
+
+function HalloweenUI.UpdateQueue()
+	local st = ctx.State
+	local names = st:GetAttribute("HQ_Members") or ""
+	local inQueue = false
+	local list = {}
+	for n in string.gmatch(names, "[^\n]+") do
+		list[#list + 1] = n
+		if n == player.DisplayName then
+			inQueue = true
+		end
+	end
+	local p = refs.Queue
+	if not p then
+		return
+	end
+	p.Visible = inQueue and not player:GetAttribute("InMatch")
+	if not p.Visible then
+		return
+	end
+	local isHost = (st:GetAttribute("HQ_Host") or 0) == player.UserId
+	local lines = {}
+	for i = 1, Config.HalloweenIsland.Queue.MaxPlayers do
+		lines[i] = (i == 1 and "👑 " or "• ") .. (list[i] or "свободно")
+	end
+	refs.QMembers.Text = table.concat(lines, "\n")
+	refs.QHost.Text = isHost and "Ты хост: выбери сложность" or "Сложность выбирает хост"
+	local diff = st:GetAttribute("HQ_Diff") or "Easy"
+	for key, b in pairs(refs.QDiff) do
+		b.BackgroundColor3 = key == diff and Config.Difficulties[key].Color:Lerp(Color3.new(0, 0, 0), 0.4) or UI.Theme.BG2
+		b.Active = isHost
+		b.AutoButtonColor = false
+	end
+	refs.QStart.Visible = isHost
+	local at = st:GetAttribute("HQ_At") or 0
+	if st:GetAttribute("HQ_Busy") then
+		refs.QTimer.Text = "Арена занята — ждём конца матча"
+	elseif at > 0 then
+		refs.QTimer.Text = "Телепорт через " .. math.max(0, math.ceil(at - workspace:GetServerTimeNow())) .. " c"
+	else
+		refs.QTimer.Text = ""
+	end
+end
+
+------------------------------------------------------------------------
+-- БЕСТИАРИЙ
+------------------------------------------------------------------------
+local function enemyViewport(parent, id, props)
+	local vf = K.new("ViewportFrame", { Parent = parent, BackgroundTransparency = 1, Size = props.Size, Position = props.Position or UDim2.new(), Ambient = rgb(150, 130, 160), LightColor = rgb(255, 240, 230), LightDirection = Vector3.new(-0.5, -1, -0.8), ZIndex = props.ZIndex or 1 })
+	local ok, rig = pcall(EnemyModels.Build, id)
+	if not ok then
+		return vf
+	end
+	for _, d in ipairs(rig.Model:GetDescendants()) do
+		if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("PointLight") then
+			d:Destroy()
+		end
+	end
+	rig.Model.Parent = vf
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = 34
+	local h = rig.Height or 5
+	local c = Vector3.new(0, h * 0.5 - rig.HipHeight, 0)
+	cam.CFrame = CFrame.lookAt(c + Vector3.new(h * 0.45, h * 0.25, -h * 1.7), c)
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	return vf
+end
+
+local function buildBestiary()
+	local m = K.modal("Bestiary", "БЕСТИАРИЙ • HAUNTED HOLLOW", UDim2.fromOffset(940, 580), "Pumpkin")
+	local grid = K.new("ScrollingFrame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 1, -80), Position = UDim2.fromOffset(18, 66), CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 6, BorderSizePixel = 0, ZIndex = 6 }, {
+		K.new("UIGridLayout", { CellSize = UDim2.fromOffset(212, 236), CellPadding = UDim2.fromOffset(10, 10), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	refs.BestiaryGrid = grid
+	refs.BestiaryBuilt = false
+end
+
+local BOSS_OF = { GraveWarden = "Easy", FogReaper = "Medium", CursedMonarch = "Hard" }
+local function fillBestiary()
+	if refs.BestiaryBuilt then
+		return
+	end
+	refs.BestiaryBuilt = true
+	for order, id in ipairs(Config.EnemyOrder) do
+		local e = Config.Enemies[id]
+		if e.Event == "Halloween" then
+			local diff = BOSS_OF[id] and Config.Difficulties[BOSS_OF[id]]
+			local col = diff and diff.Color or (e.MiniBoss and rgb(200, 90, 255) or ORANGE)
+			local card = K.panel({ Parent = refs.BestiaryGrid, BackgroundColor3 = UI.Theme.BG2, StrokeColor = col, LayoutOrder = order, ZIndex = 7 })
+			enemyViewport(card, id, { Size = UDim2.new(1, 0, 0, 110), ZIndex = 8 })
+			K.label({ Parent = card, Size = UDim2.new(1, -10, 0, 22), Position = UDim2.fromOffset(5, 110), Text = e.Name, TextColor3 = col, ZIndex = 8 })
+			local tag = diff and ("ФИНАЛЬНЫЙ БОСС • " .. diff.Name) or (e.MiniBoss and "МИНИ-БОСС" or "ВРАГ")
+			K.label({ Parent = card, Size = UDim2.new(1, -10, 0, 14), Position = UDim2.fromOffset(5, 132), Text = string.format("%s  •  HP %d  •  скор. %g", tag, e.Health, e.Speed), TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 8 })
+			K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 80), Position = UDim2.fromOffset(6, 150), Text = e.Description or "", TextScaled = false, TextSize = 12, TextWrapped = true, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 8 })
+		end
+	end
+end
+
+HalloweenUI.FillBestiary = fillBestiary
+
+------------------------------------------------------------------------
+function HalloweenUI.Init(c, ui)
+	ctx, UI = c, ui
+	Config, UnitModels, EnemyModels, CaseModels, FX = c.Config, c.UnitModels, c.EnemyModels, c.CaseModels, c.FX
+	K = UI.Kit
+	buildRunePicker()
+	buildQueue()
+	buildBestiary()
+	-- 3D-руны медленно вращаются
+	RunService.RenderStepped:Connect(function()
+		local list = refs.RuneSpins
+		if not list then
+			return
+		end
+		local t = os.clock()
+		for i = #list, 1, -1 do
+			local it = list[i]
+			if not it.VF.Parent then
+				table.remove(list, i)
+			elseif it.VF.Visible then
+				it.Model:PivotTo(CFrame.new(0, math.sin(t * 1.6) * 0.08, 0) * CFrame.Angles(0, t * 0.9, 0))
+			end
+		end
+	end)
+end
+
+return HalloweenUI
+]======] }
 FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "UI" }, "ModuleScript", [======[
 --!nocheck
 -- VOID TD :: UI (клиент)
@@ -3868,6 +6099,7 @@ local UI = {}
 local ctx, Config, UnitModels, Renderer, FX
 local player = Players.LocalPlayer
 local UnitViewer = require(script.Parent:WaitForChild("UnitViewer"))
+local HalloweenUI = require(script.Parent:WaitForChild("HalloweenUI"))
 
 local THEME = {
 	BG = Color3.fromRGB(16, 10, 26),
@@ -4065,6 +6297,30 @@ function ICONS.Back(c, z)
 	shape(c, 0.34, 0.63, 0.32, 0.12, col, 42, 0.5, z)
 end
 
+-- тыква: дольки, хвостик, вырезанное лицо
+function ICONS.Pumpkin(c, z)
+	for i, x in ipairs({ 0.3, 0.7, 0.5 }) do
+		local o = shape(c, x, 0.58, i == 3 and 0.42 or 0.38, 0.6, Color3.new(1, 1, 1), 0, 0.45, z + (i == 3 and 1 or 0))
+		shade(o, Color3.fromRGB(255, 165, 60), Color3.fromRGB(190, 80, 20))
+		new("UIStroke", { Parent = o, Color = Color3.fromRGB(70, 25, 5), Thickness = 1.5 })
+	end
+	shape(c, 0.52, 0.22, 0.1, 0.18, Color3.fromRGB(80, 110, 40), 14, 0.3, z + 2)
+	for _, x in ipairs({ 0.38, 0.62 }) do
+		shape(c, x, 0.52, 0.12, 0.12, Color3.fromRGB(255, 230, 120), 45, 0.1, z + 3)
+	end
+	shape(c, 0.5, 0.7, 0.34, 0.08, Color3.fromRGB(255, 230, 120), 0, 0.4, z + 3)
+end
+
+-- руна: камень-ромб с символом
+function ICONS.Rune(c, z)
+	local o = shape(c, 0.5, 0.5, 0.62, 0.62, Color3.new(1, 1, 1), 45, 0.15, z)
+	shade(o, Color3.fromRGB(255, 160, 60), Color3.fromRGB(120, 30, 40), 45)
+	new("UIStroke", { Parent = o, Color = Color3.fromRGB(40, 10, 10), Thickness = 2 })
+	shape(c, 0.5, 0.5, 0.08, 0.42, Color3.fromRGB(255, 240, 200), 0, 0.5, z + 1)
+	shape(c, 0.5, 0.4, 0.3, 0.07, Color3.fromRGB(255, 240, 200), 30, 0.5, z + 1)
+	shape(c, 0.5, 0.6, 0.3, 0.07, Color3.fromRGB(255, 240, 200), -30, 0.5, z + 1)
+end
+
 -- контейнер с иконкой (квадратный)
 local function icon(kind, parent, props)
 	local c = new("Frame", { Parent = parent, Name = "Icon" .. kind, BackgroundTransparency = 1, Size = props.Size, Position = props.Position or UDim2.new(), AnchorPoint = props.AnchorPoint or Vector2.new(), ZIndex = props.ZIndex or 1 })
@@ -4117,6 +6373,30 @@ end
 local function rarityColor(id)
 	return Config.Rarities[Config.Units[id].Rarity].Color
 end
+
+-- лёгкие оранжевые искры на карточках хэллоуинских юнитов (двигаются в UI.Update)
+local sparks = {}
+local function eventSparks(parent, z, n)
+	for i = 1, n or 4 do
+		local f = new("Frame", { Parent = parent, BackgroundColor3 = Color3.fromRGB(255, 160, 60), BorderSizePixel = 0, Size = UDim2.fromOffset(3, 3), Rotation = 45, ZIndex = z, BackgroundTransparency = 0.2 })
+		sparks[#sparks + 1] = { F = f, X = math.random(), P = math.random() * 3, S = 0.25 + math.random() * 0.25 }
+	end
+end
+
+-- Тег события: значок-тыква в углу, «🎃 HALLOWEEN» и искры. Рамка остаётся цветом редкости.
+local function eventTag(parent, unitId, z, textPos, textSize)
+	local def = Config.Units[unitId]
+	local ev = def and def.Event and Config.Events[def.Event]
+	if not ev then
+		return
+	end
+	icon("Pumpkin", parent, { Size = UDim2.fromOffset(22, 22), Position = UDim2.fromOffset(4, 4), ZIndex = z + 2 })
+	if textPos then
+		label({ Parent = parent, Size = textSize or UDim2.new(1, -8, 0, 13), Position = textPos, Text = ev.Tag, TextColor3 = ev.Color, Font = Enum.Font.GothamBold, ZIndex = z + 1 })
+	end
+	eventSparks(parent, z + 1, 4)
+end
+UI.EventTag = eventTag
 
 -- 3D превью юнита
 local function viewport(parent, unitId, level, props)
@@ -4216,6 +6496,8 @@ local function buildHUD()
 	refs.MoneyIcon = icon("Coin", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 7) })
 	refs.Gems = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 32), Position = UDim2.fromOffset(52, 50), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(150, 200, 255) })
 	refs.GemsIcon = icon("Gem", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 49) })
+	refs.Coins = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 30), Position = UDim2.fromOffset(52, 92), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(255, 160, 60) })
+	refs.CoinsIcon = icon("Pumpkin", cur, { Size = UDim2.fromOffset(32, 32), Position = UDim2.fromOffset(11, 91) })
 
 	-- волна и ядро
 	local top = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 104), Position = UDim2.new(0.5, 0, 0, 12) })
@@ -4560,6 +6842,8 @@ function UI.Toggle(name)
 					UI.RefreshInventory()
 				elseif name == "Mode" then
 					UI.RefreshMode()
+				elseif name == "Bestiary" then
+					HalloweenUI.FillBestiary()
 				end
 			end
 		else
@@ -4661,6 +6945,21 @@ end
 
 local function rateText(case)
 	local lines = {}
+	if case.Rewards then
+		-- полный список наград с шансами (юниты и руны)
+		for _, r in ipairs(case.Rewards) do
+			local name, color
+			if r.Rune then
+				local rd = Config.Runes[r.Rune]
+				name, color = "Руна «" .. rd.Name .. "»", Config.RuneRarity.Color
+			else
+				local def = Config.Units[r.Unit]
+				name, color = def.Name .. " (" .. def.Rarity .. ")", Config.Rarities[def.Rarity].Color
+			end
+			lines[#lines + 1] = string.format('<font color="#%s">%s</font>  %s%%', color:ToHex(), name, tostring(r.Rate))
+		end
+		return table.concat(lines, "\n")
+	end
 	for _, rarity in ipairs(Config.RarityOrder) do
 		local rate = case.Rates[rarity]
 		if rate and rate > 0 then
@@ -4680,8 +6979,11 @@ function UI.SelectCase(caseId)
 	refs.CaseName.TextColor3 = case.Color
 	refs.CaseDesc.Text = case.Description
 	refs.CaseRates.Text = rateText(case)
-	refs.CaseBuy1.Text = "x1  💎" .. case.Cost1
-	refs.CaseBuy10.Text = "x10  💎" .. case.Cost10
+	refs.CaseRates.TextSize = case.Rewards and 13 or 18
+	local cur = case.Currency == "HalloweenCoins" and "🎃" or "💎"
+	refs.CaseBuy1.Text = (case.Single and "ОТКРЫТЬ  " or "x1  ") .. cur .. case.Cost1
+	refs.CaseBuy10.Visible = not case.Single and case.Cost10 ~= nil
+	refs.CaseBuy10.Text = "x10  " .. cur .. tostring(case.Cost10 or "")
 	refs.CaseBig:ClearAllChildren()
 	caseViews.Big = caseViewport(refs.CaseBig, caseId)
 	for id, b in pairs(refs.CaseTabs) do
@@ -4699,6 +7001,17 @@ function UI.SelectCase(caseId)
 		viewport(cell, id, 1, { Size = UDim2.new(1, 0, 0, 74), ZIndex = 8 })
 		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 16), Position = UDim2.fromOffset(3, 74), Text = def.Name, Font = Enum.Font.GothamBold, ZIndex = 8 })
 		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.fromOffset(3, 90), Text = def.Rarity, TextColor3 = rc, ZIndex = 8 })
+		eventTag(cell, id, 8)
+	end
+	-- руны в кейсе
+	for i, r in ipairs(case.Rewards or {}) do
+		if r.Rune then
+			local rd = Config.Runes[r.Rune]
+			local cell = panel({ Parent = refs.CaseUnits, Size = UDim2.fromOffset(100, 108), BackgroundColor3 = THEME.BG2, StrokeColor = Config.RuneRarity.Color, LayoutOrder = 1000 + i, ZIndex = 7 })
+			HalloweenUI.RuneViewport(cell, r.Rune, { Size = UDim2.new(1, 0, 0, 74), ZIndex = 8 })
+			label({ Parent = cell, Size = UDim2.new(1, -6, 0, 16), Position = UDim2.fromOffset(3, 74), Text = rd.Name, Font = Enum.Font.GothamBold, ZIndex = 8 })
+			label({ Parent = cell, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.fromOffset(3, 90), Text = "РУНА • HALLOWEEN", TextColor3 = Config.RuneRarity.Color, ZIndex = 8 })
+		end
 	end
 end
 
@@ -4708,6 +7021,10 @@ local function showCards(overlay, results)
 	})
 	for i, r in ipairs(results) do
 		task.delay(0.15 * i, function()
+			if r.Rune then
+				HalloweenUI.RuneCard(grid, r, i)
+				return
+			end
 			local def = Config.Units[r.Id]
 			local rc = rarityColor(r.Id)
 			local card = panel({ Parent = grid, BackgroundColor3 = THEME.BG2, StrokeColor = rc, LayoutOrder = i, ZIndex = 23 })
@@ -4716,6 +7033,7 @@ local function showCards(overlay, results)
 			viewport(card, r.Id, 1, { Size = UDim2.new(1, 0, 0, 120), Position = UDim2.fromOffset(0, 8), ZIndex = 24 })
 			label({ Parent = card, Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 130), Text = def.Name, ZIndex = 24 })
 			label({ Parent = card, Size = UDim2.new(1, -8, 0, 18), Position = UDim2.fromOffset(4, 154), Text = def.Rarity:upper(), TextColor3 = rc, ZIndex = 24 })
+			eventTag(card, r.Id, 24, UDim2.fromOffset(4, 172), UDim2.new(1, -8, 0, 14))
 			if r.New then
 				local tag = label({ Parent = card, Size = UDim2.fromOffset(56, 22), Position = UDim2.fromOffset(6, 6), Text = "NEW!", TextColor3 = THEME.Gold, ZIndex = 25 })
 				tag.Rotation = -12
@@ -4736,7 +7054,9 @@ local function playCaseOpening(caseId, results)
 	local case = Config.Cases[caseId]
 	local best = 1
 	for _, r in ipairs(results) do
-		best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+		if r.Id then
+			best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+		end
 	end
 	local bestName = Config.RarityOrder[best]
 	local bestColor = Config.Rarities[bestName].Color
@@ -4870,7 +7190,12 @@ local function buildCases()
 		local ok, res = ctx.Request("Summon", { Case = selectedCase, Count = count })
 		busy = false
 		if ok then
-			playCaseOpening(selectedCase, res)
+			if selectedCase == "Halloween" then
+				-- проклятый сундук: своя кинематографичная анимация
+				HalloweenUI.PlayOpening(res, showCards)
+			else
+				playCaseOpening(selectedCase, res)
+			end
 		end
 	end
 	refs.CaseBuy1 = button({ Parent = m, AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(200, 50), Position = UDim2.new(1, -238, 1, -12), Text = "x1", BackgroundColor3 = THEME.AccentDark, ZIndex = 6 }, function()
@@ -4964,6 +7289,12 @@ local function buildInventory()
 	refs.InvRarity = label({ Parent = d, Size = UDim2.new(1, -20, 0, 18), Position = UDim2.fromOffset(10, 38), Text = "", TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7 })
 	refs.InvDesc = label({ Parent = d, Size = UDim2.new(1, -20, 0, 48), Position = UDim2.fromOffset(10, 60), Text = "", TextScaled = false, TextSize = 14, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Gotham, TextColor3 = THEME.Dim, ZIndex = 7 })
 	refs.InvStats = label({ Parent = d, Size = UDim2.new(1, -20, 0, 120), Position = UDim2.fromOffset(10, 110), Text = "", TextScaled = false, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Code, ZIndex = 7 })
+	-- руна юнита: показать, надеть, снять
+	refs.InvRune = button({ Parent = d, AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -20, 0, 34), Position = UDim2.new(0, 10, 1, -60), Text = "РУНА: нет", TextColor3 = Color3.fromRGB(255, 170, 70), BackgroundColor3 = Color3.fromRGB(50, 26, 20), StrokeColor = Color3.fromRGB(255, 130, 30), ZIndex = 7 }, function()
+		if invSelected then
+			HalloweenUI.OpenRunePicker(invSelected)
+		end
+	end)
 	refs.InvEquip = button({ Parent = d, AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -20, 0, 44), Position = UDim2.new(0, 10, 1, -10), Text = "EQUIP", BackgroundColor3 = Color3.fromRGB(60, 130, 80), ZIndex = 7 }, function()
 		if invSelected then
 			UI.ToggleEquip(invSelected)
@@ -5022,8 +7353,22 @@ local function selectInventory(id)
 		end
 	end
 	refs.InvEquip.Visible = owned
+	refs.InvRune.Visible = owned
+	local runeId = prof.RuneSlots and prof.RuneSlots[id]
+	refs.InvRune.Text = runeId and ("РУНА: " .. Config.Runes[runeId].Name .. "  (сменить)") or "РУНА: нет  (надеть)"
+	if def.Event and Config.Events[def.Event] then
+		refs.InvRarity.Text = def.Rarity:upper() .. "  •  " .. Config.Events[def.Event].Tag .. (def.Ability and ("  •  " .. def.Ability) or "")
+	end
 	refs.InvEquip.Text = equipped and "UNEQUIP" or "EQUIP"
 	refs.InvEquip.BackgroundColor3 = equipped and Color3.fromRGB(130, 50, 60) or Color3.fromRGB(60, 130, 80)
+end
+
+-- фильтр коллекции: nil — все юниты, "Halloween" — только юниты события (круг на острове)
+function UI.SetInventoryFilter(eventKey)
+	UI.InvFilter = eventKey
+	if modals.Inventory and modals.Inventory.Visible then
+		UI.RefreshInventory()
+	end
 end
 
 function UI.RefreshInventory()
@@ -5058,6 +7403,9 @@ function UI.RefreshInventory()
 		local def = Config.Units[id]
 		local count = prof.Inventory[id] or 0
 		local rc = rarityColor(id)
+		if UI.InvFilter and def.Event ~= UI.InvFilter then
+			continue
+		end
 		local b = button({ Parent = refs.InvGrid, Text = "", BackgroundColor3 = THEME.BG2, StrokeColor = count > 0 and rc or Color3.fromRGB(60, 50, 70), LayoutOrder = order, ZIndex = 7 }, function()
 			selectInventory(id)
 			if (ctx.Profile.Inventory[id] or 0) > 0 then
@@ -5072,7 +7420,11 @@ function UI.RefreshInventory()
 		label({ Parent = b, Size = UDim2.new(1, -8, 0, 16), Position = UDim2.fromOffset(4, 118), Text = def.Rarity, TextColor3 = rc, ZIndex = 8 })
 		if count > 0 then
 			label({ Parent = b, Size = UDim2.fromOffset(40, 20), Position = UDim2.new(1, -44, 0, 4), Text = "x" .. count, TextColor3 = THEME.Gold, ZIndex = 9 })
+			if prof.RuneSlots and prof.RuneSlots[id] then
+				icon("Rune", b, { Size = UDim2.fromOffset(20, 20), Position = UDim2.new(1, -24, 0, 26), ZIndex = 10 })
+			end
 		end
+		eventTag(b, id, 8, UDim2.fromOffset(4, 82), UDim2.new(1, -8, 0, 13))
 	end
 	if invSelected then
 		selectInventory(invSelected)
@@ -5149,7 +7501,7 @@ local function showEnd(victory, payload)
 	local title = label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(800, 120), Position = UDim2.fromScale(0.5, 0.38), Text = victory and "VICTORY" or "DEFEAT", TextColor3 = victory and THEME.Gold or THEME.Bad, ZIndex = 31, StrokeThickness = 4 })
 	local sc = new("UIScale", { Parent = title, Scale = 0.2 })
 	tween(sc, 0.5, { Scale = 1 }, Enum.EasingStyle.Back)
-	local sub = victory and ("Пустота отступила! Награда: 💎" .. tostring(payload.Gems)) or ("Ядро Пустоты разрушено на волне " .. tostring(payload.Wave))
+	local sub = victory and ("Пустота отступила! Награда: 💎" .. tostring(payload.Gems) .. (payload.Coins and ("  +🎃" .. payload.Coins .. " Halloween Coins") or "")) or ("Ядро разрушено на волне " .. tostring(payload.Wave) .. (payload.Mode == "Halloween" and "  •  Halloween Coins не выдаются" or ""))
 	label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(800, 40), Position = UDim2.fromScale(0.5, 0.5), Text = sub, ZIndex = 31 })
 	local timer = label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(600, 30), Position = UDim2.fromScale(0.5, 0.57), Text = "", TextColor3 = THEME.Dim, ZIndex = 31 })
 	local reset = payload.Reset or 15
@@ -5191,7 +7543,7 @@ function UI.OnNotify(p)
 		end
 		local f = refs.CoreFill
 		f.BackgroundColor3 = THEME.Bad
-		tween(f, 0.4, { BackgroundColor3 = THEME.Accent })
+		tween(f, 0.4, { BackgroundColor3 = UI.MapMode == "Halloween" and Color3.fromRGB(255, 130, 30) or THEME.Accent })
 	elseif t == "Victory" then
 		FX.Sound("Victory", 1, 1)
 		showEnd(true, p)
@@ -5209,8 +7561,28 @@ function UI.OnNotify(p)
 			refs.EndOverlay = nil
 		end
 		UI.CloseUnit()
-		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
+		if player:GetAttribute("Island") then
+			UI.Toast("Бой окончен. Ты на Хэллоуин-острове", "good")
+		else
+			UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
+		end
 	end
+end
+
+-- карта матча: Void или Haunted Hollow
+function UI.SetMapMode(key)
+	UI.MapMode = key
+	if refs.CoreFill then
+		refs.CoreFill.BackgroundColor3 = key == "Halloween" and Color3.fromRGB(255, 130, 30) or THEME.Accent
+	end
+end
+
+function UI.Fade(text)
+	task.spawn(UI.FadeTransition, text)
+end
+
+function UI.UpdateQueue()
+	HalloweenUI.UpdateQueue()
 end
 
 function UI.SetLiteText(on)
@@ -5225,6 +7597,7 @@ function UI.SetProfile(prof)
 	if modals.Inventory and modals.Inventory.Visible then
 		UI.RefreshInventory()
 	end
+	HalloweenUI.OnProfile(prof)
 end
 
 local lastRefresh = 0
@@ -5234,7 +7607,7 @@ function UI.Update(dt)
 	refs.Money.Text = Config.FormatNumber(money)
 	local gems = player:GetAttribute("Gems") or (ctx.Profile and ctx.Profile.Gems) or 0
 	refs.Gems.Text = Config.FormatNumber(gems)
-	if refs.SummonGems then
+	if refs.SummonGems and selectedCase ~= "Halloween" then
 		refs.SummonGems.Text = "💎 " .. Config.FormatNumber(gems)
 	end
 
@@ -5246,9 +7619,32 @@ function UI.Update(dt)
 	refs.Hotbar.Visible = inMatch
 	refs.Leave.Visible = inMatch
 	refs.Money.Visible = inMatch
-	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
-	refs.Gems.Position = UDim2.fromOffset(52, inMatch and 50 or 8)
-	refs.GemsIcon.Position = UDim2.fromOffset(10, inMatch and 49 or 7)
+	local coins = player:GetAttribute("HalloweenCoins") or (ctx.Profile and ctx.Profile.HalloweenCoins) or 0
+	refs.Coins.Text = Config.FormatNumber(coins)
+	local gy = inMatch and 50 or 8
+	refs.Currency.Size = UDim2.fromOffset(230, gy + 84)
+	refs.Gems.Position = UDim2.fromOffset(52, gy)
+	refs.GemsIcon.Position = UDim2.fromOffset(10, gy - 1)
+	refs.Coins.Position = UDim2.fromOffset(52, gy + 44)
+	refs.CoinsIcon.Position = UDim2.fromOffset(11, gy + 43)
+	if refs.SummonGems and selectedCase == "Halloween" then
+		refs.SummonGems.Text = "🎃 " .. Config.FormatNumber(coins)
+		refs.SummonGems.TextColor3 = Color3.fromRGB(255, 160, 60)
+	elseif refs.SummonGems then
+		refs.SummonGems.TextColor3 = Color3.fromRGB(120, 200, 255)
+	end
+	-- искры на карточках хэллоуинских юнитов
+	local tt = os.clock()
+	for i = #sparks, 1, -1 do
+		local sp = sparks[i]
+		if not sp.F.Parent then
+			table.remove(sparks, i)
+		else
+			local a = ((tt * sp.S + sp.P) % 1)
+			sp.F.Position = UDim2.fromScale(sp.X + math.sin(tt * 2 + sp.P) * 0.04, 1 - a)
+			sp.F.BackgroundTransparency = 0.2 + a * 0.8
+		end
+	end
 	refs.MoneyIcon.Visible = inMatch
 	if not inMatch and UI.SelectedUid then
 		UI.CloseUnit()
@@ -5284,7 +7680,7 @@ function UI.Update(dt)
 	local hp = State:GetAttribute("CoreHP") or 100
 	local maxHp = State:GetAttribute("CoreMaxHP") or 100
 	refs.CoreFill.Size = UDim2.fromScale(math.clamp(hp / maxHp, 0, 1), 1)
-	refs.CoreText.Text = "VOID CORE  " .. hp .. " / " .. maxHp
+	refs.CoreText.Text = (UI.MapMode == "Halloween" and "СВЯТИЛИЩЕ  " or "VOID CORE  ") .. hp .. " / " .. maxHp
 
 	-- босс
 	local bossId = State:GetAttribute("BossId") or 0
@@ -5357,9 +7753,13 @@ function UI.Init(c)
 	UI.Gui = screen
 	-- окно 3D-просмотра юнита
 	UI.Root = gui
-	UI.Kit = { new = new, corner = corner, stroke = stroke, label = label, button = button, panel = panel, tween = tween }
+	UI.Kit = { new = new, corner = corner, stroke = stroke, label = label, button = button, panel = panel, tween = tween,
+		modal = modal, viewport = viewport, icon = icon, rarityColor = rarityColor, eventTag = eventTag, eventSparks = eventSparks, pad = pad }
 	UI.SpecialText = specialText
+	UI.Modals = modals
+	UI.Refs = refs
 	UnitViewer.Init(c, UI)
+	HalloweenUI.Init(c, UI)
 end
 
 return UI
@@ -5451,7 +7851,7 @@ local function update()
 		local screen = UserInputService:GetMouseLocation()
 		ray = cam:ViewportPointToRay(screen.X, screen.Y)
 	end
-	local map = workspace:FindFirstChild("VoidTDMap")
+	local map = ctx.Renderer.ActiveMap()
 	if not map then
 		return
 	end

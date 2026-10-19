@@ -24,3 +24,9 @@ for preset in shattered blood; do
 	echo "== server sim: $preset"
 	luau run_server.luau -a "$preset" Medium 2>&1 | grep -E "RESULT|attempt|Error" || true
 done
+for diff in Easy Medium Hard; do
+	echo "== halloween server: $diff"
+	luau run_halloween.luau -a "$diff" 2>&1 | grep -E "RESULT|HALLOWEEN TEST OK|attempt|Error|luau:"
+done
+echo "== halloween client"
+luau run_client_halloween.luau 2>&1 | grep -E "HALLOWEEN CLIENT TEST OK|attempt|Error|luau:"

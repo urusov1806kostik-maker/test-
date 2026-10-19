@@ -12,7 +12,7 @@ local SPS = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts"
 local SERVICES = { ReplicatedStorage = RS, ServerScriptService = SSS, StarterPlayerScripts = SPS }
 
 -- удалить предыдущую установку
-for _, pair in ipairs({ { RS, "VoidTD" }, { SSS, "VoidTDServer" }, { SPS, "VoidTDClient" }, { workspace, "VoidTDMap" }, { workspace, "VoidTDLobby" } }) do
+for _, pair in ipairs({ { RS, "VoidTD" }, { SSS, "VoidTDServer" }, { SPS, "VoidTDClient" }, { workspace, "VoidTDMap" }, { workspace, "VoidTDLobby" }, { workspace, "VoidTDHalloween" }, { workspace, "VoidTDHalloweenMap" } }) do
 	local obj = pair[1]:FindFirstChild(pair[2])
 	if obj then obj:Destroy() end
 end
@@ -102,6 +102,9 @@ Config.Settings = {
 	FreezeImmunity = 3,           -- после остановки времени враг 3 с не может быть остановлен снова
 	-- В Studio эти юниты выдаются в инвентарь для проверки (в опубликованной игре — нет)
 	StudioGrantUnits = { "CursedClockmaker" },
+	-- союзники (призывы Кукловода, Иллюзиониста и руны «Проклятые нити»)
+	AllySpeed = 6,                -- скорость союзников по дороге (идут от базы к порталу)
+	AllyStartBack = 4,            -- появляются на этом расстоянии от базы
 	ShopTestMode = true,          -- в Studio покупка с ProductId = 0 выдаёт кристаллы бесплатно (для теста)
 	DataStoreName = "VoidTD_Data_v1",
 	SyncRate = 0.1,               -- как часто сервер рассылает позиции врагов
@@ -126,7 +129,8 @@ Config.Rarities = {
 ------------------------------------------------------------------------
 -- КЕЙСЫ (Summon). Rates — шансы редкостей в процентах, сумма = 100.
 ------------------------------------------------------------------------
-Config.CaseOrder = { "VoidCase", "ShatteredReality", "BloodMoon" }
+-- Blood Moon убран из лобби и меню кейсов. Его юниты остаются у игроков и в игре.
+Config.CaseOrder = { "VoidCase", "ShatteredReality" }
 
 Config.Cases = {
 	VoidCase = {
@@ -144,21 +148,38 @@ Config.Cases = {
 		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
 		Units = { "RiftScout", "CrystalHunter", "VoidPuppeteer", "Starbreaker", "RiftMonarch", "RealityDestroyer" },
 	},
-	-- HALLOWEEN CASE: пока выключен (Enabled = false) — в нём есть только Проклятый часовщик,
-	-- остальные хэллоуинские юниты, Король фонарей, Ночной сторож и руны ещё не добавлены.
-	-- Валюта — Halloween Coins. UnitRates — шанс конкретного юнита в процентах (поверх шансов редкостей).
+	-- HALLOWEEN CASE: только на Хэллоуин-острове, за Halloween Coins, одна награда за открытие.
+	-- Rewards — полный список наград с шансами в процентах (сумма = 100). Результат считается на сервере.
 	Halloween = {
 		Name = "HALLOWEEN CASE", Color = Color3.fromRGB(255, 130, 30),
-		Description = "Хэллоуин. Проклятый часовщик: 0.2%",
-		Enabled = false,
+		Description = "Проклятый сундук. 11 хэллоуинских юнитов, Проклятый часовщик и 3 руны.",
 		Currency = "HalloweenCoins",
-		Cost1 = 500, Cost10 = 5000,
-		Rates = {},
-		UnitRates = { CursedClockmaker = 0.2 },
-		Units = { "CursedClockmaker" },
+		Cost1 = 500,
+		Single = true,
+		Rewards = {
+			{ Unit = "LanternKing", Rate = 0.1 },
+			{ Unit = "CursedClockmaker", Rate = 0.2 },
+			{ Unit = "HalloweenPuppeteer", Rate = 2 },
+			{ Unit = "HeadlessExecutioner", Rate = 2 },
+			{ Unit = "PlagueDoctor", Rate = 5 },
+			{ Unit = "PhantomKnight", Rate = 5 },
+			{ Unit = "DarkIllusionist", Rate = 5 },
+			{ Unit = "CursedSheriff", Rate = 10 },
+			{ Unit = "MidnightBellringer", Rate = 10 },
+			{ Unit = "Gravedigger", Rate = 14 },
+			{ Unit = "CursedScarecrow", Rate = 14 },
+			{ Unit = "NightWatchman", Rate = 24.7 },
+			{ Rune = "LanternHeart", Rate = 2.5 },
+			{ Rune = "CursedThreads", Rate = 3 },
+			{ Rune = "PhantomCrown", Rate = 2.5 },
+		},
+		Units = { "LanternKing", "CursedClockmaker", "HalloweenPuppeteer", "HeadlessExecutioner", "PlagueDoctor", "PhantomKnight",
+			"DarkIllusionist", "CursedSheriff", "MidnightBellringer", "Gravedigger", "CursedScarecrow", "NightWatchman" },
 	},
+	-- Blood Moon: кейс отключён и убран из лобби (юниты остаются в инвентаре)
 	BloodMoon = {
 		Name = "BLOOD MOON", Color = Color3.fromRGB(210, 30, 50),
+		Enabled = false,
 		Description = "Кровавая луна. Шанс SECRET: 0.1%",
 		Cost1 = 100, Cost10 = 900,
 		Rates = { Common = 70, Rare = 21, Epic = 6.4, Legendary = 2, Mythic = 0.5, Secret = 0.1 },
@@ -252,10 +273,110 @@ Config.Lobby = {
 		-- кейсы: Case = ключ из Config.Cases
 		Case_VoidCase         = { Offset = Vector3.new(-58, 0, -22), Radius = 7, Title = "VOID CASE",         Color = Color3.fromRGB(170, 80, 255), Case = "VoidCase" },
 		Case_ShatteredReality = { Offset = Vector3.new(-70, 0, 6),   Radius = 7, Title = "SHATTERED REALITY", Color = Color3.fromRGB(130, 50, 230), Case = "ShatteredReality" },
-		Case_BloodMoon        = { Offset = Vector3.new(-58, 0, 34),  Radius = 7, Title = "BLOOD MOON",        Color = Color3.fromRGB(230, 40, 60),  Case = "BloodMoon" },
+		-- огромный портал на Хэллоуин-остров
+		HalloweenPortal = { Offset = Vector3.new(-56, 0, 40), Radius = 8, Title = "HALLOWEEN EVENT", Color = Color3.fromRGB(255, 130, 30), Teleport = "Halloween" },
 	},
 }
 Config.BattleSpawn = Vector3.new(10, 60, 10)
+
+------------------------------------------------------------------------
+-- HALLOWEEN EVENT
+------------------------------------------------------------------------
+-- Тег события (не редкость): рамка карточки остаётся цветом основной редкости
+Config.Events = {
+	Halloween = { Tag = "🎃 HALLOWEEN", Color = Color3.fromRGB(255, 135, 35), Glow = Color3.fromRGB(255, 170, 60) },
+}
+
+-- Хэллоуин-остров: кейс, вход в бой на 4 квадратах, доска наград, превью юнитов, бестиарий
+Config.HalloweenIsland = {
+	Center = Vector3.new(560, 60, 460),
+	Radius = 100,
+	Spawn = Vector3.new(560, 60, 530),
+	Zones = {
+		Case_Halloween = { Offset = Vector3.new(-50, 0, -20), Radius = 8, Title = "HALLOWEEN CASE", Color = Color3.fromRGB(255, 130, 30), Case = "Halloween" },
+		Units          = { Offset = Vector3.new(60, 0, 20),   Radius = 7, Title = "ЮНИТЫ",          Color = Color3.fromRGB(255, 170, 60) },
+		Bestiary       = { Offset = Vector3.new(60, 0, -22),  Radius = 7, Title = "БЕСТИАРИЙ",      Color = Color3.fromRGB(170, 60, 255), Bestiary = true },
+		HalloweenUnits = { Offset = Vector3.new(-62, 0, 26),  Radius = 7, Title = "HALLOWEEN ЮНИТЫ", Color = Color3.fromRGB(255, 120, 40), EventUnits = "Halloween" },
+		ReturnPortal   = { Offset = Vector3.new(34, 0, 60),   Radius = 7, Title = "В ЛОББИ",        Color = Color3.fromRGB(170, 80, 255), Teleport = "Lobby" },
+	},
+	-- 4 светящихся квадрата входа в Хэллоуин-матч (центр — Offset, Pad — сторона квадрата)
+	Queue = {
+		Offset = Vector3.new(0, 0, -46),
+		Pads = { Vector3.new(-9, 0, -4.5), Vector3.new(9, 0, -4.5), Vector3.new(-9, 0, 4.5), Vector3.new(9, 0, 4.5) },
+		Pad = 7,
+		MaxPlayers = 4,
+		Countdown = 15,       -- секунд до телепорта (хост может нажать СТАРТ — останется 3 с)
+		StartNow = 3,
+	},
+}
+
+Config.Halloween = {
+	Difficulties = { "Easy", "Medium", "Hard" },
+	-- Halloween Coins каждому участнику за победу (за поражение — ничего)
+	Coins = { Easy = 100, Medium = 150, Hard = 250 },
+	Bosses = { Easy = "GraveWarden", Medium = "FogReaper", Hard = "CursedMonarch" },
+	MaxWave = 20,
+}
+
+-- HALLOWEEN-руны: своя редкость HALLOWEEN, 1 руна на юнита, без улучшений, работают только надетыми
+Config.RuneRarity = { Name = "HALLOWEEN", Color = Color3.fromRGB(255, 130, 30) }
+Config.RuneOrder = { "LanternHeart", "CursedThreads", "PhantomCrown" }
+Config.Runes = {
+	LanternHeart = {
+		Name = "Сердце фонаря", Color = Color3.fromRGB(255, 140, 40),
+		Description = "Каждая 3-я обычная атака вызывает огненный взрыв: 20% урона юнита, радиус 4, до 4 дополнительных врагов.",
+		EveryNth = 3, Mult = 0.2, Radius = 4, MaxTargets = 4,
+	},
+	CursedThreads = {
+		Name = "Проклятые нити", Color = Color3.fromRGB(220, 30, 50),
+		Description = "Каждая 5-я обычная атака замедляет до 3 врагов на 25% на 2 с (боссов — на 12.5%). Каждые 60 с призывает проклятых людей.",
+		EveryNth = 5, Slow = 0.25, SlowTime = 2, MaxTargets = 3,
+		Summon = {
+			Interval = 60, Max = 3,
+			Levels = {
+				{ Ally = "CursedPerson", Count = 1, HP = 300 },
+				{ Ally = "ShadowSoldier", Count = 1, HP = 650 },
+				{ Ally = "CursedGuard", Count = 2, HP = 900 },
+				{ Ally = "CrimsonWarrior", Count = 2, HP = 1400 },
+				{ Ally = "CursedKnight", Count = 3, HP = 1900 },
+			},
+		},
+	},
+	PhantomCrown = {
+		Name = "Призрачная корона", Color = Color3.fromRGB(110, 190, 255),
+		Description = "Каждая обычная атака с шансом 30% повторяется через 0.3 с призрачной копией юнита со 100% урона.",
+		Chance = 0.3, Delay = 0.3, Mult = 1,
+	},
+}
+
+Config.AllyOrder = {
+	"ShadowDouble", "CardSoldier", "MirrorKnight", "PhantomMage", "RoyalIllusion",
+	"WoodenDoll", "PorcelainDoll", "ArmoredDoll", "CursedPuppetKnight", "RoyalMarionette", "GoldenMarionette",
+	"CursedPerson", "ShadowSoldier", "CursedGuard", "CrimsonWarrior", "CursedKnight",
+}
+-- Союзники: идут по дороге от базы навстречу врагам. HP = запас урона:
+-- при столкновении враг теряет min(HP союзника, HP врага), союзник — столько же.
+Config.Allies = {
+	-- Иллюзионист
+	ShadowDouble   = { Name = "Теневой двойник",        Family = "Illusion", Tier = 1 },
+	CardSoldier    = { Name = "Карточный солдат",       Family = "Illusion", Tier = 2 },
+	MirrorKnight   = { Name = "Зеркальный рыцарь",      Family = "Illusion", Tier = 3 },
+	PhantomMage    = { Name = "Фантомный маг",          Family = "Illusion", Tier = 4 },
+	RoyalIllusion  = { Name = "Королевская иллюзия",    Family = "Illusion", Tier = 5 },
+	-- Кукловод
+	WoodenDoll     = { Name = "Деревянная кукла",       Family = "Puppet", Tier = 1 },
+	PorcelainDoll  = { Name = "Фарфоровая кукла",       Family = "Puppet", Tier = 2 },
+	ArmoredDoll    = { Name = "Бронированная кукла",    Family = "Puppet", Tier = 3 },
+	CursedPuppetKnight = { Name = "Проклятый рыцарь",   Family = "Puppet", Tier = 4 },
+	RoyalMarionette = { Name = "Королевская марионетка", Family = "Puppet", Tier = 5 },
+	GoldenMarionette = { Name = "Золотая марионетка",   Family = "Puppet", Tier = 6 },
+	-- руна «Проклятые нити»
+	CursedPerson   = { Name = "Проклятый человек",      Family = "Cursed", Tier = 1 },
+	ShadowSoldier  = { Name = "Теневой солдат",         Family = "Cursed", Tier = 2 },
+	CursedGuard    = { Name = "Проклятый страж",        Family = "Cursed", Tier = 3 },
+	CrimsonWarrior = { Name = "Багровый воин",          Family = "Cursed", Tier = 4 },
+	CursedKnight   = { Name = "Проклятый рыцарь",       Family = "Cursed", Tier = 5 },
+}
 
 ------------------------------------------------------------------------
 -- ЮНИТЫ
@@ -274,7 +395,9 @@ Config.UnitOrder = {
 	-- Blood Moon Case
 	"BloodAcolyte", "CrimsonGunslinger", "MoonWitch", "BloodfangWarlord", "LunarSeraph", "CrimsonEclipse",
 	-- Halloween Case
-	"CursedClockmaker",
+	"NightWatchman", "Gravedigger", "CursedScarecrow", "CursedSheriff", "MidnightBellringer",
+	"PlagueDoctor", "PhantomKnight", "DarkIllusionist", "HalloweenPuppeteer", "HeadlessExecutioner",
+	"LanternKing", "CursedClockmaker",
 }
 
 Config.Units = {
@@ -596,6 +719,209 @@ Config.Units = {
 	--------------------------------------------------------------------
 	-- HALLOWEEN CASE
 	--------------------------------------------------------------------
+	-- Power — способность вместо каждой N-й обычной атаки:
+	--   Mode = "AOE" (по области вокруг цели), "Self" (волна вокруг юнита), "Single" (одна цель, Mult и метка),
+	--   "Zone" (облако урона по времени). Radius — из Power или из уровня (PowerRadius).
+	NightWatchman = {
+		Name = "Night Watchman", Rarity = "Common", Event = "Halloween", AttackType = "AOE", ImpactKind = "LightFlash", Case = "Halloween",
+		Description = "🎃 Ночной сторож с фонарём. Вспышки света бьют по небольшой области.",
+		Ability = "ЛУЧ ФОНАРЯ",
+		Anim = "Lantern", HitDelay = 0.28, Scale = 1.0, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(255, 220, 140),
+		Power = { N = 5, Anim = "LanternBeam", Kind = "LanternBeam", Mode = "AOE", Mult = 1.6, Radius = 6 },
+		PreviewAbilities = { { "LanternBeam", "ЛУЧ" } },
+		Levels = {
+			{ Damage = 8,  Range = 12, Cooldown = 1.20, Cost = 220, AOERadius = 4 },
+			{ Damage = 11, Range = 12, Cooldown = 1.15, Cost = 170, AOERadius = 4 },
+			{ Damage = 16, Range = 13, Cooldown = 1.10, Cost = 300, AOERadius = 4.5 },
+			{ Damage = 23, Range = 13, Cooldown = 1.00, Cost = 480, AOERadius = 4.5 },
+			{ Damage = 33, Range = 14, Cooldown = 0.95, Cost = 750, AOERadius = 5 },
+		},
+	},
+	Gravedigger = {
+		Name = "Gravedigger", Rarity = "Rare", Event = "Halloween", AttackType = "Melee", Case = "Halloween",
+		Description = "🎃 Могильщик. Тяжёлые удары лопатой. Каждый 4-й удар — взрыв земли и камней по области.",
+		Ability = "ВЗРЫВ ЗЕМЛИ",
+		Anim = "Shovel", HitDelay = 0.3, Scale = 1.05, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(150, 120, 90),
+		Power = { N = 4, Anim = "DirtBurst", Kind = "DirtBurst", Mode = "AOE", Mult = 1.2, Radius = 5 },
+		PreviewAbilities = { { "DirtBurst", "ЗЕМЛЯ" } },
+		Levels = {
+			{ Damage = 45,  Range = 12, Cooldown = 1.30, Cost = 650 },
+			{ Damage = 65,  Range = 12, Cooldown = 1.25, Cost = 480 },
+			{ Damage = 95,  Range = 13, Cooldown = 1.20, Cost = 800 },
+			{ Damage = 140, Range = 13, Cooldown = 1.10, Cost = 1250 },
+			{ Damage = 210, Range = 14, Cooldown = 1.05, Cost = 1900 },
+		},
+	},
+	CursedScarecrow = {
+		Name = "Cursed Scarecrow", Rarity = "Rare", Event = "Halloween", AttackType = "Projectile", Case = "Halloween",
+		Description = "🎃 Проклятое пугало. Насылает ворон. Каждая 5-я атака — вихрь листьев: урон и замедление по области.",
+		Ability = "ВИХРЬ ЛИСТЬЕВ",
+		Anim = "Crows", HitDelay = 0.25, ProjectileSpeed = 60, Projectile = "Crow", Scale = 1.05, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(230, 150, 50),
+		Power = { N = 5, Anim = "LeafStorm", Kind = "LeafStorm", Mode = "AOE", Mult = 0.9, Radius = 6, Slow = 0.2, SlowTime = 1.5 },
+		PreviewAbilities = { { "LeafStorm", "ВИХРЬ" } },
+		Levels = {
+			{ Damage = 24,  Range = 18, Cooldown = 1.10, Cost = 700 },
+			{ Damage = 35,  Range = 19, Cooldown = 1.05, Cost = 500 },
+			{ Damage = 50,  Range = 20, Cooldown = 1.00, Cost = 850 },
+			{ Damage = 72,  Range = 22, Cooldown = 0.92, Cost = 1300 },
+			{ Damage = 105, Range = 24, Cooldown = 0.85, Cost = 2000 },
+		},
+	},
+	CursedSheriff = {
+		Name = "Cursed Sheriff", Rarity = "Epic", Event = "Halloween", AttackType = "Projectile", Case = "Halloween",
+		Description = "🎃 Проклятый шериф. Зелёные проклятые пули. Каждый 4-й выстрел — метка проклятия: x2.5 урона, цель 3 с получает +15% урона.",
+		Ability = "МЕТКА ПРОКЛЯТИЯ",
+		Anim = "Revolver", HitDelay = 0.08, ProjectileSpeed = 150, Projectile = "CurseBullet", Scale = 1.05, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(120, 255, 110),
+		Power = { N = 4, Anim = "CurseMark", Kind = "CurseMark", Mode = "Single", Mult = 2.5, Mark = 0.15, MarkTime = 3 },
+		PreviewAbilities = { { "CurseMark", "МЕТКА" } },
+		Levels = {
+			{ Damage = 32,  Range = 20, Cooldown = 0.65, Cost = 1500 },
+			{ Damage = 46,  Range = 21, Cooldown = 0.60, Cost = 1050 },
+			{ Damage = 66,  Range = 22, Cooldown = 0.55, Cost = 1750 },
+			{ Damage = 95,  Range = 23, Cooldown = 0.50, Cost = 2700 },
+			{ Damage = 138, Range = 25, Cooldown = 0.45, Cost = 4000 },
+		},
+	},
+	MidnightBellringer = {
+		Name = "Midnight Bellringer", Rarity = "Epic", Event = "Halloween", AttackType = "Pulse", Case = "Halloween",
+		Description = "🎃 Полуночный звонарь. Удар в колокол — круговая звуковая волна. Каждый 4-й удар — ПОЛНОЧЬ: сильная волна, призрачные часы и замедление.",
+		Ability = "ПОЛНОЧНЫЙ ЗВОН",
+		Anim = "Bell", HitDelay = 0.35, Scale = 1.1, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(190, 160, 255),
+		Power = { N = 4, Anim = "MidnightToll", Kind = "MidnightToll", Mode = "Self", Mult = 1.8, Slow = 0.3, SlowTime = 1.5 },
+		PreviewAbilities = { { "MidnightToll", "ПОЛНОЧЬ" } },
+		Levels = {
+			{ Damage = 40,  Range = 10, Cooldown = 1.90, Cost = 1600, AOERadius = 10 },
+			{ Damage = 58,  Range = 10, Cooldown = 1.80, Cost = 1100, AOERadius = 10 },
+			{ Damage = 84,  Range = 11, Cooldown = 1.70, Cost = 1800, AOERadius = 11 },
+			{ Damage = 120, Range = 12, Cooldown = 1.60, Cost = 2800, AOERadius = 12 },
+			{ Damage = 175, Range = 13, Cooldown = 1.50, Cost = 4200, AOERadius = 13 },
+		},
+	},
+	PlagueDoctor = {
+		Name = "Plague Doctor", Rarity = "Legendary", Event = "Halloween", AttackType = "Flask", Case = "Halloween",
+		Description = "🎃 Чумной доктор. Бросает колбы с ядом: взрыв и ядовитая лужа. Каждая 4-я колба — ЧУМНОЕ ОБЛАКО с воронами.",
+		Ability = "ЧУМНОЕ ОБЛАКО",
+		Anim = "Flask", HitDelay = 0.3, ProjectileSpeed = 45, Projectile = "Flask", Scale = 1.15, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(140, 230, 80),
+		PoisonTime = 3, PoisonTick = 0.5,
+		Power = { N = 4, Anim = "PlagueCloud", Kind = "PlagueCloud", Mode = "Zone", Mult = 1.0, RadiusMult = 1.6, Duration = 5 },
+		PreviewAbilities = { { "PlagueCloud", "ОБЛАКО" } },
+		Levels = {
+			{ Damage = 120, Range = 18, Cooldown = 2.0, Cost = 3400, Explode = 5,   PoisonDps = 40 },
+			{ Damage = 170, Range = 19, Cooldown = 1.9, Cost = 2300, Explode = 5.5, PoisonDps = 56 },
+			{ Damage = 245, Range = 20, Cooldown = 1.8, Cost = 3600, Explode = 6,   PoisonDps = 80 },
+			{ Damage = 350, Range = 21, Cooldown = 1.7, Cost = 5500, Explode = 6.5, PoisonDps = 115 },
+			{ Damage = 510, Range = 23, Cooldown = 1.6, Cost = 8200, Explode = 7,   PoisonDps = 170 },
+		},
+	},
+	PhantomKnight = {
+		Name = "Phantom Knight", Rarity = "Legendary", Event = "Halloween", AttackType = "Pierce", Case = "Halloween",
+		Description = "🎃 Призрачный рыцарь. Синие разрезы пронзают всех на линии. Каждый 4-й удар — ГИГАНТСКИЙ ПРИЗРАЧНЫЙ МЕЧ падает на врагов.",
+		Ability = "ПРИЗРАЧНЫЙ МЕЧ",
+		Anim = "GhostSlash", HitDelay = 0.3, Scale = 1.25, DefaultTarget = "First",
+		PierceWidth = 3.4, ImpactColor = Color3.fromRGB(90, 170, 255), ImpactKindPierce = "GhostSlash",
+		Power = { N = 4, Anim = "GhostSword", Kind = "GhostSword", Mode = "AOE", Mult = 2, Delay = 0.55 },
+		PreviewAbilities = { { "GhostSword", "МЕЧ" } },
+		Levels = {
+			{ Damage = 230, Range = 15, Cooldown = 2.2,  Cost = 3500, PowerRadius = 8 },
+			{ Damage = 330, Range = 16, Cooldown = 2.1,  Cost = 2400, PowerRadius = 8.5 },
+			{ Damage = 470, Range = 16, Cooldown = 2.0,  Cost = 3800, PowerRadius = 9 },
+			{ Damage = 670, Range = 17, Cooldown = 1.9,  Cost = 5600, PowerRadius = 10 },
+			{ Damage = 980, Range = 18, Cooldown = 1.8,  Cost = 8400, PowerRadius = 11 },
+		},
+	},
+	DarkIllusionist = {
+		Name = "Dark Illusionist", Rarity = "Legendary", Event = "Halloween", AttackType = "Projectile", Case = "Halloween",
+		Description = "🎃 Тёмный иллюзионист. Бросает веер карт. Каждая 5-я атака — ЗЕРКАЛЬНЫЙ РАЗЛОМ. Из фиолетового портала призывает иллюзии.",
+		Ability = "ЗЕРКАЛЬНЫЙ РАЗЛОМ • ИЛЛЮЗИИ",
+		Anim = "Cards", HitDelay = 0.2, ProjectileSpeed = 100, Projectile = "Card", Scale = 1.1, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(190, 90, 255),
+		Power = { N = 5, Anim = "MirrorShatter", Kind = "MirrorShatter", Mode = "AOE", Mult = 1.5, Radius = 6 },
+		PreviewAbilities = { { "MirrorShatter", "РАЗЛОМ" }, { "Summon", "ПРИЗЫВ" } },
+		-- призыв иллюзий: интервал по уровню, не больше Max живых от одного Иллюзиониста
+		Summon = {
+			Max = 6, Portal = "Illusion",
+			Levels = {
+				{ Ally = "ShadowDouble",  Count = 1, HP = 400,  Interval = 30 },
+				{ Ally = "CardSoldier",   Count = 1, HP = 800,  Interval = 28 },
+				{ Ally = "MirrorKnight",  Count = 2, HP = 1400, Interval = 26 },
+				{ Ally = "PhantomMage",   Count = 2, HP = 2400, Interval = 24 },
+				{ Ally = "RoyalIllusion", Count = 3, HP = 3500, Interval = 22 },
+			},
+		},
+		Levels = {
+			{ Damage = 70,  Range = 18, Cooldown = 1.6,  Cost = 3600, Shots = 3 },
+			{ Damage = 100, Range = 19, Cooldown = 1.5,  Cost = 2400, Shots = 3 },
+			{ Damage = 140, Range = 20, Cooldown = 1.45, Cost = 3800, Shots = 3 },
+			{ Damage = 200, Range = 21, Cooldown = 1.35, Cost = 5800, Shots = 3 },
+			{ Damage = 290, Range = 23, Cooldown = 1.25, Cost = 8600, Shots = 3 },
+		},
+	},
+	HalloweenPuppeteer = {
+		Name = "Puppeteer", Rarity = "Mythic", Event = "Halloween", AttackType = "Thread", Case = "Halloween",
+		Description = "🎃 Кукловод. Красные нити режут и замедляют врагов. Каждая 5-я атака — РАЗРЫВ НИТЕЙ. Призывает марионеток.",
+		Ability = "РАЗРЫВ НИТЕЙ • МАРИОНЕТКИ",
+		Anim = "Puppet", HitDelay = 0.25, Scale = 1.3, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(230, 30, 50), ThreadColor = Color3.fromRGB(230, 30, 50),
+		Power = { N = 5, Anim = "ThreadSnap", Kind = "ThreadSnap", Mode = "AOE", Mult = 1.5, Radius = 7 },
+		PreviewAbilities = { { "ThreadSnap", "РАЗРЫВ" }, { "Summon", "ПРИЗЫВ" } },
+		Summon = {
+			Max = 5, Portal = "Puppet",
+			-- на MAX уровне каждый 3-й призыв заменяет одну обычную марионетку на Золотую
+			Golden = { Every = 3, Ally = "GoldenMarionette", HP = 10000 },
+			Levels = {
+				{ Ally = "WoodenDoll",         Count = 1, HP = 600,  Interval = 30 },
+				{ Ally = "PorcelainDoll",      Count = 1, HP = 1200, Interval = 28 },
+				{ Ally = "ArmoredDoll",        Count = 2, HP = 2200, Interval = 26 },
+				{ Ally = "CursedPuppetKnight", Count = 2, HP = 4000, Interval = 24 },
+				{ Ally = "RoyalMarionette",    Count = 3, HP = 6500, Interval = 22 },
+			},
+		},
+		Levels = {
+			{ Damage = 190, Range = 18, Cooldown = 1.6,  Cost = 7000,  Targets = 2, Slow = 0.30, SlowTime = 1.5, Dot = 60,  DotTime = 3 },
+			{ Damage = 270, Range = 19, Cooldown = 1.5,  Cost = 4500,  Targets = 2, Slow = 0.33, SlowTime = 1.5, Dot = 85,  DotTime = 3 },
+			{ Damage = 385, Range = 20, Cooldown = 1.45, Cost = 7000,  Targets = 3, Slow = 0.36, SlowTime = 1.6, Dot = 120, DotTime = 3 },
+			{ Damage = 550, Range = 21, Cooldown = 1.35, Cost = 10000, Targets = 3, Slow = 0.40, SlowTime = 1.7, Dot = 170, DotTime = 3 },
+			{ Damage = 800, Range = 22, Cooldown = 1.25, Cost = 15000, Targets = 4, Slow = 0.45, SlowTime = 1.8, Dot = 250, DotTime = 3 },
+		},
+	},
+	HeadlessExecutioner = {
+		Name = "Headless Executioner", Rarity = "Mythic", Event = "Halloween", AttackType = "AOE", ImpactKind = "FireCrack", Case = "Halloween",
+		Description = "🎃 Безголовый палач. Удар огромным топором раскалывает землю огнём. Каждый 3-й удар — КАЗНЬ: x2.5 урона и поджог.",
+		Ability = "КАЗНЬ",
+		Anim = "ExecAxe", HitDelay = 0.5, Scale = 1.45, DefaultTarget = "First",
+		ImpactColor = Color3.fromRGB(255, 110, 30),
+		Power = { N = 3, Anim = "Execution", Kind = "Execution", Mode = "AOE", Mult = 2.5, RadiusAdd = 3, Burn = 0.25, BurnTime = 3, Delay = 0.65 },
+		PreviewAbilities = { { "Execution", "КАЗНЬ" } },
+		Levels = {
+			{ Damage = 300,  Range = 14, Cooldown = 2.4, Cost = 7200,  AOERadius = 7 },
+			{ Damage = 420,  Range = 14, Cooldown = 2.3, Cost = 4600,  AOERadius = 7.5 },
+			{ Damage = 600,  Range = 15, Cooldown = 2.2, Cost = 7200,  AOERadius = 8 },
+			{ Damage = 850,  Range = 16, Cooldown = 2.1, Cost = 10500, AOERadius = 9 },
+			{ Damage = 1230, Range = 17, Cooldown = 2.0, Cost = 15500, AOERadius = 10 },
+		},
+	},
+	LanternKing = {
+		Name = "LANTERN KING", Rarity = "Secret", Event = "Halloween", AttackType = "Projectile", Case = "Halloween",
+		Description = "SECRET 🎃 Король фонарей. Огненные тыквы взрываются по области. Каждая 4-я атака — ПРИЗРАЧНАЯ ТЫКВА: огромный взрыв.",
+		Ability = "ПРИЗРАЧНАЯ ТЫКВА",
+		Anim = "LanternStaff", HitDelay = 0.3, ProjectileSpeed = 55, Projectile = "Pumpkin", Scale = 1.45, DefaultTarget = "First",
+		ExplodeMult = 0.6, ImpactColor = Color3.fromRGB(255, 130, 30), ExplodeKind = "PumpkinBlast", PlaceFX = "Throne",
+		Power = { N = 4, Anim = "GhostPumpkin", Kind = "GhostPumpkin", Mode = "AOE", Mult = 2.5, Delay = 0.8 },
+		PreviewAbilities = { { "GhostPumpkin", "ТЫКВА" } },
+		Levels = {
+			{ Damage = 330,  Range = 18, Cooldown = 1.6,  Cost = 9500,  Explode = 5,   PowerRadius = 10 },
+			{ Damage = 460,  Range = 19, Cooldown = 1.5,  Cost = 6500,  Explode = 5.5, PowerRadius = 11 },
+			{ Damage = 650,  Range = 20, Cooldown = 1.45, Cost = 9500,  Explode = 6,   PowerRadius = 12 },
+			{ Damage = 920,  Range = 21, Cooldown = 1.35, Cost = 13500, Explode = 6.5, PowerRadius = 13 },
+			{ Damage = 1330, Range = 22, Cooldown = 1.3,  Cost = 20000, Explode = 7,   PowerRadius = 14 },
+		},
+	},
 	CursedClockmaker = {
 		Name = "CURSED CLOCKMAKER", Rarity = "Secret", Event = "Halloween", AttackType = "Chrono", Case = "Halloween",
 		Description = "SECRET 🎃 Проклятый часовщик. Хроносекира выпускает зубчатый диск: он летит по прямой и режет до 5 врагов. Три способности времени.",
@@ -627,6 +953,9 @@ Config.Units = {
 Config.EnemyOrder = {
 	"LostSoul", "VoidCrawler", "ShadowBeast", "ArmoredHorror", "RiftPhantom",
 	"AbyssBrute", "CorruptedTitan", "VoidDevourer", "TheEntity",
+	-- Хэллоуин
+	"CursedDead", "PumpkinRunner", "PhantomWarrior", "BoneGuard", "LivingScarecrow", "StrawMinion",
+	"FogWarlock", "PumpkinBrute", "NightReaper", "GraveWarden", "FogReaper", "CursedMonarch",
 }
 
 Config.Enemies = {
@@ -640,6 +969,49 @@ Config.Enemies = {
 	VoidDevourer   = { Name = "Void Devourer",   Health = 3000,  Speed = 4.5, Reward = 1500, CoreDamage = 50,  Scale = 2.6, IsBoss = true, BossGems = 150 },
 	TheEntity      = { Name = "The Entity",      Health = 8400,  Speed = 4,   Reward = 3000, CoreDamage = 100, Scale = 3.0, Armor = 0.1, IsBoss = true, BossGems = 500,
 		Summon = { Enemy = "LostSoul", Count = 3, Interval = 7 } },
+
+	--------------------------------------------------------------------
+	-- ХЭЛЛОУИН (только на карте Haunted Hollow)
+	--------------------------------------------------------------------
+	CursedDead      = { Name = "Cursed Dead",      Health = 32,   Speed = 6.5, Reward = 10,  CoreDamage = 1, Scale = 1.0, Event = "Halloween",
+		Description = "Медленный проклятый мертвец. После смерти рассыпается в зелёный дым." },
+	PumpkinRunner   = { Name = "Pumpkin Runner",   Health = 20,   Speed = 16,  Reward = 9,   CoreDamage = 1, Scale = 0.9, Event = "Halloween",
+		Description = "Очень быстрый, но хрупкий. Оставляет оранжевые искры." },
+	PhantomWarrior  = { Name = "Phantom Warrior",  Health = 85,   Speed = 10.5,Reward = 32,  CoreDamage = 3, Scale = 1.05, Event = "Halloween",
+		Description = "Периодически становится почти невидимым и получает вдвое меньше урона.",
+		Phase = { Every = 6, Duration = 1.5, Taken = 0.5 } },
+	BoneGuard       = { Name = "Bone Guard",       Health = 240,  Speed = 5.5, Reward = 60,  CoreDamage = 4, Scale = 1.15, Armor = 0.4, Event = "Halloween",
+		Description = "Медленный и крепкий. На половине HP броня ломается (40% → 10%).",
+		ArmorBreak = { At = 0.5, Armor = 0.1 } },
+	LivingScarecrow = { Name = "Living Scarecrow", Health = 120,  Speed = 8.5, Reward = 38,  CoreDamage = 3, Scale = 1.1, Event = "Halloween",
+		Description = "После смерти из него выбегают 2 соломенных существа.",
+		OnDeath = { Enemy = "StrawMinion", Count = 2 } },
+	StrawMinion     = { Name = "Straw Creature",   Health = 18,   Speed = 12,  Reward = 4,   CoreDamage = 1, Scale = 0.6, Event = "Halloween", Minion = true,
+		Description = "Соломенное существо из Живого пугала." },
+	FogWarlock      = { Name = "Fog Warlock",      Health = 150,  Speed = 7.5, Reward = 55,  CoreDamage = 4, Scale = 1.1, Event = "Halloween",
+		Description = "Создаёт туман: враги рядом ускоряются на 30% на 2.5 с.",
+		Fog = { Every = 6, Radius = 9, Speed = 0.3, Duration = 2.5 } },
+	PumpkinBrute    = { Name = "Pumpkin Brute",    Health = 560,  Speed = 5,   Reward = 110, CoreDamage = 8, Scale = 1.55, Event = "Halloween",
+		Description = "Огромный тыквенный громила. Много HP, медленный." },
+	NightReaper     = { Name = "Night Reaper",     Health = 1500, Speed = 6,   Reward = 380, CoreDamage = 20, Scale = 1.8, Armor = 0.2, Event = "Halloween", MiniBoss = true,
+		Description = "Мини-босс. Каждые 10 с на 3 с ставит защиту: получает вдвое меньше урона.",
+		Shield = { Every = 10, Duration = 3, Taken = 0.5 } },
+	-- ФИНАЛЬНЫЕ БОССЫ (по одному на сложность)
+	GraveWarden     = { Name = "Grave Warden",     Health = 3000, Speed = 4.2, Reward = 2500, CoreDamage = 100, Scale = 2.4, Armor = 0.5, IsBoss = true, BossGems = 150, Event = "Halloween",
+		Description = "Босс ЛЁГКОЙ сложности. Мощная броня трескается по мере потери HP. Медленный.",
+		ArmorScale = true, SpawnStyle = "Grave" },
+	FogReaper       = { Name = "Fog Reaper",       Health = 4500, Speed = 5,   Reward = 3500, CoreDamage = 100, Scale = 2.5, Armor = 0.15, IsBoss = true, BossGems = 250, Event = "Halloween",
+		Description = "Босс СРЕДНЕЙ сложности. Ускоряется, создаёт туман, ставит защиту. На 50% HP — красное свечение.",
+		Haste = { Every = 12, Duration = 3, Speed = 0.6 },
+		Fog = { Every = 8, Radius = 10, Speed = 0.3, Duration = 3 },
+		Shield = { Every = 15, Duration = 3, Taken = 0.5 },
+		Enrage = { At = 0.5, Speed = 0.15 }, SpawnStyle = "FogVortex" },
+	CursedMonarch   = { Name = "Cursed Monarch",   Health = 7000, Speed = 4.2, Reward = 5000, CoreDamage = 100, Scale = 2.7, Armor = 0.15, IsBoss = true, BossGems = 400, Event = "Halloween",
+		Description = "Босс СЛОЖНОЙ сложности. Огненная аура, защита на участках дороги, на 50% HP — вторая фаза и 2 Тыквенных громилы.",
+		-- участки дороги (доля длины пути), где броня монарха +35%
+		ArmorZones = { { 0.28, 0.40, 0.35 }, { 0.60, 0.72, 0.35 } },
+		FireAura = 1.5, -- союзники при столкновении теряют в 1.5 раза больше HP
+		Enrage = { At = 0.5, Spawn = { "PumpkinBrute", 2 } }, SpawnStyle = "Portal" },
 }
 
 ------------------------------------------------------------------------
@@ -704,6 +1076,56 @@ Config.Map = {
 }
 
 ------------------------------------------------------------------------
+-- КАРТЫ. Void — обычная карта, Halloween — Haunted Hollow (только из очереди на Хэллоуин-острове).
+-- Path у Хэллоуин-карты задан относительно Center.
+------------------------------------------------------------------------
+Config.Map.Key = "Void"
+Config.Map.Center = Vector3.new(0, 60, 0)
+Config.Map.BattleSpawn = Config.BattleSpawn
+
+Config.Maps = {
+	Void = Config.Map,
+	Halloween = {
+		Key = "Halloween",
+		Name = "Haunted Hollow",
+		Center = Vector3.new(560, 60, 0),
+		GroundY = 60,
+		PathWidth = 10,
+		IslandSize = Vector2.new(270, 210),
+		BattleSpawn = Vector3.new(590, 60, 45),
+		MaxWave = 20,
+		Path = {
+			{ -112, -72 }, { -50, -72 }, { -50, -22 }, { -100, -22 }, { -100, 40 }, { -62, 76 },
+			{ 0, 76 }, { 0, 12 }, { 40, -28 }, { 40, -76 }, { 96, -76 }, { 96, 10 }, { 62, 40 },
+			{ 62, 82 }, { 112, 82 },
+		},
+		-- BOSS — подставляется финальный босс выбранной сложности (Config.Halloween.Bosses)
+		Waves = {
+			[1]  = { { "CursedDead", 8, 1.2 } },
+			[2]  = { { "CursedDead", 10, 0.9 }, { "PumpkinRunner", 4, 1.0 } },
+			[3]  = { { "PumpkinRunner", 8, 0.7 }, { "CursedDead", 8, 0.8 } },
+			[4]  = { { "PhantomWarrior", 4, 1.8 }, { "CursedDead", 10, 0.7 } },
+			[5]  = { { "LivingScarecrow", 4, 2.0 }, { "PumpkinRunner", 10, 0.5 } },
+			[6]  = { { "BoneGuard", 3, 3.0 }, { "PhantomWarrior", 6, 1.2 } },
+			[7]  = { { "FogWarlock", 2, 4.0 }, { "CursedDead", 16, 0.5 }, { "PumpkinRunner", 8, 0.5 } },
+			[8]  = { { "LivingScarecrow", 6, 1.5 }, { "BoneGuard", 4, 2.5 } },
+			[9]  = { { "PhantomWarrior", 10, 0.9 }, { "FogWarlock", 3, 3.0 } },
+			[10] = { { "PumpkinBrute", 2, 5.0 }, { "NightReaper", 1, 0 }, { "PumpkinRunner", 12, 0.4 } },
+			[11] = { { "BoneGuard", 8, 1.6 }, { "LivingScarecrow", 6, 1.2 } },
+			[12] = { { "FogWarlock", 4, 2.5 }, { "PhantomWarrior", 12, 0.7 }, { "CursedDead", 20, 0.3 } },
+			[13] = { { "PumpkinBrute", 4, 3.5 }, { "PumpkinRunner", 20, 0.35 } },
+			[14] = { { "BoneGuard", 10, 1.2 }, { "FogWarlock", 5, 2.0 } },
+			[15] = { { "NightReaper", 2, 6.0 }, { "LivingScarecrow", 10, 0.9 }, { "PhantomWarrior", 10, 0.7 } },
+			[16] = { { "PumpkinBrute", 6, 2.5 }, { "BoneGuard", 8, 1.0 } },
+			[17] = { { "FogWarlock", 6, 1.5 }, { "PhantomWarrior", 16, 0.5 }, { "PumpkinRunner", 25, 0.3 } },
+			[18] = { { "NightReaper", 3, 5.0 }, { "PumpkinBrute", 6, 2.0 } },
+			[19] = { { "PumpkinBrute", 8, 1.8 }, { "BoneGuard", 12, 0.8 }, { "LivingScarecrow", 10, 0.8 } },
+			[20] = { { "FogWarlock", 4, 2.0 }, { "BOSS", 1, 0 }, { "PumpkinBrute", 4, 4.0 }, { "NightReaper", 2, 6.0 } },
+		},
+	},
+}
+
+------------------------------------------------------------------------
 -- Утилиты
 ------------------------------------------------------------------------
 function Config.GetUnitStats(unitId, level)
@@ -743,17 +1165,33 @@ local Config = require(script.Parent.Config)
 local PathUtil = {}
 
 local points = {}
-for i, p in ipairs(Config.Map.Path) do
-	points[i] = Vector3.new(p[1], Config.Map.GroundY, p[2])
-end
-
 local cumulative = { 0 }
-for i = 2, #points do
-	cumulative[i] = cumulative[i - 1] + (points[i] - points[i - 1]).Magnitude
-end
+local mapCfg = Config.Map
 
-PathUtil.Points = points
-PathUtil.Length = cumulative[#cumulative]
+-- Перестроить дорогу для карты (Void / Halloween). Сервер и клиент вызывают при смене карты.
+function PathUtil.SetMap(key)
+	mapCfg = (Config.Maps and Config.Maps[key]) or Config.Map
+	local c = mapCfg.Center or Vector3.new()
+	local rel = mapCfg ~= Config.Map
+	points = {}
+	for i, p in ipairs(mapCfg.Path) do
+		points[i] = rel and Vector3.new(c.X + p[1], mapCfg.GroundY, c.Z + p[2]) or Vector3.new(p[1], mapCfg.GroundY, p[2])
+	end
+	cumulative = { 0 }
+	for i = 2, #points do
+		cumulative[i] = cumulative[i - 1] + (points[i] - points[i - 1]).Magnitude
+	end
+	PathUtil.Points = points
+	PathUtil.Length = cumulative[#cumulative]
+	PathUtil.MapKey = mapCfg.Key or "Void"
+	PathUtil.Map = mapCfg
+end
+PathUtil.SetMap("Void")
+
+-- Доля пройденного пути (0..1)
+function PathUtil.Fraction(d)
+	return d / PathUtil.Length
+end
 
 -- Позиция и направление на расстоянии d от начала дороги
 function PathUtil.PositionAt(d)
@@ -815,12 +1253,13 @@ end
 -- Проверка позиции для установки (используется и клиентом для превью, и сервером)
 function PathUtil.IsPlacementClear(pos)
 	local s = Config.Settings
-	local half = Config.Map.PathWidth / 2
+	local half = mapCfg.PathWidth / 2
 	if PathUtil.DistanceToPath(pos) < half + s.PathClearance then
 		return false, "Нельзя ставить на дорогу"
 	end
-	local size = Config.Map.IslandSize
-	if math.abs(pos.X) > size.X / 2 - 3 or math.abs(pos.Z) > size.Y / 2 - 3 then
+	local size = mapCfg.IslandSize
+	local c = mapCfg.Center or Vector3.new()
+	if math.abs(pos.X - c.X) > size.X / 2 - 3 or math.abs(pos.Z - c.Z) > size.Y / 2 - 3 then
 		return false, "Слишком близко к краю"
 	end
 	if PathUtil.FlatDistance(pos, points[1]) < 14 then
@@ -1093,6 +1532,1438 @@ function Kit.Calm(root, amount)
 end
 
 return Kit
+]======] }
+FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "HalloweenModels" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenModels
+-- Хэллоуинские юниты (R6 в угловатом стиле), союзники-призывы и 3D-иконки рун.
+-- Подключается из UnitModels: require(HalloweenModels)(UnitModels).
+--   UnitModels.Register(id, builder, rarity) — 11 юнитов события
+--   UnitModels.BuildAlly(allyId) -> rig   (R6 с моторами RS/LS/RH/LH/Neck/Root для ходьбы)
+--   UnitModels.BuildRune(runeId) -> { Model, Core }   (заякоренные детали, центр в начале координат)
+
+local Config = require(script.Parent.Config)
+
+return function(UnitModels)
+	local H = UnitModels.H
+	local Kit = UnitModels.Kit
+	local M = H.M
+	local rgb = H.rgb
+	local GRIP, AIM = H.GRIP, H.AIM
+	local figure, eyes, belt, robe, mantle = H.figure, H.eyes, H.belt, H.robe, H.mantle
+	local muzzle, shaft, levelAura, capeWith = H.muzzle, H.shaft, H.levelAura, H.capeWith
+
+	local V = Vector3.new
+	local V2 = Vector2.new
+	local CF = CFrame.new
+	local ANG = CFrame.Angles
+	local rad = math.rad
+	local PI = math.pi
+
+	local function lite()
+		return UnitModels.Lite
+	end
+
+	-- Палитра Хэллоуина: чёрный, тёмно-фиолетовый, оранжевый, бордовый, золото
+	local HW = {
+		Black = rgb(18, 14, 22),
+		Coal = rgb(32, 26, 38),
+		Night = rgb(26, 22, 40),
+		Purple = rgb(58, 30, 86),
+		PurpleDeep = rgb(36, 18, 54),
+		Violet = rgb(150, 70, 230),
+		Orange = rgb(255, 130, 30),
+		OrangeDim = rgb(170, 78, 22),
+		Pumpkin = rgb(214, 104, 28),
+		PumpkinDark = rgb(150, 66, 18),
+		Burgundy = rgb(98, 22, 38),
+		BurgDark = rgb(58, 14, 24),
+		Gold = rgb(214, 168, 70),
+		GoldDark = rgb(146, 108, 46),
+		Edge = rgb(150, 124, 96),
+		EdgeCool = rgb(120, 112, 140),
+		Bone = rgb(222, 212, 192),
+		Straw = rgb(206, 166, 82),
+		StrawDark = rgb(150, 112, 52),
+		Burlap = rgb(150, 118, 78),
+		Wood = rgb(74, 48, 30),
+		WoodLight = rgb(120, 82, 50),
+		Leather = rgb(62, 40, 30),
+		Iron = rgb(70, 68, 78),
+		Green = rgb(120, 255, 110),
+		GreenDim = rgb(60, 140, 60),
+		Ghost = rgb(110, 190, 255),
+		GhostDeep = rgb(40, 80, 150),
+		Red = rgb(235, 30, 50),
+		Pale = rgb(196, 190, 200),
+		Flame = rgb(255, 190, 80),
+	}
+
+	------------------------------------------------------------------------
+	-- ДЕТАЛИ
+	------------------------------------------------------------------------
+	-- Треугольник в плоскости XY узла cf (виден спереди), вершина вверх
+	local function tri(r, limb, cf, w, h, color, mat, depth)
+		local F = cf * ANG(0, PI / 2, 0)
+		local d = depth or 0.05
+		local a = r:Wedge(limb, V(d, h, w / 2), F * CF(0, 0, -w / 4), color, mat or M.Neon)
+		local b = r:Wedge(limb, V(d, h, w / 2), F * CF(0, 0, w / 4) * ANG(0, PI, 0), color, mat or M.Neon)
+		return { a, b }
+	end
+
+	-- Спрятать базовый куб головы, который добавляет figure()
+	local function hideHeadBox(r)
+		for _, d in ipairs(r.Model:GetChildren()) do
+			if d.Name == "Detail" and d.Size == V(1.2, 1.2, 1.2) then
+				local w = d:FindFirstChildOfClass("Weld")
+				if w and w.Part0 == r.Head then
+					d.Transparency = 1
+				end
+			end
+		end
+	end
+
+	-- Взгляд «вниз по миру» в координатах руки при позе idle (для нитей и висящих предметов)
+	local function downIn(pose)
+		local rot = ANG(rad(pose[1]), rad(pose[2]), rad(pose[3]))
+		local v = rot:Inverse() * V(0, -1, 0)
+		return V(v.X, v.Y, v.Z).Unit
+	end
+
+	-- Тыква из 8 граней-рёбер вокруг оси Y; лицо смотрит в -Z. Возвращает список деталей лица.
+	local function pumpkin(r, limb, cf, R, h, color, edge, faceColor, o)
+		o = o or {}
+		local w = 2 * R * math.tan(rad(22.5)) * 1.12
+		local ribs = {}
+		-- рёбра чередуются по цвету и высоте; между ними — тёмные бороздки
+		local mid = color:Lerp(edge, 0.35)
+		for k = 0, 7 do
+			local a = k * PI / 4
+			local hh = (k % 2 == 0) and h or h * 0.9
+			local pos = V(math.sin(a) * R * 0.6, 0, -math.cos(a) * R * 0.6)
+			ribs[#ribs + 1] = r:Box(limb, V(w, hh, R * 0.8), cf * CF(pos) * ANG(0, -a, 0), (k % 2 == 0) and color or mid, M.Plastic)
+			if not o.Cheap and not lite() then
+				local g = a + PI / 8
+				r:Box(limb, V(0.06, h * 0.86, 0.06), cf * CF(math.sin(g) * R * 0.97, 0, -math.cos(g) * R * 0.97) * ANG(0, -g, 0), edge, M.Plastic)
+			end
+		end
+		-- верх и низ
+		r:Box(limb, V(R * 1.3, h * 0.1, R * 1.3), cf * CF(0, h / 2 - h * 0.02, 0) * ANG(0, PI / 4, 0), edge, M.Plastic)
+		-- черенок
+		Kit.bar(r, limb, cf * V(0, h / 2, 0), cf * V(0.08 * R, h / 2 + h * 0.26, 0.05 * R), V2(0.16 * R, 0.16 * R), o.Stem or rgb(66, 74, 34), M.Wood)
+		-- вырезанное лицо (светится)
+		local face = {}
+		if faceColor then
+			local z = -R - 0.03
+			for _, s in ipairs({ -1, 1 }) do
+				for _, p in ipairs(tri(r, limb, cf * CF(0.3 * R * s, h * 0.14, z) * ANG(0, 0, rad(8 * s)), 0.36 * R, 0.3 * R, faceColor, M.Neon, 0.06)) do
+					face[#face + 1] = p
+				end
+			end
+			if not o.Cheap then
+				for _, p in ipairs(tri(r, limb, cf * CF(0, -h * 0.02, z), 0.14 * R, 0.13 * R, faceColor, M.Neon, 0.06)) do
+					face[#face + 1] = p
+				end
+			end
+			face[#face + 1] = r:Neon(limb, V(0.95 * R, 0.17 * R, 0.06), cf * CF(0, -h * 0.22, z), faceColor)
+			-- зубы
+			if not o.Cheap then
+				for _, x in ipairs({ -0.24, 0.24 }) do
+					r:Box(limb, V(0.14 * R, 0.1 * R, 0.07), cf * CF(x * R, -h * 0.19, z - 0.01), color, M.Plastic)
+				end
+				r:Box(limb, V(0.14 * R, 0.1 * R, 0.07), cf * CF(0, -h * 0.25, z - 0.01), color, M.Plastic)
+			end
+		end
+		return face
+	end
+
+	-- Фонарь: крыша, кольцо, стекло, огонёк внутри. cf — центр стекла. Возвращает огонёк.
+	local function lantern(r, limb, cf, s, frame, glow, glass)
+		Kit.bevel(r, limb, V(0.72, 0.16, 0.72) * s, cf * CF(0, 0.42 * s, 0), frame, false)
+		Kit.spike(r, limb, cf * V(0, 0.48 * s, 0), cf * V(0, 0.8 * s, 0), 0.52 * s, frame, M.Metal)
+		r:Box(limb, V(0.06, 0.3, 0.3) * s, cf * CF(0, 0.92 * s, 0), frame, M.Metal)
+		r:Box(limb, V(0.06, 0.06, 0.3) * s, cf * CF(0, 1.06 * s, 0), frame, M.Metal)
+		for _, x in ipairs({ -1, 1 }) do
+			for _, z in ipairs({ -1, 1 }) do
+				r:Box(limb, V(0.07, 0.7, 0.07) * s, cf * CF(0.27 * s * x, 0, 0.27 * s * z), frame, M.Metal)
+			end
+		end
+		r:Box(limb, V(0.5, 0.6, 0.5) * s, cf, glass or rgb(255, 170, 70), M.Glass, { Transparency = 0.45 })
+		local flame = r:Neon(limb, V(0.22, 0.32, 0.22) * s, cf * CF(0, -0.03 * s, 0) * ANG(0, PI / 4, 0), glow)
+		Kit.bevel(r, limb, V(0.66, 0.14, 0.66) * s, cf * CF(0, -0.38 * s, 0), frame, false)
+		r:Glow(flame, glow, 9, 1.4)
+		return flame
+	end
+
+	-- Корона: кольцо-восьмиугольник с зубцами (cf — центр низа короны)
+	local function kingCrown(r, limb, cf, R, h, color, gemColor, n)
+		local sides = (n or 8) <= 4 and 4 or 8
+		local w = 2 * R * math.tan(PI / sides) * 1.1
+		for k = 0, sides - 1 do
+			local a = k * 2 * PI / sides
+			r:Box(limb, V(w, h * 0.32, 0.12), cf * CF(math.sin(a) * R, h * 0.16, -math.cos(a) * R) * ANG(0, -a, 0), color, M.Metal)
+		end
+		for k = 0, (n or 8) - 1 do
+			local a = k * 2 * PI / (n or 8)
+			local p = V(math.sin(a) * R, h * 0.3, -math.cos(a) * R)
+			local hh = (k % 2 == 0) and h or h * 0.62
+			tri(r, limb, cf * CF(p + V(0, hh / 2, 0)) * ANG(0, -a, 0), 0.36, hh, color, M.Metal, 0.12)
+		end
+		if gemColor then
+			Kit.gem(r, limb, 0.22, cf * CF(0, h * 0.16, -R - 0.07), gemColor)
+		end
+		if gemColor and sides == 8 then
+			Kit.gem(r, limb, 0.15, cf * CF(R * 0.72, h * 0.16, -R * 0.72 - 0.07) * ANG(0, rad(-45), 0), gemColor)
+			Kit.gem(r, limb, 0.15, cf * CF(-R * 0.72, h * 0.16, -R * 0.72 - 0.07) * ANG(0, rad(45), 0), gemColor)
+		end
+	end
+
+	-- Широкополая шляпа (cf — центр полей на голове)
+	local function brimHat(r, color, band, o)
+		o = o or {}
+		local Hd = r.Head
+		local y = o.Y or 0.62
+		Kit.bevel(r, Hd, V(o.Brim or 2.1, 0.12, o.Brim or 2.1), CF(0, y, 0) * ANG(rad(o.Tilt or 0), 0, 0), color, o.Edge or false, M.Fabric)
+		Kit.bevel(r, Hd, V(o.W or 1.3, o.Hgt or 0.6, o.W or 1.3), CF(0, y + (o.Hgt or 0.6) / 2, 0) * ANG(rad(o.Tilt or 0), 0, 0), color, o.Edge or false, M.Fabric)
+		if band then
+			r:Box(Hd, V((o.W or 1.3) + 0.04, 0.14, (o.W or 1.3) + 0.04), CF(0, y + 0.12, 0) * ANG(rad(o.Tilt or 0), 0, 0), band, M.Fabric)
+		end
+	end
+
+	-- Ворона: сидит на детали limb в точке cf (клюв в -Z cf)
+	local function crow(r, limb, cf, s, eye)
+		Kit.bevel(r, limb, V(0.36, 0.34, 0.6) * s, cf * CF(0, 0.17 * s, 0), HW.Black, rgb(60, 54, 70), M.Plastic)
+		r:Box(limb, V(0.3, 0.28, 0.3) * s, cf * CF(0, 0.42 * s, -0.3 * s), HW.Black, M.Plastic)
+		Kit.spike(r, limb, cf * V(0, 0.4 * s, -0.44 * s), cf * V(0, 0.36 * s, -0.72 * s), 0.14 * s, rgb(70, 60, 50), M.Plastic, true, 0.06)
+		for _, x in ipairs({ -1, 1 }) do
+			r:Neon(limb, V(0.04, 0.06, 0.06) * s, cf * CF(0.15 * s * x, 0.47 * s, -0.38 * s), eye or HW.Orange)
+			r:Wedge(limb, V(0.06, 0.24, 0.5) * s, cf * CF(0.2 * s * x, 0.24 * s, 0.05 * s), rgb(30, 26, 38), M.Plastic)
+		end
+		Kit.spike(r, limb, cf * V(0, 0.2 * s, 0.28 * s), cf * V(0, 0.12 * s, 0.62 * s), 0.26 * s, HW.Black, M.Plastic, true, 0.05)
+	end
+
+	-- Пятиконечная звезда (значок шерифа) в плоскости XY
+	local function star(r, limb, cf, s, color)
+		for k = 0, 4 do
+			tri(r, limb, cf * ANG(0, 0, k * 2 * PI / 5) * CF(0, 0.18 * s, 0), 0.22 * s, 0.32 * s, color, M.Metal, 0.05)
+		end
+		r:Box(limb, V(0.2, 0.2, 0.06) * s, cf * ANG(0, 0, rad(45)), color, M.Metal)
+	end
+
+	-- Склянка с жидкостью (cf — центр)
+	local function flask(r, limb, cf, s, liquid)
+		r:Box(limb, V(0.36, 0.42, 0.36) * s, cf, rgb(180, 220, 200), M.Glass, { Transparency = 0.5 })
+		local l = r:Neon(limb, V(0.3, 0.26, 0.3) * s, cf * CF(0, -0.06 * s, 0), liquid)
+		r:Box(limb, V(0.14, 0.2, 0.14) * s, cf * CF(0, 0.3 * s, 0), rgb(180, 220, 200), M.Glass, { Transparency = 0.5 })
+		r:Box(limb, V(0.12, 0.08, 0.12) * s, cf * CF(0, 0.43 * s, 0), HW.Wood, M.Wood)
+		return l
+	end
+
+	-- Колокол из уступов (cf — точка подвеса, колокол висит вниз)
+	local function bell(r, limb, cf, s, color, rim, glow)
+		Kit.bevel(r, limb, V(0.3, 0.2, 0.3) * s, cf * CF(0, -0.1 * s, 0), color, false)
+		Kit.bevel(r, limb, V(0.55, 0.3, 0.55) * s, cf * CF(0, -0.32 * s, 0), color, rim)
+		Kit.bevel(r, limb, V(0.72, 0.34, 0.72) * s, cf * CF(0, -0.62 * s, 0), color, rim)
+		Kit.bevel(r, limb, V(0.95, 0.18, 0.95) * s, cf * CF(0, -0.86 * s, 0), rim, false)
+		r:Box(limb, V(0.5, 0.1, 0.5) * s, cf * CF(0, -0.96 * s, 0), rgb(10, 8, 14), M.Plastic)
+		local c = r:Neon(limb, V(0.2, 0.2, 0.2) * s, cf * CF(0, -1.04 * s, 0) * ANG(rad(45), 0, rad(45)), glow)
+		return c
+	end
+
+	-- Игральная карта (cf — центр, лицом в -Z)
+	local function card(r, limb, cf, s, suit, back)
+		r:Box(limb, V(0.42, 0.6, 0.03) * s, cf, back and HW.Purple or rgb(236, 232, 240), M.Plastic)
+		if back then
+			r:Neon(limb, V(0.18, 0.18, 0.035) * s, cf * ANG(0, 0, rad(45)), HW.Violet)
+		else
+			r:Box(limb, V(0.14, 0.14, 0.035) * s, cf * ANG(0, 0, rad(45)), suit, M.Plastic)
+		end
+	end
+
+	-- Нить (тонкий светящийся отрезок)
+	local function thread(r, limb, a, b, color, d)
+		return r:Seg(limb, a, b, d or 0.035, color, M.Neon)
+	end
+
+	-- Шлейф пламени / искр вверх
+	local function embers(r, part, color, rate, size)
+		return r:Sparkles(part, color, { Rate = rate or 8, Up = 3, Size = size or 0.25, LifeMin = 0.5, LifeMax = 1.1 })
+	end
+
+	------------------------------------------------------------------------
+	-- 1. NIGHT WATCHMAN (Common) — ночной сторож с фонарём
+	------------------------------------------------------------------------
+	local function NightWatchman(lv)
+		local coat, coatD = rgb(40, 44, 66), rgb(28, 30, 46)
+		local r = figure("NightWatchman", { Torso = coat, Arm = coat, Leg = coatD, Skin = rgb(206, 178, 156), Edge = HW.EdgeCool })
+		eyes(r, rgb(30, 22, 18), false, 0.06)
+		r:Box(r.Head, V(0.5, 0.08, 0.05), CF(0, -0.3, -0.62), rgb(90, 60, 50))
+		-- седые бакенбарды
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(r.Head, V(0.12, 0.5, 0.5), CF(0.62 * s, -0.2, -0.1), rgb(150, 146, 150), M.Fabric)
+		end
+		-- фуражка-котелок
+		brimHat(r, HW.Coal, lv >= 2 and HW.Burgundy or nil, { Brim = 1.7, W = 1.24, Hgt = 0.5, Y = 0.6 })
+		-- длинное пальто с пуговицами
+		Kit.bevel(r, r.Torso, V(2.14, 1.2, 1.14), CF(0, 0.38, 0), coat, HW.EdgeCool, M.Fabric)
+		for k = 0, 2 do
+			r:Box(r.Torso, V(0.14, 0.14, 0.06), CF(0, 0.7 - k * 0.42, -0.6), lv >= 4 and HW.Gold or HW.Iron, M.Metal)
+		end
+		for _, s in ipairs({ -1, 1 }) do
+			Kit.bevel(r, r.Torso, V(0.98, 1.3, 0.16), CF(0.52 * s, -1.6, -0.5), coatD, false, M.Fabric)
+		end
+		belt(r, HW.Leather, HW.Iron)
+		if lv >= 2 then
+			-- шарф
+			Kit.bevel(r, r.Torso, V(1.4, 0.3, 1.2), CF(0, 0.98, 0), HW.Burgundy, false, M.Fabric)
+			r:Box(r.Torso, V(0.3, 0.8, 0.08), CF(0.4, 0.5, -0.62), HW.Burgundy, M.Fabric)
+		end
+		if lv >= 3 then
+			mantle(r, coatD, HW.EdgeCool)
+			-- связка ключей на поясе
+			r:Box(r.Torso, V(0.2, 0.2, 0.06), CF(-0.7, -0.95, -0.6), HW.Iron, M.Metal)
+			r:Box(r.Torso, V(0.06, 0.4, 0.06), CF(-0.62, -1.2, -0.62), HW.Gold, M.Metal)
+			r:Box(r.Torso, V(0.06, 0.34, 0.06), CF(-0.78, -1.17, -0.62), HW.Gold, M.Metal)
+		end
+		-- дубинка в левой руке
+		local club = lv >= 4 and HW.Iron or HW.Wood
+		r:Box(r.LArm, V(0.22, 1.7, 0.22), CF(0, -1.6, -0.3) * ANG(rad(-20), 0, 0), club, lv >= 4 and M.Metal or M.Wood)
+		if lv >= 4 then
+			star(r, r.Torso, CF(-0.55, 0.6, -0.62), 0.9, HW.Gold)
+		end
+		-- фонарь висит под кулаком правой руки
+		local pose = { 35, 0, 0 }
+		local dn = downIn(pose)
+		local hand = V(0, GRIP, -0.2)
+		r:Seg(r.RArm, hand, hand + dn * 0.55, 0.06, HW.Iron, M.Metal)
+		local lc = hand + dn * 1.05
+		local s = lv >= 4 and 1.25 or 1.05
+		local look = CFrame.lookAt(lc, lc + dn, V(0, 0, -1)) * ANG(-PI / 2, 0, 0)
+		local flame = lantern(r, r.RArm, look * ANG(PI, 0, 0), s, lv >= 4 and HW.Gold or HW.Iron, lv >= 5 and rgb(255, 230, 150) or HW.Flame)
+		muzzle(r, r.RArm, CF(lc))
+		if lv >= 3 then
+			embers(r, flame, HW.Flame, 4, 0.15)
+		end
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do
+			Kit.bevel(r, L, V(1.1, 0.5, 1.2), CF(0, -0.75, -0.08), HW.Leather, false)
+		end
+		if lv >= 5 then
+			capeWith(r, 1.9, 2.9, coatD, HW.Flame)
+		end
+		levelAura(r, lv, HW.Flame)
+		return r:Finish(Config.Units.NightWatchman.Scale, { RS = pose, LS = { 8, 0, -6 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 2. GRAVEDIGGER (Rare) — могильщик с лопатой
+	------------------------------------------------------------------------
+	local function Gravedigger(lv)
+		local shirt, pants = rgb(70, 58, 50), rgb(44, 38, 36)
+		local r = figure("Gravedigger", { Torso = shirt, Arm = shirt, Leg = pants, Skin = rgb(150, 160, 140), Edge = HW.Edge })
+		eyes(r, lv >= 3 and HW.Orange or rgb(30, 26, 22), lv >= 3, 0.08)
+		-- щетина/борода и кривой рот
+		Kit.bevel(r, r.Head, V(1.24, 0.42, 0.3), CF(0, -0.42, -0.5), rgb(70, 64, 58), false, M.Fabric)
+		-- шляпа с обвисшими полями
+		brimHat(r, rgb(46, 40, 36), rgb(90, 70, 46), { Brim = 1.9, W = 1.26, Hgt = 0.5, Y = 0.6, Tilt = -6 })
+		-- фартук
+		Kit.bevel(r, r.Torso, V(1.7, 1.9, 0.12), CF(0, -0.4, -0.56), HW.Leather, false, M.Fabric)
+		r:Box(r.Torso, V(0.08, 0.9, 0.06), CF(-0.5, 0.6, -0.56), HW.Leather, M.Fabric)
+		r:Box(r.Torso, V(0.08, 0.9, 0.06), CF(0.5, 0.6, -0.56), HW.Leather, M.Fabric)
+		belt(r, HW.Leather, HW.Iron)
+		-- закатанные рукава, перчатки
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			Kit.bevel(r, A, V(1.1, 0.3, 1.1), CF(0, -0.15, 0), rgb(96, 82, 70), false, M.Fabric)
+			Kit.bevel(r, A, V(1.06, 0.55, 1.06), CF(0, -0.78, 0), rgb(46, 36, 30), false, M.Fabric)
+		end
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do
+			Kit.bootA(r, L, HW.Leather, false, 1.1)
+		end
+		if lv >= 2 then
+			H.plateShoulders(r, HW.Iron, HW.Edge, 0.9)
+			-- комья земли на ботинках
+			r:Box(r.RLeg, V(0.4, 0.2, 0.3), CF(0.2, -0.95, -0.6), rgb(60, 46, 34), M.Plastic)
+		end
+		if lv >= 3 then
+			-- фонарь на поясе
+			lantern(r, r.Torso, CF(-0.95, -1.15, -0.25), 0.6, HW.Iron, HW.Flame)
+		end
+		if lv >= 4 then
+			-- надгробие-ранец за спиной
+			Kit.bevel(r, r.Torso, V(1.3, 1.6, 0.35), CF(0, 0.5, 0.75), rgb(96, 94, 104), rgb(140, 138, 150), M.Slate)
+			Kit.bevel(r, r.Torso, V(0.95, 0.3, 0.37), CF(0, 1.4, 0.75), rgb(96, 94, 104), false, M.Slate)
+			r:Box(r.Torso, V(0.15, 0.7, 0.05), CF(0, 0.6, 0.94), rgb(60, 58, 66), M.Slate)
+			r:Box(r.Torso, V(0.45, 0.15, 0.05), CF(0, 0.75, 0.94), rgb(60, 58, 66), M.Slate)
+		end
+		-- лопата: древко, Т-рукоять, полотно наверху
+		local wood = lv >= 4 and HW.Wood or HW.WoodLight
+		local top = shaft(r, r.RArm, -2.4, 1.5, wood, 0.2)
+		r:Box(r.RArm, V(0.55, 0.16, 0.16), CF(0, -2.45, -0.5), wood, M.Wood)
+		local bladeC = top + V(0, 0.6, 0)
+		local metal = lv >= 5 and HW.Gold or (lv >= 3 and HW.Iron or rgb(110, 90, 70))
+		Kit.bevel(r, r.RArm, V(0.1, 0.36, 0.3), CF(top + V(0, 0.08, 0)), metal, false)
+		Kit.bevel(r, r.RArm, V(0.08, 0.9, 0.85), CF(bladeC), metal, lv >= 3 and HW.Edge or false)
+		Kit.spike(r, r.RArm, bladeC + V(0, 0.45, 0), bladeC + V(0, 0.8, 0), 0.85, metal, M.Metal, true, 0.08)
+		if lv >= 5 then
+			r:Neon(r.RArm, V(0.1, 0.06, 0.8), CF(bladeC + V(0, 0.42, 0)), HW.Orange)
+		end
+		if lv >= 4 then
+			-- череп на полотне
+			Kit.bevel(r, r.RArm, V(0.06, 0.3, 0.3), CF(bladeC + V(-0.06, 0, 0)), HW.Bone, false, M.Plastic)
+		end
+		r:WeaponTrail(r.RArm, top, bladeC + V(0, 0.8, 0), lv >= 5 and HW.Orange or rgb(180, 150, 110))
+		muzzle(r, r.RArm, CF(bladeC + V(0, 0.6, 0)))
+		if lv >= 5 then
+			capeWith(r, 1.9, 2.8, rgb(46, 40, 36), HW.Orange)
+		end
+		levelAura(r, lv, HW.Orange)
+		return r:Finish(Config.Units.Gravedigger.Scale, { RS = { 25, 0, 0 }, LS = { 10, 0, -6 }, Neck = { 6, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 3. CURSED SCARECROW (Rare) — проклятое пугало с вороньём
+	------------------------------------------------------------------------
+	local function CursedScarecrow(lv)
+		local shirt = lv >= 4 and rgb(110, 40, 40) or rgb(120, 90, 60)
+		local r = figure("CursedScarecrow", { Torso = shirt, Arm = shirt, Leg = rgb(70, 60, 80), Skin = HW.Burlap, Edge = HW.StrawDark })
+		local Hd = r.Head
+		-- мешок-голова: прошитые глаза-кресты и рот
+		Kit.bevel(r, Hd, V(1.3, 1.25, 1.3), CF(0, 0, 0), HW.Burlap, HW.StrawDark, M.Fabric)
+		local glow = lv >= 3 and HW.Orange or rgb(40, 26, 18)
+		for _, s in ipairs({ -1, 1 }) do
+			for _, a in ipairs({ 45, -45 }) do
+				local f = lv >= 3 and r.Neon or r.Box
+				f(r, Hd, V(0.3, 0.07, 0.05), CF(0.28 * s, 0.12, -0.67) * ANG(0, 0, rad(a)), glow)
+			end
+		end
+		r:Box(Hd, V(0.7, 0.06, 0.05), CF(0, -0.28, -0.67), rgb(40, 26, 18))
+		for k = -2, 2 do
+			r:Box(Hd, V(0.04, 0.18, 0.05), CF(k * 0.15, -0.28, -0.68), rgb(40, 26, 18))
+		end
+		-- верёвка на шее и пучки соломы
+		r:Box(Hd, V(1.34, 0.12, 1.34), CF(0, -0.55, 0), HW.StrawDark, M.Fabric)
+		for k = 0, 5 do
+			local a = k / 6 * PI * 2
+			Kit.spike(r, Hd, V(math.cos(a) * 0.5, -0.6, math.sin(a) * 0.5), V(math.cos(a) * 0.85, -0.95, math.sin(a) * 0.85), 0.2, HW.Straw, M.Fabric, true, 0.05)
+		end
+		-- шляпа-колпак
+		if lv >= 2 then
+			H.wizardHat(r, rgb(60, 46, 34), lv >= 4 and HW.Burgundy or rgb(90, 70, 46), false)
+		end
+		-- рубаха с заплатками
+		Kit.bevel(r, r.Torso, V(2.14, 2.0, 1.14), CF(0, 0, 0), shirt, HW.StrawDark, M.Fabric)
+		r:Box(r.Torso, V(0.5, 0.45, 0.05), CF(0.45, -0.1, -0.6), rgb(150, 130, 90), M.Fabric)
+		r:Box(r.Torso, V(0.4, 0.4, 0.05), CF(-0.5, 0.5, -0.6), rgb(90, 70, 100), M.Fabric)
+		belt(r, rgb(120, 96, 50), HW.StrawDark)
+		-- солома из рукавов и штанин
+		for _, A in ipairs({ r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+			for k = -1, 1 do
+				Kit.spike(r, A, V(k * 0.28, -0.85, 0), V(k * 0.4, -1.35, -0.1), 0.24, HW.Straw, M.Fabric, true, 0.05)
+			end
+		end
+		-- крест-шест за спиной
+		r:Box(r.Torso, V(0.24, 4.6, 0.24), CF(0, -0.1, 0.72), HW.Wood, M.Wood)
+		r:Box(r.Torso, V(3.6, 0.22, 0.22), CF(0, 0.75, 0.72), HW.Wood, M.Wood)
+		-- вилы в правой руке
+		local top = shaft(r, r.RArm, -2.5, 2.0, HW.Wood, 0.18)
+		local fork = lv >= 4 and HW.Iron or rgb(100, 90, 80)
+		r:Box(r.RArm, V(0.12, 0.12, 0.85), CF(top + V(0, 0.05, 0)), fork, M.Metal)
+		for k = -1, 1 do
+			Kit.spike(r, r.RArm, top + V(0, 0.05, k * 0.38), top + V(0, 0.95, k * 0.38), 0.14, fork, M.Metal)
+		end
+		if lv >= 5 then
+			for k = -1, 1 do
+				r:Neon(r.RArm, V(0.05, 0.5, 0.05), CF(top + V(0, 0.45, k * 0.38 - 0.06)), HW.Orange)
+			end
+		end
+		muzzle(r, r.RArm, CF(top + V(0, 0.9, 0)))
+		r:WeaponTrail(r.RArm, top, top + V(0, 1, 0), HW.Orange)
+		-- вороны на плечах
+		if lv >= 3 then
+			crow(r, r.LArm, CF(0, 1.02, 0) * ANG(0, rad(20), 0), 1, HW.Orange)
+		end
+		if lv >= 4 then
+			crow(r, r.Torso, CF(1.35, 0.85, 0.72) * ANG(0, rad(-30), 0), 0.9, HW.Orange)
+		end
+		if lv >= 5 then
+			local hub = r:Orbit("OrbitCrows", r.Torso, CF(0, 1.9, 0), 2.2, 0, 0.2, HW.Black)
+			for i = 0, 2 do
+				local a = i / 3 * PI * 2
+				crow(r, hub, CF(math.cos(a) * 2.3, math.sin(a * 2) * 0.2, math.sin(a) * 2.3) * ANG(0, -a, 0), 0.9, HW.Orange)
+			end
+			capeWith(r, 1.9, 2.8, rgb(70, 54, 40), HW.Orange)
+		end
+		levelAura(r, lv, HW.Orange)
+		return r:Finish(Config.Units.CursedScarecrow.Scale, { RS = { 20, 0, 0 }, LS = { 75, 0, -25 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 4. CURSED SHERIFF (Epic) — проклятый шериф с зелёным револьвером
+	------------------------------------------------------------------------
+	local function revolver(r, A, o)
+		local F = AIM
+		Kit.bevel(r, A, V(0.26, 0.5, 0.34), F * CF(0, -0.15, 0.15) * ANG(rad(-18), 0, 0), o.Grip or HW.Wood, false, M.Wood)
+		Kit.bevel(r, A, V(0.3, 0.32, 0.5), F * CF(0, 0.14, -0.15), o.Metal, o.Edge)
+		local cyl = Kit.bevel(r, A, V(0.4, 0.34, 0.38), F * CF(0, 0.16, -0.5), o.Metal, o.Edge)
+		r:Box(A, V(0.18, 0.18, 1.1), F * CF(0, 0.24, -1.15), o.Metal, M.Metal)
+		r:Box(A, V(0.06, 0.1, 0.1), F * CF(0, 0.36, -1.6), o.Metal, M.Metal)
+		r:Neon(A, V(0.08, 0.08, 0.9), F * CF(0, 0.34, -1.1), o.Glow)
+		for k = 0, 1 do
+			r:Neon(A, V(0.42, 0.06, 0.06), F * CF(0, 0.16, -0.38 - k * 0.24), o.Glow)
+		end
+		return muzzle(r, A, F * CF(0, 0.24, -1.75)), cyl
+	end
+
+	local function CursedSheriff(lv)
+		local coat, coatD = rgb(76, 54, 38), rgb(46, 34, 28)
+		local r = figure("CursedSheriff", { Torso = rgb(56, 50, 46), Arm = coat, Leg = rgb(40, 36, 44), Skin = rgb(150, 170, 150), Edge = HW.Edge })
+		local glow = HW.Green
+		eyes(r, glow, true, 0.08)
+		-- платок на лице
+		Kit.bevel(r, r.Head, V(1.26, 0.5, 1.26), CF(0, -0.36, 0), lv >= 4 and HW.Burgundy or rgb(110, 40, 40), false, M.Fabric)
+		Kit.spike(r, r.Head, V(0, -0.6, -0.63), V(0, -0.95, -0.66), 0.5, lv >= 4 and HW.Burgundy or rgb(110, 40, 40), M.Fabric, true, 0.06)
+		-- ковбойская шляпа: широкие поля с загнутыми краями и тулья с вмятиной
+		local hatC = lv >= 3 and HW.Black or rgb(70, 50, 36)
+		Kit.bevel(r, r.Head, V(2.3, 0.12, 1.9), CF(0, 0.62, 0), hatC, false, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			Kit.bevel(r, r.Head, V(0.3, 0.12, 1.8), CF(1.2 * s, 0.75, 0) * ANG(0, 0, rad(35 * s)), hatC, false, M.Fabric)
+		end
+		Kit.bevel(r, r.Head, V(1.25, 0.62, 1.3), CF(0, 0.98, 0), hatC, false, M.Fabric)
+		r:Wedge(r.Head, V(1.25, 0.18, 0.6), CF(0, 1.38, -0.2) * ANG(0, PI, 0), hatC, M.Fabric)
+		r:Box(r.Head, V(1.29, 0.14, 1.34), CF(0, 0.74, 0), lv >= 3 and glow or rgb(140, 110, 70), lv >= 3 and M.Neon or M.Fabric)
+		if lv >= 4 then
+			-- черепок на шляпе
+			Kit.bevel(r, r.Head, V(0.34, 0.34, 0.08), CF(0, 0.92, -0.68), HW.Bone, false, M.Plastic)
+			for _, s in ipairs({ -1, 1 }) do
+				r:Neon(r.Head, V(0.08, 0.08, 0.04), CF(0.08 * s, 0.94, -0.73), glow)
+			end
+		end
+		-- жилет, значок, пояс с патронами
+		Kit.bevel(r, r.Torso, V(2.12, 1.3, 1.12), CF(0, 0.32, 0), rgb(46, 40, 38), HW.Edge, M.Fabric)
+		star(r, r.Torso, CF(-0.5, 0.55, -0.6), 1.05, lv >= 2 and HW.Gold or HW.Iron)
+		belt(r, HW.Leather, HW.Gold)
+		if lv >= 2 then
+			Kit.bar(r, r.Torso, V(-0.9, 0.95, -0.58), V(0.9, -0.7, -0.58), V2(0.2, 0.06), HW.Leather)
+			for k = 0, 3 do
+				local p = V(-0.6 + k * 0.38, 0.65 - k * 0.35, -0.62)
+				r:Box(r.Torso, V(0.08, 0.16, 0.06), CF(p) * ANG(0, 0, rad(42)), HW.Gold, M.Metal)
+			end
+		end
+		-- длинный плащ-пыльник: полы до колен
+		for _, s in ipairs({ -1, 1 }) do
+			Kit.bevel(r, r.Torso, V(0.98, 1.7, 0.16), CF(0.56 * s, -1.75, -0.44), coat, HW.Edge, M.Fabric)
+			Kit.bevel(r, r.Torso, V(0.16, 1.7, 1.1), CF(1.05 * s, -1.75, 0.0), coat, false, M.Fabric)
+		end
+		Kit.bevel(r, r.Torso, V(2.1, 1.8, 0.16), CF(0, -1.8, 0.52), coat, false, M.Fabric)
+		Kit.tatter(r, r.Torso, -2.6, 0.55, 2.0, 4, coat, M.Fabric, 2)
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			Kit.bevel(r, A, V(1.08, 0.4, 1.08), CF(0, -0.75, 0), HW.Leather, false, M.Fabric)
+		end
+		if lv >= 4 then
+			mantle(r, coatD, HW.Edge)
+		end
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do
+			Kit.bootA(r, L, HW.Leather, HW.Edge, 1.1)
+			r:Box(L, V(0.1, 0.1, 0.3), CF(0, -0.95, 0.65), HW.Gold, M.Metal) -- шпоры
+		end
+		local metal = lv >= 4 and rgb(40, 44, 40) or HW.Iron
+		local edge = lv >= 3 and HW.GreenDim or HW.Edge
+		revolver(r, r.RArm, { Metal = metal, Edge = edge, Glow = glow })
+		if lv >= 3 then
+			-- второй револьвер в левой руке
+			local m2 = r.Muzzle
+			revolver(r, r.LArm, { Metal = metal, Edge = edge, Glow = glow })
+			r.Muzzle = m2
+		else
+			-- кобура
+			Kit.bevel(r, r.Torso, V(0.3, 0.6, 0.42), CF(-1.0, -1.15, -0.1), HW.Leather, false, M.Fabric)
+		end
+		if lv >= 5 then
+			capeWith(r, 1.9, 3.0, coatD, glow)
+			-- проклятые цепи с черепами по поясу
+			Kit.chain(r, r.Torso, 4, 0.22, rgb(60, 90, 60), CF(0.95, -0.95, -0.35))
+		end
+		levelAura(r, lv, glow)
+		return r:Finish(Config.Units.CursedSheriff.Scale, { RS = { 72, 0, 0 }, LS = lv >= 3 and { 30, 0, -10 } or { 6, 0, -6 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 5. MIDNIGHT BELLRINGER (Epic) — горбатый звонарь с колоколом
+	------------------------------------------------------------------------
+	local function MidnightBellringer(lv)
+		local robeC, robeD = rgb(44, 34, 62), rgb(28, 22, 40)
+		local r = figure("MidnightBellringer", { Torso = robeC, Arm = robeC, Leg = robeD, Skin = rgb(170, 160, 176), Edge = HW.EdgeCool })
+		local glow = rgb(190, 160, 255)
+		H.hood(r, robeC, HW.EdgeCool, glow, true)
+		for _, x in ipairs({ -1, 1 }) do
+			r:Neon(r.Head, V(0.22, 0.13, 0.05), CF(0.24 * x, 0.06, -0.66), glow)
+		end
+		-- горб
+		Kit.bevel(r, r.Torso, V(1.7, 1.1, 0.8), CF(0, 0.65, 0.65) * ANG(rad(-15), 0, 0), robeC, HW.EdgeCool, M.Fabric)
+		robe(r, robeD, lv >= 3 and HW.Gold or nil, 1.8)
+		belt(r, rgb(70, 50, 40), HW.Gold, lv >= 2 and glow or nil)
+		-- верёвка от колокола на поясе
+		r:Box(r.Torso, V(0.12, 1.4, 0.12), CF(0.75, -1.5, -0.6), rgb(170, 150, 110), M.Fabric)
+		if lv >= 2 then
+			mantle(r, robeC, HW.EdgeCool)
+		end
+		-- ручной колокол: рукоять в кулаке, колокол под ней
+		local pose = { 62, 0, 10 }
+		local dn = downIn(pose)
+		local hand = V(0, GRIP, -0.15)
+		r:Seg(r.RArm, hand, hand + dn * 0.6, V2(0.2, 0.2), HW.Wood, M.Wood)
+		local s = ({ 0.8, 0.85, 0.9, 1.0, 1.1 })[lv]
+		local hang = CFrame.lookAt(hand + dn * 0.6, hand + dn * 2, V(0, 0, -1)) * ANG(-PI / 2, 0, 0) * ANG(PI, 0, 0)
+		local bc = lv >= 4 and HW.Gold or rgb(150, 110, 60)
+		local clap = bell(r, r.RArm, hang, s, bc, lv >= 4 and HW.GoldDark or rgb(110, 80, 44), glow)
+		muzzle(r, r.RArm, hang * CF(0, -0.9 * s, 0))
+		r:Glow(clap, glow, 8, 1)
+		-- призрачные часы над плечом
+		if lv >= 2 then
+			local c = r:Joint("OrbitGhostClock", r.Torso, V(0.1, 0.1, 0.1), CF(-1.4, 2.0, 0.6), CF(), glow)
+			c.Transparency = 1
+			r:Box(c, V(1.0, 1.0, 0.1), CF() * ANG(0, 0, rad(45)), glow, M.Glass, { Transparency = 0.55 })
+			r:Box(c, V(0.82, 0.82, 0.12), CF() * ANG(0, 0, rad(45)), rgb(30, 24, 50), M.Glass, { Transparency = 0.35 })
+			r:Neon(c, V(0.06, 0.34, 0.14), CF(0, 0.15, -0.02), glow)
+			r:Neon(c, V(0.26, 0.05, 0.14), CF(0.12, 0, -0.02), glow)
+		end
+		if lv >= 3 then
+			-- малый колокол на поясе
+			bell(r, r.Torso, CF(-0.95, -0.8, -0.3), 0.45, bc, rgb(110, 80, 44), glow)
+		end
+		if lv >= 4 then
+			local hub = r:Orbit("OrbitClocks", r.Torso, CF(0, 0.6, 0), 2.3, 0, 0.2, glow)
+			for i = 0, 2 do
+				local a = i / 3 * PI * 2
+				local p = CF(math.cos(a) * 2.3, 0, math.sin(a) * 2.3) * ANG(0, -a + PI / 2, 0)
+				r:Box(hub, V(0.6, 0.6, 0.08), p * ANG(0, 0, rad(45)), glow, M.Glass, { Transparency = 0.5 })
+				r:Neon(hub, V(0.05, 0.24, 0.1), p * CF(0, 0.1, 0), glow)
+			end
+		end
+		if lv >= 5 then
+			capeWith(r, 2.0, 3.0, robeC, glow)
+		end
+		levelAura(r, lv, glow)
+		return r:Finish(Config.Units.MidnightBellringer.Scale, { RS = pose, LS = { 15, 0, -8 }, Neck = { -4, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 6. PLAGUE DOCTOR (Legendary) — чумной доктор
+	------------------------------------------------------------------------
+	local function PlagueDoctor(lv)
+		local coat, coatD = rgb(30, 26, 32), rgb(20, 18, 24)
+		local r = figure("PlagueDoctor", { Torso = coat, Arm = coat, Leg = coatD, Skin = rgb(60, 46, 38), Edge = HW.EdgeCool })
+		local glow = HW.Green
+		local Hd = r.Head
+		-- кожаная маска с клювом и круглыми стёклами
+		local leather = lv >= 4 and rgb(70, 48, 36) or rgb(96, 72, 54)
+		Kit.bevel(r, Hd, V(1.3, 1.3, 1.3), CF(), leather, rgb(130, 100, 76), M.Fabric)
+		Kit.bevel(r, Hd, V(0.62, 0.5, 0.5), CF(0, -0.2, -0.82), leather, rgb(130, 100, 76), M.Fabric)
+		Kit.spike(r, Hd, V(0, -0.22, -1.05), V(0, -0.55, -2.1), 0.5, leather, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(Hd, V(0.38, 0.38, 0.08), CF(0.3 * s, 0.14, -0.67) * ANG(0, 0, rad(45)), HW.Gold, M.Metal)
+			r:Neon(Hd, V(0.3, 0.3, 0.1), CF(0.3 * s, 0.14, -0.68) * ANG(0, 0, rad(45)), lv >= 2 and glow or rgb(160, 200, 160))
+		end
+		-- широкополая шляпа
+		brimHat(r, HW.Black, lv >= 3 and HW.Burgundy or rgb(40, 34, 38), { Brim = 2.4, W = 1.4, Hgt = 0.75, Y = 0.68, Edge = HW.EdgeCool })
+		-- длинный плащ и кожаный фартук
+		robe(r, coat, lv >= 3 and HW.Burgundy or nil, 2.0)
+		Kit.bevel(r, r.Torso, V(1.4, 2.6, 0.12), CF(0, -0.9, -0.62), rgb(70, 52, 40), false, M.Fabric)
+		belt(r, HW.Leather, HW.Gold)
+		mantle(r, coatD, HW.EdgeCool)
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			Kit.bevel(r, A, V(1.1, 0.6, 1.1), CF(0, -0.78, 0), rgb(36, 30, 30), false, M.Fabric)
+		end
+		-- склянки на поясе
+		for k = 0, (lv >= 2 and 3 or 2) - 1 do
+			flask(r, r.Torso, CF(-0.75 + k * 0.42, -1.18, -0.68), 0.75, k % 2 == 0 and glow or rgb(200, 80, 255))
+		end
+		-- колба с ядом в правой руке
+		local f = flask(r, r.RArm, CF(0, GRIP - 0.42, -0.25), lv >= 4 and 1.5 or 1.25, glow)
+		muzzle(r, r.RArm, CF(0, GRIP - 0.42, -0.25))
+		r:Glow(f, glow, 7, 1)
+		if lv >= 3 then
+			r:Sparkles(f, glow, { Rate = 5, Up = 2, Size = 0.2 })
+		end
+		-- трость с черепом в левой руке
+		local top = shaft(r, r.LArm, -3.0, -0.4, HW.Black, 0.16)
+		Kit.bevel(r, r.LArm, V(0.42, 0.42, 0.42), CF(top + V(0, 0.2, 0)), HW.Bone, false, M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Neon(r.LArm, V(0.1, 0.08, 0.04), CF(top + V(0.1 * s, 0.24, -0.22)), glow)
+		end
+		-- ворон на плече
+		if lv >= 3 then
+			crow(r, r.LArm, CF(0.05, 1.02, 0) * ANG(0, rad(15), 0), 1.15, glow)
+		end
+		if lv >= 4 then
+			local hub = r:Orbit("OrbitFlasks", r.Torso, CF(0, 0.2, 0), 2.2, 0, 0.2, glow)
+			for i = 0, 2 do
+				local a = i / 3 * PI * 2
+				flask(r, hub, CF(math.cos(a) * 2.2, math.sin(a * 2) * 0.2, math.sin(a) * 2.2), 0.9, i == 1 and rgb(200, 80, 255) or glow)
+			end
+		end
+		if lv >= 5 then
+			capeWith(r, 2.1, 3.3, coatD, glow)
+			if not lite() then
+				local e = Instance.new("ParticleEmitter")
+				e.Name = "PoisonMist"
+				e.Color = ColorSequence.new(rgb(80, 160, 70))
+				e.LightEmission = 0.3
+				e.Rate = 4
+				e.Lifetime = NumberRange.new(1, 1.8)
+				e.Speed = NumberRange.new(0.2, 0.6)
+				e.SpreadAngle = Vector2.new(180, 180)
+				e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 1.6) })
+				e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 1) })
+				e.Parent = r.Torso
+			end
+		end
+		levelAura(r, lv, glow)
+		return r:Finish(Config.Units.PlagueDoctor.Scale, { RS = { 40, 0, 0 }, LS = { 15, 0, -8 }, Neck = { 6, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 7. PHANTOM KNIGHT (Legendary) — призрачный рыцарь
+	------------------------------------------------------------------------
+	local function PhantomKnight(lv)
+		local ghost, deep = rgb(70, 120, 190), rgb(34, 52, 96)
+		local edge = rgb(150, 210, 255)
+		local glow = HW.Ghost
+		local r = figure("PhantomKnight", { Torso = deep, Arm = deep, Leg = deep, Skin = rgb(20, 30, 50), Edge = edge })
+		-- полупрозрачная броня призрака
+		local function glass(limb, size, cf)
+			return r:Box(limb, size, cf, ghost, M.Glass, { Transparency = 0.35 })
+		end
+		H.helm(r, rgb(46, 70, 120), edge, glow, nil, true)
+		glass(r.Head, V(1.42, 1.56, 1.42), CF(0, 0.1, 0))
+		-- плюмаж из синего огня
+		local nPl = lv >= 4 and 3 or (lv >= 2 and 2 or 1)
+		for k = 1, nPl do
+			Kit.spike(r, r.Head, V(0, 0.75, 0.1 + k * 0.18), V(0, 1.4 + k * 0.1, 0.6 + k * 0.25), 0.4, glow, M.Neon, true, 0.08)
+		end
+		H.chest(r, rgb(46, 70, 120), edge, glow)
+		glass(r.Torso, V(2.25, 2.1, 1.25), CF())
+		belt(r, deep, edge, glow)
+		H.tassets(r, rgb(46, 70, 120), edge)
+		H.bigShoulders(r, rgb(46, 70, 120), edge, lv >= 3 and glow or nil, lv >= 4 and 1.15 or 1.0, lv >= 4 and 2 or 1)
+		H.bracers(r, rgb(46, 70, 120), edge)
+		-- ноги растворяются в дымке
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do
+			Kit.bevel(r, L, V(1.12, 0.8, 1.14), CF(0, 0.3, 0), rgb(46, 70, 120), edge)
+			glass(L, V(1.16, 2.0, 1.16), CF())
+		end
+		if not lite() then
+			local e = Instance.new("ParticleEmitter")
+			e.Name = "GhostMist"
+			e.Color = ColorSequence.new(glow)
+			e.LightEmission = 0.6
+			e.Rate = 6
+			e.Lifetime = NumberRange.new(0.8, 1.4)
+			e.Speed = NumberRange.new(0.2, 0.7)
+			e.SpreadAngle = Vector2.new(180, 180)
+			e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 1.2) })
+			e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 1) })
+			e.Parent = r.RLeg
+		end
+		-- светящийся синий меч (на MAX — большой двуручный)
+		local len = ({ 3.0, 3.2, 3.4, 3.7, 4.2 })[lv]
+		H.blade(r, r.RArm, { Len = len, W = lv >= 5 and 0.7 or 0.55, Blade = rgb(90, 150, 220), Guard = rgb(46, 70, 120), Edge = edge, Glow = glow, Core = lv >= 3 and rgb(220, 240, 255) or nil, Trail = glow })
+		if lv >= 3 then
+			capeWith(r, 2.0, 3.2, rgb(30, 50, 90), glow)
+		end
+		if lv >= 5 then
+			local hub = r:Orbit("OrbitSwords", r.Torso, CF(0, 0.4, 0), 2.6, 0, 0.2, glow)
+			for i = 0, 2 do
+				local a = i / 3 * PI * 2
+				local p = V(math.cos(a) * 2.6, 0, math.sin(a) * 2.6)
+				r:Box(hub, V(0.1, 1.6, 0.32), CF(p) * ANG(0, -a, 0), glow, M.Glass, { Transparency = 0.3 })
+				r:Box(hub, V(0.12, 0.12, 0.7), CF(p + V(0, -0.7, 0)) * ANG(0, -a, 0), edge, M.Metal)
+				Kit.spike(r, hub, p + V(0, 0.8, 0), p + V(0, 1.2, 0), 0.3, glow, M.Neon, true, 0.08)
+			end
+		end
+		levelAura(r, lv, glow)
+		local rig = r:Finish(Config.Units.PhantomKnight.Scale, { RS = { 30, 0, 0 }, LS = { 10, 0, -8 } })
+		return rig
+	end
+
+	------------------------------------------------------------------------
+	-- 8. DARK ILLUSIONIST (Legendary) — тёмный иллюзионист с картами
+	------------------------------------------------------------------------
+	local function DarkIllusionist(lv)
+		local suit, suitD = rgb(30, 22, 40), rgb(20, 14, 28)
+		local r = figure("DarkIllusionist", { Torso = suit, Arm = suit, Leg = suitD, Skin = rgb(214, 200, 210), Edge = HW.EdgeCool })
+		local glow = HW.Violet
+		local Hd = r.Head
+		-- маска-домино и улыбка
+		r:Box(Hd, V(1.1, 0.34, 0.06), CF(0, 0.12, -0.62), HW.Black, M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Neon(Hd, V(0.2, 0.1, 0.05), CF(0.27 * s, 0.12, -0.66), glow)
+		end
+		r:Box(Hd, V(0.46, 0.06, 0.04), CF(0, -0.3, -0.62) * ANG(0, 0, rad(-6)), rgb(80, 20, 40))
+		-- цилиндр
+		Kit.bevel(r, Hd, V(1.8, 0.1, 1.8), CF(0, 0.62, 0), HW.Black, false, M.Fabric)
+		Kit.bevel(r, Hd, V(1.15, 1.2, 1.15), CF(0, 1.25, 0), HW.Black, HW.EdgeCool, M.Fabric)
+		r:Box(Hd, V(1.19, 0.2, 1.19), CF(0, 0.8, 0), lv >= 3 and glow or HW.Burgundy, lv >= 3 and M.Neon or M.Fabric)
+		if lv >= 2 then
+			card(r, Hd, CF(0.4, 0.95, -0.62) * ANG(0, 0, rad(-15)), 0.8, HW.Red)
+		end
+		-- фрак: жилет, лацканы, фалды
+		Kit.bevel(r, r.Torso, V(2.12, 2.0, 1.12), CF(), suit, HW.EdgeCool, M.Fabric)
+		r:Box(r.Torso, V(0.6, 1.3, 0.06), CF(0, 0.3, -0.58), rgb(80, 20, 40), M.Fabric)
+		r:Wedge(r.Torso, V(0.5, 0.25, 0.06), CF(0, 0.9, -0.62) * ANG(0, 0, PI), rgb(236, 232, 240), M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(r.Torso, V(0.36, 1.3, 0.08), CF(0.48 * s, 0.35, -0.6) * ANG(0, 0, rad(12 * s)), HW.Black, M.Fabric)
+			Kit.bevel(r, r.Torso, V(0.85, 1.6, 0.14), CF(0.45 * s, -1.6, 0.52) * ANG(rad(-8), 0, rad(-6 * s)), suitD, false, M.Fabric)
+		end
+		belt(r, HW.Black, HW.Gold, lv >= 2 and glow or nil)
+		-- белые перчатки
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			Kit.bevel(r, A, V(1.06, 0.42, 1.06), CF(0, -0.8, 0), rgb(236, 232, 240), false, M.Plastic)
+		end
+		-- плащ с высоким воротником (красная подкладка)
+		local cape = capeWith(r, 2.1, 3.1, lv >= 4 and HW.Black or suitD, lv >= 3 and glow or nil)
+		r:Box(cape, V(1.95, 1.6, 0.04), CF(0, 0, -0.08), HW.Burgundy, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Wedge(r.Torso, V(0.15, 0.9, 0.7), CF(0.9 * s, 1.35, 0.25) * ANG(0, PI, 0), HW.Burgundy, M.Fabric)
+		end
+		-- веер карт в правой руке (лицом вперёд при поднятой руке)
+		local F = AIM
+		local n = lv >= 3 and 5 or 3
+		for k = 1, n do
+			local a = rad((k - (n + 1) / 2) * 22)
+			card(r, r.RArm, F * CF(0, 0.05, -0.4) * ANG(0, 0, -a) * CF(0, 0.42, -0.01 * k), 1.45,
+				(k % 2 == 0) and HW.Black or HW.Red)
+		end
+		muzzle(r, r.RArm, F * CF(0, 0.05, -0.5))
+		-- трость с кристаллом в левой руке
+		local top = shaft(r, r.LArm, -2.3, 1.3, HW.Black, 0.14)
+		r:Box(r.LArm, V(0.18, 0.12, 0.18), CF(top), HW.Gold, M.Metal)
+		r:Neon(r.LArm, V(0.32, 0.32, 0.32), CF(top + V(0, 0.25, 0)) * ANG(rad(45), 0, rad(45)), glow)
+		-- осколки зеркал
+		if lv >= 4 then
+			local hub = r:Orbit("OrbitMirrors", r.Torso, CF(0, 0.6, 0), 2.3, 0, 0.2, glow)
+			for i = 0, (lv >= 5 and 5 or 3) - 1 do
+				local cnt = lv >= 5 and 5 or 3
+				local a = i / cnt * PI * 2
+				local p = V(math.cos(a) * 2.3, math.sin(a * 3) * 0.25, math.sin(a) * 2.3)
+				tri(r, hub, CF(p) * ANG(0, -a + PI / 2, 0), 0.5, 0.8, rgb(200, 190, 230), M.Foil, 0.06)
+				r:Neon(hub, V(0.05, 0.4, 0.07), CF(p) * ANG(0, -a + PI / 2, 0), glow)
+			end
+		end
+		if lv >= 5 then
+			local hub2 = r:Orbit("OrbitCards", r.Head, CF(0, 1.9, 0), 1.2, 0, 0.2, glow)
+			for i = 0, 3 do
+				local a = i / 4 * PI * 2
+				card(r, hub2, CF(math.cos(a) * 1.2, 0, math.sin(a) * 1.2) * ANG(0, -a, rad(20)), 0.9, HW.Red, i % 2 == 1)
+			end
+		end
+		levelAura(r, lv, glow)
+		return r:Finish(Config.Units.DarkIllusionist.Scale, { RS = { 60, 0, 10 }, LS = { 10, 0, -8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 9. PUPPETEER (Mythic) — кукловод с крестовиной и красными нитями
+	------------------------------------------------------------------------
+	local function marionette(r, limb, cf, s, wood, head)
+		Kit.bevel(r, limb, V(0.5, 0.6, 0.3) * s, cf, wood, false, M.Wood)
+		r:Box(limb, V(0.4, 0.4, 0.4) * s, cf * CF(0, 0.55 * s, 0), head, M.Plastic)
+		for _, x in ipairs({ -1, 1 }) do
+			r:Neon(limb, V(0.06, 0.06, 0.04) * s, cf * CF(0.09 * s * x, 0.6 * s, -0.21 * s), HW.Red)
+			r:Box(limb, V(0.14, 0.5, 0.14) * s, cf * CF(0.34 * s * x, 0, 0), wood, M.Wood)
+			r:Box(limb, V(0.16, 0.5, 0.16) * s, cf * CF(0.14 * s * x, -0.58 * s, 0), wood, M.Wood)
+		end
+	end
+
+	local function HalloweenPuppeteer(lv)
+		local coat, coatD = rgb(26, 18, 26), rgb(16, 12, 18)
+		local red = HW.Red
+		local r = figure("HalloweenPuppeteer", { Torso = coat, Arm = coat, Leg = coatD, Skin = rgb(228, 222, 230), Edge = rgb(130, 70, 80) })
+		local Hd = r.Head
+		-- фарфоровая маска с трещиной и красной улыбкой
+		r:Box(Hd, V(1.0, 1.0, 0.06), CF(0, -0.02, -0.62), rgb(236, 230, 236), M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			tri(r, Hd, CF(0.26 * s, 0.14, -0.66) * ANG(0, 0, PI), 0.24, 0.16, red, M.Neon, 0.04)
+		end
+		r:Box(Hd, V(0.5, 0.06, 0.04), CF(0, -0.27, -0.66), red, M.Neon)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(Hd, V(0.06, 0.14, 0.04), CF(0.27 * s, -0.22, -0.66), red, M.Neon)
+		end
+		if lv >= 2 then
+			Kit.crack(r, Hd, { V(-0.1, 0.45, -0.66), V(-0.22, 0.25, -0.66), V(-0.12, 0.05, -0.66) }, 0.04, rgb(60, 40, 50))
+		end
+		-- высокий цилиндр с красной лентой
+		Kit.bevel(r, Hd, V(1.7, 0.1, 1.7), CF(0, 0.62, 0), HW.Black, false, M.Fabric)
+		Kit.bevel(r, Hd, V(1.1, 1.4, 1.1), CF(0, 1.35, 0) * ANG(0, 0, rad(-5)), HW.Black, rgb(90, 50, 60), M.Fabric)
+		r:Box(Hd, V(1.14, 0.18, 1.14), CF(0, 0.82, 0), lv >= 3 and red or HW.Burgundy, lv >= 3 and M.Neon or M.Fabric)
+		-- длинный фрак до пола, высокий воротник
+		robe(r, coat, HW.Burgundy, 2.0)
+		Kit.bevel(r, r.Torso, V(2.14, 1.2, 1.14), CF(0, 0.4, 0), HW.Burgundy, rgb(130, 70, 80), M.Fabric)
+		r:Box(r.Torso, V(0.5, 1.2, 0.06), CF(0, 0.4, -0.6), HW.Black, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Wedge(r.Torso, V(0.15, 1.1, 0.8), CF(0.95 * s, 1.45, 0.2) * ANG(0, PI, 0), coat, M.Fabric)
+		end
+		belt(r, HW.Black, HW.Gold, red)
+		mantle(r, coatD, rgb(130, 70, 80))
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			Kit.bevel(r, A, V(1.06, 0.42, 1.06), CF(0, -0.8, 0), rgb(236, 232, 240), false, M.Plastic)
+		end
+		-- крестовина-вага в правой руке, нити вниз к марионетке
+		local pose = { 70, 0, 18 }
+		local dn = downIn(pose)
+		local c = V(0, GRIP - 0.25, -0.1)
+		local up = CFrame.lookAt(c, c + dn, V(0, 0, -1)) * ANG(-PI / 2, 0, 0) * ANG(PI, 0, 0)
+		local wood = lv >= 4 and HW.Black or HW.Wood
+		r:Box(r.RArm, V(1.7, 0.16, 0.16), up, wood, M.Wood)
+		r:Box(r.RArm, V(0.16, 0.16, 1.3), up, wood, M.Wood)
+		if lv >= 4 then
+			for _, x in ipairs({ -0.85, 0.85 }) do
+				r:Box(r.RArm, V(0.2, 0.2, 0.2), up * CF(x, 0, 0), HW.Gold, M.Metal)
+			end
+		end
+		local ends = { V(-0.8, 0, 0), V(0.8, 0, 0), V(0, 0, -0.6), V(0, 0, 0.6) }
+		local L = ({ 1.6, 1.8, 2.0, 2.0, 2.2 })[lv]
+		for _, e in ipairs(ends) do
+			local a = up * e
+			thread(r, r.RArm, a, a + dn * L, red)
+		end
+		muzzle(r, r.RArm, CF(c + dn * L))
+		if lv >= 3 then
+			-- кукла на нитях
+			local mc = c + dn * (L + 0.55)
+			marionette(r, r.RArm, CFrame.lookAt(mc, mc + dn, V(0, 0, -1)) * ANG(-PI / 2, 0, 0) * ANG(PI, 0, 0), 1.2, HW.WoodLight, rgb(236, 230, 236))
+		end
+		-- левая рука: нити от пальцев
+		local pose2 = { 55, 0, -20 }
+		local dn2 = downIn(pose2)
+		for k = -1, 1 do
+			local a = V(k * 0.3, GRIP - 0.3, -0.1)
+			thread(r, r.LArm, a, a + dn2 * (1.4 + math.abs(k) * 0.3), red)
+		end
+		if lv >= 5 then
+			-- огромная катушка за спиной и куклы на орбите
+			for _, y in ipairs({ -0.6, 0.6 }) do
+				Kit.bevel(r, r.Torso, V(1.5, 0.2, 1.5), CF(0, 0.3 + y, 1.25) * ANG(0, PI / 4, 0), HW.Black, rgb(130, 70, 80))
+			end
+			r:Neon(r.Torso, V(1.1, 1.0, 1.1), CF(0, 0.3, 1.25), red)
+			local hub = r:Orbit("OrbitPuppets", r.Torso, CF(0, -0.4, 0), 2.6, 0, 0.2, red)
+			for i = 0, 2 do
+				local a = i / 3 * PI * 2
+				local p = CF(math.cos(a) * 2.6, 0, math.sin(a) * 2.6) * ANG(0, -a, 0)
+				marionette(r, hub, p, 1.0, HW.WoodLight, rgb(236, 230, 236))
+				thread(r, hub, p * V(0, 0.8, 0), p * V(0, 2.2, 0), red)
+			end
+		end
+		if lv >= 4 then
+			capeWith(r, 2.1, 3.4, HW.Burgundy, red)
+		end
+		levelAura(r, lv, red)
+		return r:Finish(Config.Units.HalloweenPuppeteer.Scale, { RS = pose, LS = pose2 })
+	end
+
+	------------------------------------------------------------------------
+	-- 10. HEADLESS EXECUTIONER (Mythic) — безголовый палач с огромным топором
+	------------------------------------------------------------------------
+	local function HeadlessExecutioner(lv)
+		local leather, iron = rgb(50, 32, 28), rgb(54, 52, 60)
+		local fire = HW.Orange
+		local r = figure("HeadlessExecutioner", { Torso = rgb(70, 50, 44), Arm = rgb(110, 80, 70), Leg = rgb(36, 28, 30), Skin = rgb(70, 50, 44), Edge = HW.Edge })
+		hideHeadBox(r)
+		-- обрубок шеи: железный ворот, тлеющие угли и пламя
+		Kit.bevel(r, r.Torso, V(1.3, 0.35, 1.0), CF(0, 1.12, 0), iron, HW.Edge)
+		local ember = r:Neon(r.Torso, V(0.8, 0.12, 0.6), CF(0, 1.32, 0), fire)
+		r:Box(r.Torso, V(0.5, 0.14, 0.4), CF(0, 1.36, 0), rgb(120, 30, 20), M.Plastic)
+		for k = 0, 3 do
+			local a = k / 4 * PI * 2 + 0.4
+			Kit.spike(r, r.Torso, V(math.cos(a) * 0.25, 1.35, math.sin(a) * 0.2), V(math.cos(a) * 0.32, 1.75 + (k % 2) * 0.2, math.sin(a) * 0.25), 0.22, fire, M.Neon, true, 0.05)
+		end
+		if not lite() then
+			local e = Instance.new("ParticleEmitter")
+			e.Name = "NeckFire"
+			e.Color = ColorSequence.new(rgb(255, 190, 80), rgb(255, 70, 20))
+			e.LightEmission = 1
+			e.LightInfluence = 0
+			e.Rate = 14
+			e.Lifetime = NumberRange.new(0.4, 0.8)
+			e.Speed = NumberRange.new(1.5, 3)
+			e.EmissionDirection = Enum.NormalId.Top
+			e.SpreadAngle = Vector2.new(15, 15)
+			e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0) })
+			e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+			e.Parent = ember
+		end
+		r:Glow(ember, fire, 10, 1.6)
+		-- кожаный нагрудник с ремнями, голые руки с наручами
+		Kit.bevel(r, r.Torso, V(2.14, 2.0, 1.14), CF(), leather, HW.Edge, M.Fabric)
+		Kit.bar(r, r.Torso, V(-0.9, 0.95, -0.6), V(0.9, -0.7, -0.6), V2(0.22, 0.07), rgb(30, 22, 20))
+		Kit.bar(r, r.Torso, V(0.9, 0.95, -0.6), V(-0.9, -0.7, -0.6), V2(0.22, 0.07), rgb(30, 22, 20))
+		r:Box(r.Torso, V(0.3, 0.3, 0.08), CF(0, 0.12, -0.64) * ANG(0, 0, rad(45)), HW.Iron, M.Metal)
+		belt(r, rgb(30, 22, 20), HW.Gold, lv >= 3 and fire or nil)
+		H.tassets(r, leather, HW.Edge)
+		H.bracers(r, iron, HW.Edge)
+		H.greaves(r, iron, HW.Edge, true)
+		if lv >= 2 then
+			H.bigShoulders(r, iron, HW.Edge, lv >= 4 and fire or nil, lv >= 4 and 1.15 or 1.0, lv >= 3 and 2 or 1)
+		end
+		-- капюшон палача висит на поясе
+		Kit.bevel(r, r.Torso, V(0.75, 0.85, 0.5), CF(-1.0, -1.3, -0.25), HW.Black, false, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(r.Torso, V(0.14, 0.1, 0.05), CF(-1.0 + 0.17 * s, -1.2, -0.52), lv >= 3 and fire or rgb(60, 20, 20), lv >= 3 and M.Neon or M.Plastic)
+		end
+		-- цепи
+		if lv >= 3 then
+			Kit.chain(r, r.LArm, 4, 0.26, HW.Iron, CF(0.55, -0.2, 0))
+			Kit.chain(r, r.Torso, 3, 0.24, HW.Iron, CF(0.9, -0.95, -0.4))
+		end
+		-- огромный топор палача: длинная рукоять, широкое лезвие-полумесяц
+		local top = shaft(r, r.RArm, -2.8, 2.6, lv >= 4 and HW.Black or HW.Wood, 0.26)
+		Kit.bevel(r, r.RArm, V(0.36, 0.25, 0.36), CF(V(0, -2.8, -0.5)), iron, false)
+		local R = ({ 1.3, 1.4, 1.5, 1.7, 1.9 })[lv]
+		local c = top + V(0, -0.4, -0.3)
+		local bladeC = lv >= 5 and rgb(30, 26, 32) or iron
+		local prev
+		for k = 0, 6 do
+			local phi = rad(-70 + k * 23.3)
+			local dir = V(0, math.sin(phi), -math.cos(phi))
+			Kit.bar(r, r.RArm, c + dir * 0.25, c + dir * R, V2(0.14, 2 * R * math.sin(rad(11.7)) + 0.1), bladeC, M.Metal)
+			local rim = c + dir * (R * 0.94)
+			if prev and lv >= 2 then
+				Kit.bar(r, r.RArm, prev, rim, V2(0.16, 0.08), fire, M.Neon)
+			end
+			prev = rim
+		end
+		Kit.bevel(r, r.RArm, V(0.3, 0.6, 0.6), CF(top + V(0, -0.4, 0)), iron, HW.Edge)
+		Kit.spike(r, r.RArm, top + V(0, -0.4, 0.2), top + V(0, -0.4, 0.8), 0.45, iron, M.Metal, true, 0.12)
+		if lv >= 4 then
+			Kit.crack(r, r.RArm, { c + V(0.08, 0.4, -0.5), c + V(0.08, 0.1, -0.8), c + V(0.08, -0.2, -0.6) }, 0.07, fire)
+		end
+		r:WeaponTrail(r.RArm, c + V(0, 0, -0.5), c + V(0, 0, -R), fire)
+		muzzle(r, r.RArm, CF(c + V(0, 0, -R)))
+		if lv >= 5 then
+			capeWith(r, 2.2, 3.4, HW.BurgDark, fire)
+			r:Orbit("OrbitEmbers", r.Torso, CF(0, 0.2, 0), 2.4, 5, 0.32, fire)
+			embers(r, ember, fire, 10, 0.3)
+		end
+		levelAura(r, lv, fire)
+		return r:Finish(Config.Units.HeadlessExecutioner.Scale, { RS = { 25, 0, 0 }, LS = { 20, 0, -8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 11. LANTERN KING (Secret) — Король фонарей
+	------------------------------------------------------------------------
+	local function LanternKing(lv)
+		local robeC, robeD = rgb(44, 20, 60), rgb(26, 12, 38)
+		local fire = HW.Orange
+		local r = figure("LanternKing", { Torso = robeC, Arm = robeC, Leg = robeD, Skin = HW.Pumpkin, Edge = HW.GoldDark })
+		hideHeadBox(r)
+		local Hd = r.Head
+		-- тыквенная голова с вырезанным светящимся лицом
+		pumpkin(r, Hd, CF(0, 0.12, 0), 0.92, 1.45, HW.Pumpkin, HW.PumpkinDark, lv >= 5 and rgb(255, 220, 120) or rgb(255, 170, 50))
+		local inner = r:Neon(Hd, V(0.9, 0.9, 0.9), CF(0, 0.12, 0), rgb(255, 120, 20), { Transparency = 0.2 })
+		r:Glow(inner, fire, 12, 1.8)
+		-- корона
+		kingCrown(r, Hd, CF(0, 0.82, 0), 0.62, lv >= 2 and 0.85 or 0.65, HW.Gold, lv >= 2 and fire or nil, 8)
+		-- королевская мантия
+		robe(r, robeD, HW.Gold, 2.0)
+		Kit.bevel(r, r.Torso, V(2.14, 2.0, 1.14), CF(), robeC, HW.GoldDark, M.Fabric)
+		r:Box(r.Torso, V(0.4, 2.0, 0.06), CF(0, 0, -0.58), HW.Gold, M.Fabric)
+		Kit.gem(r, r.Torso, 0.4, CF(0, 0.45, -0.64), fire, HW.Gold)
+		belt(r, HW.Black, HW.Gold, fire)
+		-- меховой воротник (оранжево-чёрный)
+		Kit.bevel(r, r.Torso, V(2.5, 0.45, 1.4), CF(0, 0.92, 0), HW.Black, HW.PumpkinDark, M.Fabric)
+		for k = -2, 2 do
+			r:Box(r.Torso, V(0.3, 0.2, 0.06), CF(k * 0.45, 0.92, -0.71), HW.PumpkinDark, M.Fabric)
+		end
+		if lv >= 4 then
+			H.bigShoulders(r, HW.Gold, HW.GoldDark, fire, 1.0, 1)
+		else
+			mantle(r, robeC, HW.GoldDark)
+		end
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			Kit.bevel(r, A, V(1.08, 0.45, 1.08), CF(0, -0.75, 0), HW.Gold, false)
+		end
+		-- плащ
+		capeWith(r, 2.2, lv >= 3 and 3.6 or 3.2, lv >= 3 and HW.Burgundy or robeD, fire)
+		-- посох-фонарь
+		local top = shaft(r, r.RArm, -2.6, 2.4, HW.Black, 0.22)
+		for _, y in ipairs({ -1.6, 0.4, 1.6 }) do
+			Kit.bevel(r, r.RArm, V(0.34, 0.14, 0.34), CF(0, y, -0.5), HW.Gold, false)
+		end
+		-- крюк и фонарь
+		local hook = { top, top + V(0, 0.5, -0.1), top + V(0, 0.7, -0.5), top + V(0, 0.5, -0.85) }
+		for i = 1, 3 do
+			Kit.bar(r, r.RArm, hook[i], hook[i + 1], V2(0.14, 0.14), HW.Gold, M.Metal)
+		end
+		local s = ({ 1.0, 1.1, 1.2, 1.3, 1.45 })[lv]
+		local lc = hook[4] + V(0, -0.85 * s, 0)
+		local flame = lantern(r, r.RArm, CF(lc), s, HW.Gold, rgb(255, 160, 40), rgb(255, 140, 50))
+		-- в фонаре — маленькая тыква
+		pumpkin(r, r.RArm, CF(lc + V(0, -0.02 * s, 0)), 0.16 * s, 0.24 * s, HW.Pumpkin, HW.PumpkinDark, nil, { Cheap = true })
+		embers(r, flame, fire, lv >= 4 and 10 or 5, 0.22)
+		muzzle(r, r.RArm, CF(lc))
+		-- огненные тыквы на орбите
+		if lv >= 3 then
+			local hub = r:Orbit("OrbitPumpkins", r.Torso, CF(0, 1.2, 0), 2.6, 0, 0.2, fire)
+			local n = lv >= 5 and 4 or 2
+			for i = 0, n - 1 do
+				local a = i / n * PI * 2
+				local p = CF(math.cos(a) * 2.6, math.sin(a * 2) * 0.3, math.sin(a) * 2.6) * ANG(0, -a - PI / 2, 0)
+				pumpkin(r, hub, p, 0.38, 0.55, HW.Pumpkin, HW.PumpkinDark, rgb(255, 190, 70), { Cheap = true })
+			end
+		end
+		if lv >= 5 then
+			embers(r, r.Torso, fire, 12, 0.3)
+		end
+		levelAura(r, lv, fire)
+		return r:Finish(Config.Units.LanternKing.Scale, { RS = { 22, 0, 0 }, LS = { 12, 0, -10 } })
+	end
+
+	UnitModels.Register("NightWatchman", NightWatchman, "Common")
+	UnitModels.Register("Gravedigger", Gravedigger, "Rare")
+	UnitModels.Register("CursedScarecrow", CursedScarecrow, "Rare")
+	UnitModels.Register("CursedSheriff", CursedSheriff, "Epic")
+	UnitModels.Register("MidnightBellringer", MidnightBellringer, "Epic")
+	UnitModels.Register("PlagueDoctor", PlagueDoctor, "Legendary")
+	UnitModels.Register("PhantomKnight", PhantomKnight, "Legendary")
+	UnitModels.Register("DarkIllusionist", DarkIllusionist, "Legendary")
+	UnitModels.Register("HalloweenPuppeteer", HalloweenPuppeteer, "Mythic")
+	UnitModels.Register("HeadlessExecutioner", HeadlessExecutioner, "Mythic")
+	UnitModels.Register("LanternKing", LanternKing, "Secret")
+
+	------------------------------------------------------------------------
+	-- СОЮЗНИКИ (призывы). Лёгкие R6-фигуры: до ~60 деталей
+	------------------------------------------------------------------------
+	local function plain(r, limb, size, cf, color, mat)
+		return r:Box(limb, size, cf, color, mat or M.Plastic)
+	end
+
+	-- Иллюзии: тёмно-фиолетовые, полупрозрачные, карты и зеркала
+	local function Illusion(id, tier)
+		local body = tier == 1 and rgb(16, 10, 24) or rgb(40, 22, 64)
+		local edge = rgb(170, 120, 230)
+		local glow = HW.Violet
+		local r = figure(id, { Torso = body, Arm = body, Leg = body, Skin = tier == 1 and rgb(16, 10, 24) or rgb(70, 40, 100), Edge = edge })
+		eyes(r, glow, true, 0.08)
+		local glassC = rgb(150, 100, 220)
+		if tier == 1 then
+			-- теневой двойник: чёрный силуэт в дымке
+			for _, L in ipairs({ r.Torso, r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+				plain(r, L, L.Size + V(0.06, 0.06, 0.06), CF(), glassC, M.Glass).Transparency = 0.7
+			end
+			H.hood(r, body, edge, glow, true)
+		elseif tier == 2 then
+			-- карточный солдат: тело — карта, копьё-пика
+			plain(r, r.Torso, V(2.0, 2.6, 0.12), CF(0, -0.2, -0.58), rgb(236, 232, 240))
+			plain(r, r.Torso, V(1.7, 2.3, 0.13), CF(0, -0.2, -0.58), HW.Red).Transparency = 0.85
+			for _, y in ipairs({ 0.6, -1.0 }) do
+				plain(r, r.Torso, V(0.4, 0.4, 0.14), CF(0, y, -0.6) * ANG(0, 0, rad(45)), HW.Red)
+			end
+			Kit.bevel(r, r.Head, V(1.3, 0.3, 1.3), CF(0, 0.65, 0), HW.Red, false)
+			for k = -1, 1 do
+				Kit.spike(r, r.Head, V(k * 0.4, 0.75, 0), V(k * 0.4, 1.15, 0), 0.3, HW.Gold, M.Metal, true, 0.08)
+			end
+			local top = shaft(r, r.RArm, -2.2, 2.0, HW.Black, 0.16)
+			Kit.spike(r, r.RArm, top, top + V(0, 0.8, 0), 0.5, HW.Red, M.Plastic, true, 0.1)
+		elseif tier == 3 then
+			-- зеркальный рыцарь: блестящая броня, зеркальный щит
+			H.helm(r, rgb(170, 160, 200), edge, glow, nil, false)
+			Kit.bevel(r, r.Torso, V(2.14, 1.1, 1.16), CF(0, 0.45, 0), rgb(170, 160, 200), edge, M.Foil)
+			H.plateShoulders(r, rgb(170, 160, 200), edge)
+			Kit.bevel(r, r.LArm, V(0.2, 2.0, 1.4), CF(-0.65, -0.6, -0.1), rgb(200, 190, 230), glow, M.Foil)
+			plain(r, r.LArm, V(0.22, 1.6, 1.0), CF(-0.66, -0.6, -0.1), glassC, M.Glass).Transparency = 0.4
+			H.blade(r, r.RArm, { Len = 2.2, W = 0.4, Blade = rgb(200, 190, 230), Guard = body, Glow = glow })
+		elseif tier == 4 then
+			-- фантомный маг: капюшон, мантия, посох со сферой
+			H.hood(r, rgb(60, 30, 96), edge, glow, true)
+			robe(r, rgb(46, 24, 76), edge, 1.7)
+			local top = shaft(r, r.RArm, -2.4, 1.9, HW.Black, 0.16)
+			r:Neon(r.RArm, V(0.5, 0.5, 0.5), CF(top + V(0, 0.35, 0)) * ANG(rad(45), 0, rad(45)), glow)
+			plain(r, r.RArm, V(0.75, 0.75, 0.75), CF(top + V(0, 0.35, 0)) * ANG(rad(45), 0, rad(45)), glassC, M.Glass).Transparency = 0.6
+		else
+			-- королевская иллюзия: корона, плащ, двойные клинки
+			kingCrown(r, r.Head, CF(0, 0.6, 0), 0.66, 0.6, rgb(200, 170, 240), glow, 4)
+			Kit.bevel(r, r.Torso, V(2.14, 1.1, 1.16), CF(0, 0.45, 0), rgb(90, 50, 140), HW.Gold, M.Foil)
+			H.plateShoulders(r, rgb(90, 50, 140), HW.Gold)
+			r:Cape(1.9, 2.6, rgb(60, 30, 96), false)
+			H.blade(r, r.RArm, { Len = 2.4, W = 0.45, Blade = rgb(200, 190, 230), Guard = HW.Gold, Glow = glow })
+			H.blade(r, r.LArm, { Len = 2.0, W = 0.4, Blade = rgb(200, 190, 230), Guard = HW.Gold, Glow = glow })
+		end
+		return r, glow
+	end
+
+	-- Куклы: деревянные шарниры, нити сверху
+	local function Puppet(id, tier)
+		local golden = id == "GoldenMarionette"
+		local wood = golden and HW.Gold or ({ HW.WoodLight, rgb(236, 230, 236), HW.Iron, rgb(40, 30, 36), rgb(90, 40, 60) })[tier]
+		local edge = golden and rgb(255, 230, 150) or ({ HW.Wood, rgb(190, 180, 196), HW.Edge, rgb(130, 70, 80), HW.Gold })[tier]
+		local r = figure(id, { Torso = wood, Arm = wood, Leg = wood, Skin = (tier == 2 or tier == 1) and rgb(236, 230, 236) or wood, Edge = edge })
+		-- лицо-маска с глазами-пуговицами
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(r.Head, V(0.24, 0.24, 0.05), CF(0.26 * s, 0.1, -0.62) * ANG(0, 0, rad(45)), HW.Black, M.Plastic)
+			r:Neon(r.Head, V(0.08, 0.08, 0.04), CF(0.26 * s, 0.1, -0.65), golden and HW.Orange or HW.Red)
+		end
+		r:Box(r.Head, V(0.5, 0.05, 0.04), CF(0, -0.3, -0.62), golden and HW.GoldDark or HW.Red, golden and M.Metal or M.Neon)
+		-- шарниры (суставы на плечах, бёдрах и шее)
+		local joint = golden and HW.GoldDark or (tier == 1 and HW.Wood or rgb(60, 50, 56))
+		for _, p in ipairs({ V(1.0, 0.7, 0), V(-1.0, 0.7, 0), V(0.5, -1.0, 0), V(-0.5, -1.0, 0), V(0, 1.0, 0) }) do
+			plain(r, r.Torso, V(0.45, 0.45, 0.45), CF(p) * ANG(rad(45), 0, rad(45)), joint, M.Metal)
+		end
+		for _, A in ipairs({ r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+			plain(r, A, V(1.06, 0.12, 1.06), CF(0, 0, 0), joint, M.Metal)
+		end
+		if tier == 2 and not golden then
+			-- фарфоровая кукла: платье и трещины
+			Kit.bevel(r, r.Torso, V(2.3, 1.4, 1.3), CF(0, -1.1, 0), rgb(110, 30, 60), false, M.Fabric)
+			Kit.crack(r, r.Head, { V(0.2, 0.5, -0.62), V(0.35, 0.2, -0.62), V(0.25, -0.05, -0.62) }, 0.04, rgb(60, 50, 60))
+			Kit.bevel(r, r.Head, V(1.3, 0.35, 1.3), CF(0, 0.55, 0.05), rgb(60, 30, 20), false, M.Fabric)
+		elseif tier >= 3 or golden then
+			-- броня
+			Kit.bevel(r, r.Torso, V(2.14, 1.1, 1.16), CF(0, 0.45, 0), golden and HW.Gold or (tier == 3 and HW.Iron or rgb(60, 40, 50)), edge, golden and M.Foil or M.Metal)
+			H.plateShoulders(r, golden and HW.Gold or (tier == 3 and HW.Iron or rgb(60, 40, 50)), edge)
+		end
+		if tier >= 4 or golden then
+			H.blade(r, r.RArm, { Len = tier >= 5 and 2.6 or 2.2, W = 0.45, Blade = golden and HW.Gold or HW.Iron, Guard = edge, Glow = golden and HW.Orange or HW.Red })
+		elseif tier == 3 then
+			H.shield(r, r.LArm, { Color = HW.Iron, Edge = edge, H = 1.6, W = 1.1 })
+		end
+		if tier >= 5 or golden then
+			kingCrown(r, r.Head, CF(0, 0.6, 0), 0.66, 0.55, HW.Gold, golden and HW.Orange or HW.Red, 4)
+			r:Cape(1.8, 2.4, golden and HW.Gold or HW.Burgundy, false)
+		end
+		-- нити кукловода над головой и руками
+		local red = golden and rgb(255, 210, 120) or HW.Red
+		thread(r, r.Head, V(0, 0.6, 0), V(0, 3.2, 0), red, 0.04)
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			thread(r, A, V(0, 1, 0), V(0, 3.4, 0), red, 0.035)
+		end
+		return r, red
+	end
+
+	-- Проклятые люди: красно-чёрные, светящиеся красные глаза
+	local function Cursed(id, tier)
+		local cloth = ({ rgb(70, 54, 50), rgb(30, 24, 30), rgb(40, 36, 44), rgb(110, 24, 36), rgb(24, 18, 22) })[tier]
+		local edge = rgb(140, 70, 70)
+		local glow = HW.Red
+		local r = figure(id, { Torso = cloth, Arm = tier == 1 and rgb(150, 140, 142) or cloth, Leg = rgb(30, 24, 28), Skin = rgb(160, 150, 150), Edge = edge })
+		eyes(r, glow, true, 0.08)
+		if tier == 1 then
+			-- рваная одежда, бледная кожа, красные трещины
+			Kit.tatter(r, r.Torso, -1.0, -0.56, 2.0, 4, cloth, M.Fabric, 1)
+			Kit.crack(r, r.Torso, { V(-0.4, 0.6, -0.52), V(-0.1, 0.2, -0.52), V(-0.3, -0.3, -0.52) }, 0.06, glow)
+			Kit.crack(r, r.Head, { V(0.3, 0.5, -0.61), V(0.15, 0.25, -0.61) }, 0.05, glow)
+		elseif tier == 2 then
+			H.hood(r, cloth, edge, glow, false)
+			Kit.bevel(r, r.Torso, V(2.14, 1.1, 1.16), CF(0, 0.45, 0), rgb(50, 40, 50), edge)
+			local top = shaft(r, r.RArm, -2.4, 2.2, HW.Black, 0.16)
+			Kit.spike(r, r.RArm, top, top + V(0, 0.9, 0), 0.4, HW.Iron, M.Metal)
+		elseif tier == 3 then
+			H.helm(r, rgb(60, 50, 60), edge, glow, nil, false)
+			Kit.bevel(r, r.Torso, V(2.14, 1.1, 1.16), CF(0, 0.45, 0), rgb(60, 50, 60), edge)
+			H.plateShoulders(r, rgb(60, 50, 60), edge)
+			H.shield(r, r.LArm, { Color = rgb(60, 20, 30), Edge = edge, H = 1.8, W = 1.2, Gem = glow })
+			H.blade(r, r.RArm, { Len = 1.8, W = 0.4, Blade = HW.Iron, Guard = rgb(60, 50, 60) })
+		elseif tier == 4 then
+			Kit.bevel(r, r.Head, V(1.32, 0.5, 1.34), CF(0, 0.45, 0), rgb(130, 30, 44), edge)
+			Kit.bevel(r, r.Torso, V(2.14, 1.1, 1.16), CF(0, 0.45, 0), rgb(130, 30, 44), edge)
+			H.plateShoulders(r, rgb(130, 30, 44), edge)
+			H.axe(r, r.RArm, { Head = HW.Iron, Edge = edge, Glow = glow, Wood = HW.Black })
+		else
+			H.helm(r, rgb(30, 22, 26), edge, glow, rgb(130, 30, 44), true)
+			Kit.bevel(r, r.Torso, V(2.14, 1.1, 1.16), CF(0, 0.45, 0), rgb(30, 22, 26), edge)
+			H.bigShoulders(r, rgb(30, 22, 26), edge, glow, 0.9, 1)
+			r:Cape(1.8, 2.6, rgb(90, 18, 30), false)
+			H.blade(r, r.RArm, { Len = 2.6, W = 0.5, Blade = rgb(40, 34, 40), Guard = rgb(30, 22, 26), Glow = glow })
+		end
+		return r, glow
+	end
+
+	local ALLY_FAMILY = { Illusion = Illusion, Puppet = Puppet, Cursed = Cursed }
+
+	function UnitModels.BuildAlly(allyId)
+		local def = Config.Allies[allyId]
+		if not def then
+			error("Unknown ally " .. tostring(allyId))
+		end
+		local builder = ALLY_FAMILY[def.Family]
+		-- союзники ходят группами: дешёвая фаска (2 детали), без частиц и шлейфов
+		Kit.Cheap = true
+		local ok, r, glow = pcall(builder, allyId, def.Tier)
+		Kit.Cheap = false
+		if not ok then
+			error(r)
+		end
+		local scale = allyId == "GoldenMarionette" and 1.3 or (0.82 + 0.06 * math.min(def.Tier, 5))
+		local rig = r:Finish(scale, {})
+		for _, d in ipairs(rig.Model:GetDescendants()) do
+			if d:IsA("Trail") or d:IsA("ParticleEmitter") or d:IsA("PointLight") then
+				d:Destroy()
+			end
+		end
+		if not UnitModels.Lite and glow then
+			-- одна подсветка вместо частиц
+			local l = Instance.new("PointLight")
+			l.Color = glow
+			l.Range = 6
+			l.Brightness = 0.8
+			l.Shadows = false
+			l.Parent = rig.Torso
+		end
+		Kit.Calm(rig.Model)
+		for _, d in ipairs(rig.Model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				d.CanQuery = false
+				d.CanTouch = false
+				d.CastShadow = false
+			end
+		end
+		rig.Model.Name = allyId
+		rig.Model:SetAttribute("AllyId", allyId)
+		rig.AllyId = allyId
+		return rig
+	end
+
+	------------------------------------------------------------------------
+	-- РУНЫ (3D-иконки)
+	------------------------------------------------------------------------
+	local function rpart(m, size, cf, color, mat, props)
+		local p = Instance.new("Part")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanTouch = false
+		p.CanQuery = false
+		p.CastShadow = false
+		p.Size = size
+		p.CFrame = cf
+		p.Color = color
+		p.Material = mat or M.Plastic
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		if props then
+			for k, v in pairs(props) do
+				p[k] = v
+			end
+		end
+		p.Parent = m
+		return p
+	end
+
+	local function rwedge(m, size, cf, color, mat, props)
+		local w = Instance.new("WedgePart")
+		w.Anchored = true
+		w.CanCollide = false
+		w.CanTouch = false
+		w.CanQuery = false
+		w.CastShadow = false
+		w.Size = size
+		w.CFrame = cf
+		w.Color = color
+		w.Material = mat or M.Plastic
+		if props then
+			for k, v in pairs(props) do
+				w[k] = v
+			end
+		end
+		w.Parent = m
+		return w
+	end
+
+	local function rlight(part, color, range)
+		local l = Instance.new("PointLight")
+		l.Color = color
+		l.Range = range or 8
+		l.Brightness = 1.4
+		l.Shadows = false
+		l.Parent = part
+	end
+
+	-- Сердце фонаря: оранжевое сердце в золотой клетке-фонаре
+	local function LanternHeartRune(m)
+		local gold, orange = HW.Gold, HW.Orange
+		-- сердце: ромб + две «доли» сверху
+		local core = rpart(m, V(1.0, 1.0, 0.5), CF(0, -0.15, 0) * ANG(0, 0, rad(45)), orange, M.Neon)
+		for _, s in ipairs({ -1, 1 }) do
+			rpart(m, V(0.5, 0.72, 0.72), CF(0.36 * s, 0.32, 0) * ANG(0, PI / 2, 0), orange, M.Neon, { Shape = Enum.PartType.Cylinder })
+		end
+		rpart(m, V(1.6, 1.8, 0.8), CF(0, 0.05, 0), rgb(255, 170, 70), M.Glass, { Transparency = 0.6 })
+		-- клетка
+		for _, x in ipairs({ -1, 1 }) do
+			for _, z in ipairs({ -1, 1 }) do
+				rpart(m, V(0.12, 2.0, 0.12), CF(0.85 * x, 0.05, 0.45 * z), gold, M.Metal)
+			end
+		end
+		rpart(m, V(1.95, 0.22, 1.1), CF(0, 1.1, 0), gold, M.Metal)
+		rpart(m, V(1.95, 0.22, 1.1), CF(0, -1.0, 0), gold, M.Metal)
+		rpart(m, V(1.2, 0.2, 0.8), CF(0, 1.3, 0), HW.GoldDark, M.Metal)
+		rpart(m, V(0.12, 0.5, 0.5), CF(0, 1.6, 0), gold, M.Metal)
+		rpart(m, V(0.12, 0.12, 0.5), CF(0, 1.85, 0), gold, M.Metal)
+		rwedge(m, V(1.2, 0.25, 0.5), CF(0, -1.25, 0) * ANG(PI, 0, 0), HW.GoldDark, M.Metal)
+		rlight(core, orange, 9)
+		return core
+	end
+
+	-- Проклятые нити: катушка с красной нитью и игла
+	local function CursedThreadsRune(m)
+		local red = HW.Red
+		for _, y in ipairs({ -0.75, 0.75 }) do
+			for k = 0, 3 do
+				rpart(m, V(1.6, 0.22, 0.66), CF(0, y, 0) * ANG(0, k * PI / 4, 0), HW.BurgDark, M.Wood)
+			end
+			rpart(m, V(1.7, 0.08, 0.3), CF(0, y + (y > 0 and 0.12 or -0.12), 0), HW.Gold, M.Metal)
+		end
+		rpart(m, V(0.5, 1.4, 0.5), CF(), HW.Wood, M.Wood)
+		local core
+		for k = 0, 4 do
+			local p = rpart(m, V(1.12, 0.22, 1.12), CF(0, -0.48 + k * 0.24, 0) * ANG(0, k * 0.3, 0), red, M.Neon)
+			core = core or p
+		end
+		-- свисающая нить
+		rpart(m, V(0.05, 1.0, 0.05), CF(0.58, -0.9, -0.3) * ANG(0, 0, rad(10)), red, M.Neon)
+		rpart(m, V(0.05, 0.6, 0.05), CF(0.45, -1.5, -0.3) * ANG(0, 0, rad(-25)), red, M.Neon)
+		-- игла насквозь
+		rpart(m, V(0.09, 2.6, 0.09), CF(0.2, 0.25, -0.1) * ANG(rad(10), 0, rad(-35)), rgb(210, 214, 226), M.Metal)
+		rpart(m, V(0.16, 0.26, 0.05), CF(0.2, 0.25, -0.1) * ANG(rad(10), 0, rad(-35)) * CF(0, 1.2, 0), rgb(210, 214, 226), M.Metal)
+		rlight(core, red, 8)
+		return core
+	end
+
+	-- Призрачная корона: прозрачная синяя корона
+	local function PhantomCrownRune(m)
+		local ghost, edge = HW.Ghost, rgb(200, 235, 255)
+		local R = 0.9
+		local w = 2 * R * math.tan(rad(22.5)) * 1.1
+		for k = 0, 7 do
+			local a = k * PI / 4
+			rpart(m, V(w, 0.5, 0.16), CF(math.sin(a) * R, -0.4, -math.cos(a) * R) * ANG(0, -a, 0), ghost, M.Glass, { Transparency = 0.3 })
+			rpart(m, V(w, 0.08, 0.18), CF(math.sin(a) * R, -0.68, -math.cos(a) * R) * ANG(0, -a, 0), edge, M.Neon)
+			local hh = (k % 2 == 0) and 1.2 or 0.8
+			local p = V(math.sin(a) * R, -0.15 + hh / 2, -math.cos(a) * R)
+			local F = CF(p) * ANG(0, -a, 0)
+			rwedge(m, V(0.12, hh, w / 2), F * ANG(0, PI / 2, 0) * CF(0, 0, -w / 4), ghost, M.Glass, { Transparency = 0.25 })
+			rwedge(m, V(0.12, hh, w / 2), F * ANG(0, PI / 2, 0) * CF(0, 0, w / 4) * ANG(0, PI, 0), ghost, M.Glass, { Transparency = 0.25 })
+		end
+		local core = rpart(m, V(0.36, 0.36, 0.14), CF(0, -0.4, -R - 0.1) * ANG(0, 0, rad(45)), edge, M.Neon)
+		for _, s in ipairs({ -1, 1 }) do
+			rpart(m, V(0.24, 0.24, 0.14), CF(R * 0.71 * s, -0.4, -R * 0.71 - 0.08) * ANG(0, rad(-45 * s), rad(45)), ghost, M.Neon)
+		end
+		rpart(m, V(1.2, 0.6, 1.2), CF(0, 0.15, 0), ghost, M.Neon, { Transparency = 0.75 })
+		rlight(core, ghost, 9)
+		return core
+	end
+
+	local RUNES = { LanternHeart = LanternHeartRune, CursedThreads = CursedThreadsRune, PhantomCrown = PhantomCrownRune }
+
+	function UnitModels.BuildRune(runeId)
+		local builder = RUNES[runeId]
+		if not builder then
+			error("Unknown rune " .. tostring(runeId))
+		end
+		local m = Instance.new("Model")
+		m.Name = "Rune_" .. runeId
+		local core = builder(m)
+		m.PrimaryPart = core
+		m.WorldPivot = CF()
+		Kit.Calm(m, 0.2)
+		return { Model = m, Core = core }
+	end
+end
 ]======] }
 FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "UnitModels" }, "ModuleScript", [======[
 --!nocheck
@@ -3160,6 +5031,27 @@ applyLevelSkin = function(model, lv, rarity)
 	end
 end
 
+-- Хелперы для модулей-расширений (HalloweenModels): тот же R6-стиль и те же детали
+UnitModels.H = {
+	figure = figure, eyes = eyes, chest = chest, belt = belt, tassets = tassets, robe = robe, mantle = mantle,
+	hood = hood, helm = helm, wizardHat = wizardHat, crown = crown, kabuto = kabuto,
+	plateShoulders = plateShoulders, bigShoulders = bigShoulders, bracers = bracers, greaves = greaves, wings = wings,
+	muzzle = muzzle, blade = blade, shaft = shaft, staff = staff, scythe = scythe, spear = spear, hammer = hammer,
+	axe = axe, bow = bow, quiver = quiver, crossbow = crossbow, rifle = rifle, dagger = dagger, shield = shield,
+	capeWith = capeWith, levelAura = levelAura, octa = octa, gear = gear, clockFace = clockFace, miniClock = miniClock,
+	rgb = rgb, GRIP = GRIP, AIM = AIM, M = M, P = P, AC = AC,
+}
+
+-- Регистрация юнита из модуля-расширения
+function UnitModels.Register(unitId, builder, rarity)
+	Builders[unitId] = builder
+	UNIT_RARITY[unitId] = rarity
+end
+
+function UnitModels.Has(unitId)
+	return Builders[unitId] ~= nil
+end
+
 function UnitModels.Build(unitId, level)
 	local builder = Builders[unitId]
 	if not builder then
@@ -3197,7 +5089,902 @@ function UnitModels.Build(unitId, level)
 	return rig
 end
 
+-- Хэллоуинские юниты, союзники-призывы и руны
+require(script.Parent:WaitForChild("HalloweenModels"))(UnitModels)
+
 return UnitModels
+]======] }
+FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "HalloweenEnemies" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenEnemies
+-- Хэллоуинские враги и финальные боссы (карта Haunted Hollow) в том же угловатом стиле:
+-- блоки с фаской, клинья, шипы, ромбы, рваная ткань. Палитра: чёрный, тёмно-фиолетовый, оранжевый,
+-- бордовый, золото, болотно-зелёный, кость.
+--
+-- Дополнительные поля rig (визуал реализует Renderer/FX):
+--   DeathFX  "GreenSmoke" | "PumpkinBurst" | "Ghost" | "BoneShards" | "Straw" | "Fog" | "Reaper" | "MonarchDeath"
+--   SpawnFX  "GraveBreak" | "FogVortex" | "MonarchPortal"
+-- Атрибуты деталей:
+--   Outline = true  — контур Призрачного воина, остаётся видимым в фазе невидимости
+--   Crown = true    — корона Проклятого монарха (трескается при смерти)
+-- Детали "ShieldFX" (скрыты, PT — целевая прозрачность) — щит Ночного жнеца.
+-- Эмиттеры "FogFX" (выключены) — импульс тумана Туманного колдуна и Туманного жнеца.
+
+local Kit = require(script.Parent.ModelKit)
+
+return function(EnemyModels)
+	local H = EnemyModels.H
+	local newCreature, newBiped, setup, hub = H.newCreature, H.newBiped, H.setup, H.hub
+	local emitter, emitPoint, finishCreature, finishBiped = H.emitter, H.emitPoint, H.finishCreature, H.finishBiped
+	local C, M, rgb, lite = H.C, H.M, H.rgb, H.lite
+	local A_ = Kit.Colors
+	local bevel, bar, spike, gem, tatter = Kit.bevel, Kit.bar, Kit.spike, Kit.gem, Kit.tatter
+	local crack, hide, join, hornA, pauldron, bootA, chain = Kit.crack, Kit.hide, Kit.join, Kit.hornA, Kit.pauldron, Kit.bootA, Kit.chain
+
+	local WOOD, GRASS = Enum.Material.Wood, Enum.Material.Grass
+	local V = Vector3.new
+	local V2 = Vector2.new
+	local CF = CFrame.new
+	local ANG = CFrame.Angles
+	local rad = math.rad
+	local PI = math.pi
+
+	-- палитра Хэллоуина
+	local HC = {
+		Pumpkin = rgb(214, 102, 26),
+		PumpkinHi = rgb(250, 150, 60),
+		PumpkinDark = rgb(150, 62, 18),
+		Burnt = rgb(70, 34, 20),
+		Stem = rgb(58, 70, 32),
+		Fire = rgb(255, 140, 30),
+		FireSoft = rgb(255, 196, 90),
+		Green = rgb(130, 255, 90),
+		GreenSoft = rgb(190, 255, 150),
+		Rot = rgb(84, 104, 72),
+		RotDark = rgb(50, 62, 44),
+		RotHi = rgb(130, 146, 104),
+		Rag = rgb(54, 48, 44),
+		RagHi = rgb(96, 86, 74),
+		Purple = rgb(44, 24, 62),
+		PurpleHi = rgb(96, 62, 128),
+		PurpleGlow = rgb(170, 90, 255),
+		Burgundy = rgb(92, 20, 34),
+		BurgundyHi = rgb(150, 50, 66),
+		Gold = rgb(214, 166, 64),
+		GoldDark = rgb(140, 100, 36),
+		Straw = rgb(214, 178, 92),
+		StrawDark = rgb(160, 122, 54),
+		Sack = rgb(176, 148, 104),
+		SackDark = rgb(120, 96, 64),
+		Ghost = rgb(150, 226, 218),
+		GhostMid = rgb(96, 170, 172),
+		GhostDeep = rgb(34, 60, 70),
+		Iron = rgb(58, 58, 66),
+		IronHi = rgb(116, 116, 128),
+		Rust = rgb(110, 62, 38),
+		Stone = rgb(80, 80, 86),
+		StoneHi = rgb(130, 130, 136),
+		StoneDark = rgb(52, 52, 58),
+		Moss = rgb(66, 92, 50),
+		Fog = rgb(150, 160, 150),
+		FogDark = rgb(70, 78, 74),
+		Red = rgb(255, 40, 40),
+		Crow = rgb(22, 20, 26),
+	}
+
+	local function mark(parts, attr)
+		for _, p in ipairs(parts) do
+			p:SetAttribute(attr, true)
+		end
+		return parts
+	end
+
+	-- Угловатая тыква: восьмигранник из блоков, рёбра-дольки, хвостик, вырезанное светящееся лицо.
+	-- Возвращает (все детали, детали глаз, детали рта)
+	local function pumpkin(r, limb, cf, s, o)
+		o = o or {}
+		local col, dark, glow = o.Color or HC.Pumpkin, o.Dark or HC.PumpkinDark, o.Glow or HC.Fire
+		local parts, eyesP, mouth = {}, {}, {}
+		local function add(list)
+			for _, p in ipairs(list) do
+				parts[#parts + 1] = p
+			end
+		end
+		-- корпус: крест из двух брусков (широкий и глубокий) — гранёный силуэт тыквы сверху
+		add(bevel(r, limb, V(1.75, 1.2, 1.2) * s, cf, col, o.Edge or HC.PumpkinHi, M.Plastic))
+		add(bevel(r, limb, V(1.2, 1.28, 1.6) * s, cf, col, o.Edge or HC.PumpkinHi, M.Plastic))
+		-- тёмные борозды между дольками
+		if not Kit.Cheap then
+			for _, x in ipairs({ -0.66, 0.66 }) do
+				parts[#parts + 1] = r:Box(limb, V(0.1, 1.15, 0.05) * s, cf * CF(x * s, 0, -0.6 * s), dark, M.Plastic)
+				parts[#parts + 1] = r:Box(limb, V(0.05, 1.15, 0.1) * s, cf * CF(x * 1.33 * s, 0, 0), dark, M.Plastic)
+			end
+		end
+		-- верх и хвостик
+		parts[#parts + 1] = r:Box(limb, V(1.1, 0.2, 1.05) * s, cf * CF(0, 0.66 * s, 0), dark, M.Plastic)
+		parts[#parts + 1] = bar(r, limb, (cf * CF(0, 0.7 * s, 0)).Position, (cf * CF(0.12 * s, 1.1 * s, 0.1 * s)).Position, 0.18 * s, o.Stem or HC.Stem)
+		-- глаза: светящиеся ромбы с тёмной рамкой, нос, зубастый рот
+		local z = -0.81 * s
+		for _, side in ipairs({ -1, 1 }) do
+			local e = r:Neon(limb, V(0.36, 0.3, 0.06) * s, cf * CF(0.36 * side * s, 0.18 * s, z) * ANG(0, 0, rad(30 * side)), glow)
+			eyesP[#eyesP + 1] = e
+			parts[#parts + 1] = e
+		end
+		local nose = r:Neon(limb, V(0.16, 0.16, 0.06) * s, cf * CF(0, -0.02 * s, z) * ANG(0, 0, rad(45)), glow)
+		parts[#parts + 1] = nose
+		local m1 = r:Neon(limb, V(1.0, 0.22, 0.06) * s, cf * CF(0, -0.32 * s, z), glow)
+		mouth[#mouth + 1] = m1
+		parts[#parts + 1] = m1
+		for _, x in ipairs({ -0.25, 0.22 }) do
+			parts[#parts + 1] = r:Box(limb, V(0.13, 0.14, 0.07) * s, cf * CF(x * s, -0.25 * s, z - 0.01 * s), dark, M.Plastic)
+		end
+		return parts, eyesP, mouth
+	end
+
+	-- Глубокий капюшон: верх, бока, спинка, козырёк; лицо утоплено внутрь (возвращает z лица)
+	local function deepHood(r, limb, w, h, color, edge, y)
+		y = y or 0
+		bevel(r, limb, V(w, 0.3, w), CF(0, y + h / 2 - 0.15, 0.05), color, edge, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			bevel(r, limb, V(0.26, h, w), CF((w / 2 - 0.13) * s, y, 0.05), color, edge, M.Fabric)
+		end
+		bevel(r, limb, V(w, h, 0.26), CF(0, y, w / 2 - 0.08), color, edge, M.Fabric)
+		r:Wedge(limb, V(w, 0.35, 0.45), CF(0, y + h / 2 - 0.45, -w / 2 + 0.15), color, M.Fabric)
+		r:Box(limb, V(w - 0.4, h - 0.3, 0.1), CF(0, y - 0.05, 0.1), rgb(8, 6, 12), M.Plastic)
+		return -w / 2 + 0.3
+	end
+
+	-- Простой коготь-кисть из шипов
+	local function claws(r, A, color, n, len)
+		for k = 1, n or 3 do
+			local x = (k - (n or 3) / 2 - 0.5) * 0.28
+			spike(r, A, V(x, -1.0, -0.2), V(x * 1.2, -1.15, -0.2 - (len or 0.5)), 0.16, color, M.Plastic, true, 0.06)
+		end
+	end
+
+	------------------------------------------------------------------------
+	-- 1. CURSED DEAD — медленный проклятый мертвец: руки вперёд, гнилая кожа, зелёные глаза
+	------------------------------------------------------------------------
+	local function CursedDead(scale)
+		local r = newBiped("CursedDead", V(1.15, 1.15, 1.15))
+		setup(r, { Style = "Biped", Gait = { Speed = 0.7, Stride = 0.35, Bob = 0.08, Sway = 0.14, Lean = 10 }, Death = "Collapse" })
+		r.DeathFX = "GreenSmoke"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		-- рваная рубаха и торчащие рёбра
+		bevel(r, T, V(2, 2, 1), CF(), HC.Rag, HC.RagHi, M.Fabric)
+		r:Box(T, V(0.9, 0.8, 0.08), CF(0.35, 0.35, -0.51), HC.Rot, M.Plastic)
+		for i = 0, 2 do
+			r:Box(T, V(0.7, 0.08, 0.06), CF(0.38, 0.62 - i * 0.22, -0.56), C.Bone, M.Plastic)
+		end
+		tatter(r, T, -0.95, -0.52, 2, 4, HC.Rag, M.Fabric, 2)
+		r:Box(T, V(2.04, 0.3, 1.04), CF(0, -0.85, 0), HC.Burnt, M.Fabric)
+		-- голова: гнилая кожа, ввалившиеся глаза, отвисшая челюсть
+		bevel(r, Hd, V(1.15, 1.1, 1.15), CF(0, 0.03, 0), HC.Rot, HC.RotHi, M.Plastic)
+		r:Box(Hd, V(1.18, 0.35, 1.18), CF(0, 0.45, 0.04), HC.RotDark, M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(Hd, V(0.34, 0.3, 0.06), CF(0.27 * s, 0.12, -0.58), HC.RotDark, M.Plastic)
+			r:Neon(Hd, V(0.16, 0.14, 0.06), CF(0.27 * s, 0.1, -0.61), HC.Green)
+		end
+		r:Box(Hd, V(0.6, 0.3, 0.08), CF(0, -0.38, -0.58), rgb(20, 16, 18), M.Plastic)
+		for _, x in ipairs({ -0.18, 0.05, 0.2 }) do
+			r:Box(Hd, V(0.08, 0.1, 0.06), CF(x, -0.27, -0.62), C.Bone, M.Plastic)
+		end
+		-- руки: гнилые, одна в лохмотьях, когти
+		for _, A in ipairs({ RA, LA }) do
+			bevel(r, A, V(0.9, 2, 0.9), CF(), HC.Rot, HC.RotHi, M.Plastic)
+			claws(r, A, HC.RotDark, 3, 0.4)
+		end
+		bevel(r, RA, V(1.02, 0.9, 1.02), CF(0, 0.5, 0), HC.Rag, HC.RagHi, M.Fabric)
+		for _, Lg in ipairs({ RL, LL }) do
+			bevel(r, Lg, V(1, 2, 1), CF(), HC.Burnt, HC.RagHi, M.Fabric)
+			r:Box(Lg, V(1.02, 0.4, 1.15), CF(0, -0.8, -0.08), HC.RotDark, M.Plastic)
+		end
+		-- зелёный дымок с плеч
+		local e = emitPoint(r, T, CF(0, 0.9, 0), V(1.6, 0.3, 0.8))
+		emitter(e, rgb(90, 170, 70), { Smoke = true, Rate = 3, Size = 0.6, SizeEnd = 1.2, LifeMin = 0.8, LifeMax = 1.4, SpeedMin = 0.2, SpeedMax = 0.6, Accel = V(0, 0.8, 0), T0 = 0.6 })
+		r:Glow(Hd, HC.Green, 5, 0.6)
+		return finishBiped(r, scale, { RS = { 82, 0, 4 }, LS = { 70, 0, -6 }, Neck = { 12, 0, 8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 2. PUMPKIN RUNNER — быстрый тыквоголовый бегун, оранжевые искры
+	------------------------------------------------------------------------
+	local function PumpkinRunner(scale)
+		local r = newBiped("PumpkinRunner", V(1.3, 1.3, 1.3))
+		setup(r, { Style = "Biped", Gait = { Speed = 1.25, Stride = 0.85, Bob = 0.22, Sway = 0.05, Lean = 16 }, Death = "Scatter" })
+		r.DeathFX = "PumpkinBurst"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		-- тонкое тёмное тело в лохмотьях
+		bevel(r, T, V(1.7, 1.9, 0.85), CF(), HC.Purple, HC.PurpleHi, M.Fabric)
+		r:Box(T, V(1.75, 0.25, 0.9), CF(0, -0.8, 0), HC.Burnt, M.Fabric)
+		-- шарф-лоскут
+		r:Box(T, V(1.4, 0.3, 1.0), CF(0, 0.85, 0), HC.Burgundy, M.Fabric)
+		local scarf = hub(r, "SwayScarf", T, CF(0.4, 0.8, 0.5), { Amp = 0.35, Speed = 6 })
+		spike(r, scarf, V(0, 0, 0), V(0.15, -0.3, 1.2), 0.35, HC.Burgundy, M.Fabric, true, 0.06)
+		-- тыква-голова
+		pumpkin(r, Hd, CF(0, 0.05, 0), 0.82)
+		r:Glow(Hd, HC.Fire, 6, 0.9)
+		for _, A in ipairs({ RA, LA }) do
+			bevel(r, A, V(0.7, 2, 0.7), CF(), HC.Purple, HC.PurpleHi, M.Fabric)
+			r:Box(A, V(0.72, 0.5, 0.72), CF(0, -0.8, 0), HC.Stem, M.Plastic)
+		end
+		for _, Lg in ipairs({ RL, LL }) do
+			bevel(r, Lg, V(0.75, 2, 0.75), CF(), HC.Burnt, HC.RagHi, M.Fabric)
+			r:Wedge(Lg, V(0.8, 0.35, 0.45), CF(0, -0.85, -0.55), HC.Stem, M.Plastic)
+		end
+		-- оранжевые искры
+		emitter(Hd, HC.Fire, { Rate = 10, Size = 0.18, LifeMin = 0.3, LifeMax = 0.7, SpeedMin = 1, SpeedMax = 2.5, Accel = V(0, 2, 0) })
+		return finishBiped(r, scale, { RS = { -10, 0, 6 }, LS = { -10, 0, -6 }, Root = { 10, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 3. PHANTOM WARRIOR — призрачный воин с мечом и щитом, контур остаётся при невидимости
+	------------------------------------------------------------------------
+	local function PhantomWarrior(scale)
+		local r = newCreature("PhantomWarrior", V(1.8, 1.8, 1.0))
+		setup(r, { Style = "Float", Gait = { Bob = 0.25 }, Death = "Dissipate", Spawn = "Fade" })
+		r.DeathFX = "Ghost"
+		local B = r.Torso
+		local gT = { Transparency = 0.3 }
+		local outline = {}
+		local function ol(list)
+			for _, p in ipairs(list) do
+				outline[#outline + 1] = p
+			end
+		end
+		-- призрачный торс в латах, нижняя часть — хвост-дым
+		r:Box(B, V(1.8, 1.4, 1.0), CF(0, 0.35, 0), HC.Ghost, M.Plastic, gT)
+		local plate = bevel(r, B, V(2.0, 1.0, 1.15), CF(0, 0.55, -0.02), HC.GhostDeep, HC.Ghost)
+		ol({ plate[#plate] })
+		r:Box(B, V(1.4, 0.7, 0.9), CF(0, -0.6, 0.05), HC.GhostMid, M.Plastic, { Transparency = 0.4 })
+		spike(r, B, V(0, -0.9, 0.1), V(0.15, -2.1, 0.35), 1.0, HC.GhostMid, M.Plastic, false)
+		-- голова-шлем: Т-визор, гребень
+		local head = hub(r, "BobHead", B, CF(0, 1.55, 0), { Amp = 0.06, Speed = 2 })
+		local helm = bevel(r, head, V(1.1, 1.15, 1.15), CF(), HC.GhostDeep, HC.Ghost)
+		ol({ helm[#helm] })
+		ol({ r:Neon(head, V(0.62, 0.1, 0.06), CF(0, 0.12, -0.6), HC.Ghost) })
+		ol({ r:Neon(head, V(0.1, 0.42, 0.06), CF(0, -0.1, -0.6), HC.Ghost) })
+		ol(spike(r, head, V(0, 0.55, -0.2), V(0, 1.15, 0.35), 0.7, HC.Ghost, M.Neon, true, 0.1))
+		-- наплечники
+		for _, s in ipairs({ 1, -1 }) do
+			local sh = bevel(r, B, V(0.9, 0.4, 1.05), CF(1.15 * s, 1.0, 0) * ANG(0, 0, rad(-18 * s)), HC.GhostDeep, HC.Ghost)
+			ol({ sh[#sh] })
+		end
+		-- рука с мечом (ArmR) и щитом (ArmL)
+		local armR = hub(r, "ArmR", B, CF(1.25, 0.6, 0))
+		r:Seg(armR, V(0, 0, 0), V(0.1, -1.0, -0.3), 0.4, HC.Ghost, M.Plastic, gT)
+		r:Box(armR, V(0.18, 0.18, 0.7), CF(0.1, -1.05, -0.35), HC.GhostDeep, M.Metal)
+		r:Box(armR, V(0.7, 0.14, 0.14), CF(0.1, -1.05, -0.7), HC.Ghost, M.Metal)
+		local bladeA, bladeB = V(0.1, -1.05, -0.75), V(0.1, -1.05, -3.2)
+		r:Seg(armR, bladeA, bladeB, V2(0.1, 0.32), HC.GhostMid, M.Metal)
+		ol({ r:Seg(armR, bladeA + V(0, 0.17, 0), bladeB + V(0, 0.05, 0), V2(0.06, 0.06), HC.Ghost, M.Neon) })
+		ol(spike(r, armR, bladeB, bladeB + V(0, 0, -0.45), 0.32, HC.Ghost, M.Neon, true, 0.1))
+		local armL = hub(r, "ArmL", B, CF(-1.25, 0.6, 0))
+		r:Seg(armL, V(0, 0, 0), V(-0.1, -1.0, -0.3), 0.4, HC.Ghost, M.Plastic, gT)
+		local sh = bevel(r, armL, V(0.25, 1.9, 1.3), CF(-0.35, -0.9, -0.45), HC.GhostDeep, HC.Ghost)
+		ol({ sh[#sh] })
+		gem(r, armL, 0.4, CF(-0.5, -0.8, -0.45) * ANG(0, -PI / 2, 0), HC.Ghost)
+		mark(outline, "Outline")
+		local e = emitPoint(r, B, CF(0, -1.6, 0.2), V(0.9, 0.4, 0.9))
+		emitter(e, HC.GhostMid, { Smoke = true, Rate = 6, Size = 0.8, SizeEnd = 1.4, LifeMin = 0.6, LifeMax = 1.1, Accel = V(0, 0.8, 0), T0 = 0.55 })
+		r:Glow(B, HC.Ghost, 7, 0.8)
+		return finishCreature(r, scale, 2.6, 4.2)
+	end
+
+	------------------------------------------------------------------------
+	-- 4. BONE GUARD — скелет в тяжёлой железно-костяной броне с башенным щитом; броня ломается на 50%
+	------------------------------------------------------------------------
+	local function BoneGuard(scale)
+		local r = newBiped("BoneGuard", V(1.15, 1.15, 1.15))
+		setup(r, { Style = "Heavy", Gait = { Speed = 0.8, Stride = 0.4, Bob = 0.12, Sway = 0.06, Shake = 0.08 }, Death = "Collapse" })
+		r.DeathFX = "BoneShards"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		local glow = HC.Green
+		local armor = {}
+		local function arm(list)
+			for _, p in ipairs(list) do
+				armor[#armor + 1] = p
+			end
+			return list
+		end
+		-- скелет: позвоночник, рёбра, таз
+		r:Box(T, V(0.3, 2, 0.3), CF(0, 0, 0.25), C.BoneDark, M.Plastic)
+		for i = 0, 3 do
+			r:Box(T, V(1.7 - i * 0.15, 0.14, 0.9), CF(0, 0.75 - i * 0.35, 0), C.Bone, M.Plastic)
+		end
+		r:Box(T, V(1.6, 0.4, 0.8), CF(0, -0.8, 0), C.BoneDark, M.Plastic)
+		-- череп
+		bevel(r, Hd, V(1.05, 1.0, 1.1), CF(0, 0.05, 0), C.Bone, C.BoneDark, M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(Hd, V(0.3, 0.28, 0.06), CF(0.24 * s, 0.1, -0.56), rgb(16, 14, 18), M.Plastic)
+			r:Neon(Hd, V(0.13, 0.12, 0.06), CF(0.24 * s, 0.1, -0.59), glow)
+		end
+		r:Box(Hd, V(0.7, 0.18, 0.06), CF(0, -0.32, -0.56), rgb(16, 14, 18), M.Plastic)
+		-- кости рук и ног
+		for _, A in ipairs({ RA, LA }) do
+			bar(r, A, V(0, 0.6, 0), V(0, -0.9, 0), 0.32, C.Bone)
+			r:Box(A, V(0.5, 0.35, 0.5), CF(0, -1.0, 0), C.BoneDark, M.Plastic)
+		end
+		for _, Lg in ipairs({ RL, LL }) do
+			bar(r, Lg, V(0, 0.9, 0), V(0, -0.7, 0), 0.34, C.Bone)
+			bootA(r, Lg, HC.Iron, HC.IronHi, 1.05)
+		end
+		-- БРОНЯ (ломается): нагрудник, шлем, наплечники, наручи, поножи
+		arm(bevel(r, T, V(2.15, 1.25, 1.15), CF(0, 0.45, 0), HC.Iron, HC.IronHi))
+		arm({ r:Wedge(T, V(2.0, 0.45, 0.45), CF(0, 0.55, -0.75) * ANG(PI, PI, 0), HC.Iron, M.Metal) })
+		arm(gem(r, T, 0.32, CF(0, 0.5, -0.62), glow, HC.Rust))
+		arm(bevel(r, T, V(2.1, 0.45, 1.1), CF(0, -0.45, 0), HC.Rust, HC.IronHi))
+		arm(bevel(r, Hd, V(1.25, 0.55, 1.25), CF(0, 0.45, 0.02), HC.Iron, HC.IronHi))
+		arm(spike(r, Hd, V(0, 0.7, 0.1), V(0, 1.3, 0.4), 0.55, HC.Iron, M.Metal, true, 0.1))
+		for _, s in ipairs({ -1, 1 }) do
+			arm(hornA(r, Hd, { V(0.55 * s, 0.4, 0), V(0.85 * s, 0.6, 0), V(0.9 * s, 1.05, 0.1) }, 0.2, C.Bone))
+		end
+		for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
+			local A, s = a[1], a[2]
+			arm(bevel(r, A, V(1.35, 0.55, 1.3), CF(0.15 * s, 0.85, 0) * ANG(0, 0, rad(-14 * s)), HC.Iron, HC.IronHi))
+			arm(spike(r, A, V(0.35 * s, 1.1, 0), V(0.8 * s, 1.75, 0), 0.4, C.Bone, M.Plastic, true, 0.12))
+			arm(bevel(r, A, V(0.85, 0.7, 0.85), CF(0, -0.45, 0), HC.Rust, HC.IronHi))
+		end
+		for _, Lg in ipairs({ RL, LL }) do
+			arm(bevel(r, Lg, V(1.05, 0.8, 1.05), CF(0, 0.4, 0), HC.Iron, HC.IronHi))
+		end
+		-- ржавый тесак в правой руке
+		r:Box(RA, V(0.18, 0.18, 0.6), CF(0, -1.05, -0.3), HC.Burnt, WOOD)
+		r:Seg(RA, V(0, -1.0, -0.6), V(0, -0.95, -2.6), V2(0.12, 0.5), HC.Rust, M.Metal)
+		r:Box(RA, V(0.14, 0.08, 1.9), CF(0, -0.72, -1.6), HC.IronHi, M.Metal)
+		-- башенный щит в левой руке (остаётся)
+		bevel(r, LA, V(0.3, 2.6, 1.6), CF(-0.6, -0.6, -0.4), HC.Iron, HC.IronHi)
+		r:Box(LA, V(0.34, 2.4, 0.25), CF(-0.6, -0.6, -0.4), C.Bone, M.Plastic)
+		r:Box(LA, V(0.34, 0.25, 1.3), CF(-0.6, -0.1, -0.4), C.Bone, M.Plastic)
+		gem(r, LA, 0.3, CF(-0.78, -0.1, -0.4) * ANG(0, -PI / 2, 0), glow)
+		r:Glow(T, glow, 6, 0.7)
+		local shards = emitter(T, C.Bone, { Rate = 22, Size = 0.25, SpeedMin = 3, SpeedMax = 6, LifeMin = 0.3, LifeMax = 0.6, Accel = V(0, -12, 0), Off = true })
+		r.Phases = { { At = 0.5, Break = armor, Emit = { shards }, Aggro = 1.15 } }
+		return finishBiped(r, scale, { RS = { 10, 0, 6 }, LS = { 25, 0, -8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 5. LIVING SCARECROW — живое пугало: мешок-голова, шляпа, солома, ворона на плече
+	------------------------------------------------------------------------
+	local function LivingScarecrow(scale)
+		local r = newBiped("LivingScarecrow", V(1.2, 1.25, 1.2))
+		setup(r, { Style = "Biped", Gait = { Speed = 0.9, Stride = 0.5, Bob = 0.14, Sway = 0.16, Lean = 4 }, Death = "Topple" })
+		r.DeathFX = "Straw"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		-- клетчатая рубаха: бордовый с тёмными полосами, верёвочный пояс
+		bevel(r, T, V(2, 2, 1), CF(), HC.Burgundy, HC.BurgundyHi, M.Fabric)
+		r:Box(T, V(0.18, 2.02, 1.02), CF(-0.45, 0, 0), HC.Burnt, M.Fabric)
+		r:Box(T, V(0.18, 2.02, 1.02), CF(0.45, 0, 0), HC.Burnt, M.Fabric)
+		r:Box(T, V(2.04, 0.2, 1.04), CF(0, -0.8, 0), HC.StrawDark, M.Fabric)
+		-- шест за спиной
+		r:Box(T, V(0.3, 4.5, 0.3), CF(0, 0.4, 0.75), HC.Burnt, WOOD)
+		-- мешок-голова: сшитые глаза-кресты, светящийся рот-шов
+		bevel(r, Hd, V(1.2, 1.25, 1.2), CF(), HC.Sack, HC.SackDark, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Neon(Hd, V(0.34, 0.08, 0.05), CF(0.27 * s, 0.15, -0.61) * ANG(0, 0, rad(45)), HC.Fire)
+			r:Neon(Hd, V(0.34, 0.08, 0.05), CF(0.27 * s, 0.15, -0.61) * ANG(0, 0, rad(-45)), HC.Fire)
+		end
+		r:Neon(Hd, V(0.7, 0.07, 0.05), CF(0, -0.28, -0.61) * ANG(0, 0, rad(-6)), HC.Fire)
+		for i = -2, 2 do
+			r:Box(Hd, V(0.04, 0.2, 0.06), CF(i * 0.15, -0.28, -0.63), HC.SackDark, M.Fabric)
+		end
+		-- перевязь на шее и солома из-под мешка
+		r:Box(Hd, V(1.0, 0.16, 1.0), CF(0, -0.55, 0), HC.StrawDark, M.Fabric)
+		for i = 0, 4 do
+			local a = i / 5 * PI * 2
+			spike(r, T, V(math.cos(a) * 0.45, 0.95, math.sin(a) * 0.4), V(math.cos(a) * 0.75, 1.25, math.sin(a) * 0.6), 0.22, HC.Straw, M.Fabric, true, 0.05)
+		end
+		-- соломенная шляпа с широкими полями
+		bevel(r, Hd, V(2.3, 0.12, 2.2), CF(0, 0.66, 0) * ANG(rad(-6), 0, rad(5)), HC.StrawDark, HC.Straw, M.Fabric)
+		bevel(r, Hd, V(1.2, 0.55, 1.2), CF(0.02, 0.98, 0.02) * ANG(rad(-6), 0, rad(8)), HC.Straw, HC.StrawDark, M.Fabric)
+		r:Box(Hd, V(1.24, 0.14, 1.24), CF(0, 0.8, 0) * ANG(rad(-6), 0, rad(6)), HC.Burgundy, M.Fabric)
+		-- руки-рукава с соломой на концах
+		for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
+			local A, s = a[1], a[2]
+			bevel(r, A, V(1.0, 2, 1.0), CF(0, 0.1, 0), HC.Burgundy, HC.BurgundyHi, M.Fabric)
+			for k = -1, 1 do
+				spike(r, A, V(k * 0.25, -0.85, 0), V(k * 0.4, -1.55, k * 0.1), 0.25, HC.Straw, M.Fabric, true, 0.05)
+			end
+		end
+		-- штаны с заплатой
+		for _, Lg in ipairs({ RL, LL }) do
+			bevel(r, Lg, V(1, 2, 1), CF(), HC.Rag, HC.RagHi, M.Fabric)
+			spike(r, Lg, V(0, -0.9, 0), V(0.05, -1.3, -0.2), 0.5, HC.Straw, M.Fabric, true, 0.05)
+		end
+		r:Box(LL, V(0.5, 0.5, 0.06), CF(0.1, 0.2, -0.52), HC.SackDark, M.Fabric)
+		-- ворона на левом плече
+		local crow = hub(r, "TwitchCrow", LA, CF(-0.1, 1.15, 0), { Amp = 0.5, Speed = 1 })
+		r:Box(crow, V(0.4, 0.42, 0.65), CF(0, 0.2, 0.05), HC.Crow, M.Plastic)
+		r:Box(crow, V(0.32, 0.32, 0.32), CF(0, 0.5, -0.25), HC.Crow, M.Plastic)
+		spike(r, crow, V(0, 0.48, -0.4), V(0, 0.45, -0.75), 0.16, HC.GoldDark, M.Plastic, true, 0.1)
+		r:Neon(crow, V(0.36, 0.06, 0.06), CF(0, 0.55, -0.3), HC.Red)
+		spike(r, crow, V(0, 0.2, 0.35), V(0, 0.05, 0.85), 0.35, HC.Crow, M.Plastic, true, 0.06)
+		r:Glow(Hd, HC.Fire, 5, 0.6)
+		return finishBiped(r, scale, { RS = { 12, 0, 50 }, LS = { 12, 0, -50 }, Neck = { 0, 0, -10 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 6. STRAW CREATURE — маленький соломенный бегун из пугала
+	------------------------------------------------------------------------
+	local function StrawMinion(scale)
+		local r = newBiped("StrawMinion", V(1.0, 1.0, 1.0))
+		setup(r, { Style = "Biped", Gait = { Speed = 1.5, Stride = 0.9, Bob = 0.25, Sway = 0.1, Lean = 12 }, Death = "Scatter" })
+		r.DeathFX = "Straw"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		r:Box(T, V(1.7, 2, 0.95), CF(), HC.Straw, M.Fabric)
+		r:Box(T, V(1.74, 0.22, 1.0), CF(0, 0.4, 0), HC.SackDark, M.Fabric)
+		r:Box(T, V(1.74, 0.22, 1.0), CF(0, -0.5, 0), HC.SackDark, M.Fabric)
+		r:Box(Hd, V(1.0, 1.0, 1.0), CF(), HC.Sack, M.Fabric)
+		r:Neon(Hd, V(0.18, 0.18, 0.05), CF(-0.22, 0.1, -0.51), HC.Fire)
+		r:Neon(Hd, V(0.18, 0.18, 0.05), CF(0.22, 0.1, -0.51), HC.Fire)
+		spike(r, Hd, V(0, 0.45, 0), V(0.1, 1.05, 0.1), 0.45, HC.Straw, M.Fabric, true, 0.06)
+		for _, A in ipairs({ RA, LA }) do
+			r:Box(A, V(0.6, 2, 0.6), CF(), HC.StrawDark, M.Fabric)
+		end
+		for _, Lg in ipairs({ RL, LL }) do
+			r:Box(Lg, V(0.7, 2, 0.7), CF(), HC.StrawDark, M.Fabric)
+		end
+		return finishBiped(r, scale, { RS = { -20, 0, 10 }, LS = { -20, 0, -10 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 7. FOG WARLOCK — колдун в капюшоне с фонарём на посохе, серо-зелёный туман
+	------------------------------------------------------------------------
+	local function FogWarlock(scale)
+		local r = newBiped("FogWarlock", V(1.2, 1.2, 1.2))
+		setup(r, { Style = "Biped", Gait = { Speed = 0.8, Stride = 0.35, Bob = 0.06, Sway = 0.06, Lean = 6 }, Death = "Dissipate" })
+		r.DeathFX = "Fog"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		local robeC, robeHi = rgb(46, 52, 50), rgb(104, 116, 106)
+		-- мантия до земли с рваным краем
+		bevel(r, T, V(2, 2, 1), CF(), robeC, robeHi, M.Fabric)
+		bevel(r, T, V(2.2, 1.8, 1.2), CF(0, -1.75, 0.02), robeC, robeHi, M.Fabric)
+		tatter(r, T, -2.65, -0.62, 2.2, 5, robeC, M.Fabric, 1)
+		r:Box(T, V(0.3, 3.4, 0.06), CF(0, -0.9, -0.52), HC.Burgundy, M.Fabric)
+		r:Box(T, V(2.04, 0.22, 1.04), CF(0, -0.75, 0), HC.Burnt, M.Fabric)
+		gem(r, T, 0.3, CF(0, -0.75, -0.56), HC.Green, HC.GoldDark)
+		-- капюшон с пустотой и зелёными глазами
+		local fz = deepHood(r, Hd, 1.45, 1.4, robeC, robeHi)
+		spike(r, Hd, V(0, 0.65, 0.4), V(0, 1.3, 1.0), 0.75, robeC, M.Fabric, true, 0.2)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Neon(Hd, V(0.2, 0.08, 0.05), CF(0.22 * s, 0.0, fz + 0.2) * ANG(0, 0, rad(-12 * s)), HC.Green)
+		end
+		-- рукава
+		for _, A in ipairs({ RA, LA }) do
+			bevel(r, A, V(1.0, 2, 1.0), CF(), robeC, robeHi, M.Fabric)
+			r:Box(A, V(1.15, 0.4, 1.15), CF(0, -0.85, 0), robeHi, M.Fabric)
+		end
+		for _, Lg in ipairs({ RL, LL }) do
+			r:Box(Lg, V(0.9, 2, 0.9), CF(), HC.Rag, M.Fabric)
+		end
+		-- посох с фонарём
+		r:Box(RA, V(0.2, 5.0, 0.2), CF(0, -0.6, -0.5), HC.Burnt, WOOD)
+		local lantern = hub(r, "SwayLantern", RA, CF(0, 1.9, -0.5), { Amp = 0.2, Speed = 2 })
+		r:Box(lantern, V(0.08, 0.5, 0.08), CF(0, -0.25, 0), HC.Iron, M.Metal)
+		bevel(r, lantern, V(0.6, 0.12, 0.6), CF(0, -0.55, 0), HC.Iron, HC.IronHi)
+		r:Neon(lantern, V(0.4, 0.55, 0.4), CF(0, -0.9, 0), HC.Green)
+		bevel(r, lantern, V(0.6, 0.12, 0.6), CF(0, -1.25, 0), HC.Iron, HC.IronHi)
+		r:Glow(lantern, HC.Green, 8, 1.1)
+		-- постоянный лёгкий туман у ног и импульс тумана (FogFX включает Renderer)
+		local e = emitPoint(r, T, CF(0, -2.6, 0), V(2.2, 0.3, 2.2))
+		emitter(e, HC.Fog, { Smoke = true, Rate = 4, Size = 1.2, SizeEnd = 2.4, LifeMin = 1, LifeMax = 1.8, SpeedMin = 0.3, SpeedMax = 0.8, T0 = 0.65 })
+		local fog = emitter(e, rgb(150, 190, 150), { Smoke = true, Rate = 30, Size = 2.5, SizeEnd = 5.5, LifeMin = 1.2, LifeMax = 2.0, SpeedMin = 3, SpeedMax = 6, T0 = 0.55, Off = true })
+		if fog then
+			fog.Name = "FogFX"
+		end
+		return finishBiped(r, scale, { RS = { 25, 0, 4 }, LS = { 30, 0, -12 }, Neck = { 8, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 8. PUMPKIN BRUTE — огромный громила с гигантской тыквой вместо головы
+	------------------------------------------------------------------------
+	local function PumpkinBrute(scale)
+		local r = newBiped("PumpkinBrute", V(1.6, 1.4, 1.6))
+		setup(r, { Style = "Heavy", Gait = { Speed = 0.75, Stride = 0.35, Bob = 0.22, Sway = 0.1, Shake = 0.14, Lean = 6 }, Death = "Topple" })
+		r.DeathFX = "PumpkinBurst"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		local skin, skinHi = rgb(60, 72, 44), rgb(104, 120, 76)
+		-- массивное тело в мешковине, лямки, лозы
+		bevel(r, T, V(2.8, 2.2, 1.7), CF(0, 0.15, 0.1), HC.Rag, HC.RagHi, M.Fabric)
+		bevel(r, T, V(2.4, 0.9, 1.5), CF(0, -0.75, -0.05), HC.SackDark, HC.Sack, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(T, V(0.3, 2.2, 0.08), CF(0.7 * s, 0.2, -0.82), HC.Burnt, M.Fabric)
+			r:Box(T, V(0.32, 0.32, 0.1), CF(0.7 * s, 0.85, -0.86), HC.GoldDark, M.Metal)
+		end
+		bar(r, T, V(-1.3, 0.9, -0.85), V(1.2, -0.4, -0.88), 0.16, HC.Stem)
+		spike(r, T, V(0.3, 0.3, -0.9), V(0.6, 0.55, -1.15), 0.3, HC.Stem, M.Plastic, true, 0.06)
+		-- гигантская тыква
+		pumpkin(r, Hd, CF(0, 0.3, -0.05), 1.15)
+		r:Glow(Hd, HC.Fire, 9, 1.2)
+		-- огромные руки
+		for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
+			local A, s = a[1], a[2]
+			bevel(r, A, V(1.4, 1.2, 1.4), CF(0.15 * s, 0.5, 0), skin, skinHi, M.Plastic)
+			bevel(r, A, V(1.6, 1.4, 1.6), CF(0.2 * s, -0.75, 0), skin, skinHi, M.Plastic)
+			bar(r, A, V(0.2 * s, 0.3, -0.75), V(0.25 * s, -0.9, -0.82), 0.12, HC.Stem)
+			bevel(r, A, V(1.5, 0.8, 1.5), CF(0.2 * s, -1.7, -0.05), skin, skinHi, M.Plastic)
+		end
+		-- дубина-коряга в правой руке
+		bar(r, RA, V(0.2, -1.8, -0.4), V(0.25, -1.9, -3.2), 0.45, HC.Burnt, WOOD)
+		spike(r, RA, V(0.25, -1.9, -2.6), V(0.85, -1.6, -2.9), 0.3, C.BoneDark)
+		spike(r, RA, V(0.25, -1.9, -3.0), V(-0.35, -2.3, -3.2), 0.3, C.BoneDark)
+		for _, Lg in ipairs({ RL, LL }) do
+			bevel(r, Lg, V(1.25, 2, 1.25), CF(0, 0.05, 0), HC.SackDark, HC.Sack, M.Fabric)
+			bevel(r, Lg, V(1.3, 0.55, 1.5), CF(0, -0.8, -0.12), HC.Burnt, HC.RagHi, M.Plastic)
+		end
+		emitter(Hd, HC.Fire, { Rate = 6, Size = 0.25, LifeMin = 0.4, LifeMax = 0.8, SpeedMin = 1, SpeedMax = 2, Accel = V(0, 2.5, 0) })
+		return finishBiped(r, scale, { Root = { 10, 0, 0 }, Neck = { -8, 0, 0 }, RS = { 10, 0, 8 }, LS = { 8, 0, -8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 9. NIGHT REAPER (мини-босс) — парящий жнец с косой, рваный плащ, щит-оболочка (ShieldFX)
+	------------------------------------------------------------------------
+	local function NightReaper(scale)
+		local r = newCreature("NightReaper", V(2.0, 2.0, 1.2))
+		setup(r, { Style = "Float", Gait = { Bob = 0.3 }, Death = "Dissipate", Spawn = "Fade" })
+		r.DeathFX = "Reaper"
+		local B = r.Torso
+		local cloth, clothHi = rgb(24, 18, 32), rgb(78, 56, 104)
+		local glow = HC.PurpleGlow
+		-- плащ-балахон, сужающийся книзу
+		bevel(r, B, V(2.2, 1.6, 1.3), CF(0, 0.5, 0), cloth, clothHi, M.Fabric)
+		bevel(r, B, V(1.9, 1.3, 1.15), CF(0, -0.85, 0.05), cloth, clothHi, M.Fabric)
+		bevel(r, B, V(1.4, 1.0, 0.95), CF(0, -1.95, 0.1), cloth, clothHi, M.Fabric)
+		tatter(r, B, -2.4, -0.45, 1.5, 4, cloth, M.Fabric, 3)
+		spike(r, B, V(0, -2.3, 0.2), V(0.2, -3.3, 0.5), 0.9, cloth, M.Fabric, true, 0.12)
+		-- цепь-пояс и черепа
+		chain(r, B, 3, 0.35, HC.IronHi, CF(0.6, -0.3, -0.6) * ANG(0, 0, rad(70)))
+		r:Box(B, V(0.42, 0.42, 0.4), CF(-0.55, -0.25, -0.62), C.Bone, M.Plastic)
+		-- капюшон с черепом
+		local head = hub(r, "BobHead", B, CF(0, 1.75, 0), { Amp = 0.06, Speed = 1.6 })
+		local fz = deepHood(r, head, 1.6, 1.55, cloth, clothHi)
+		spike(r, head, V(0, 0.7, 0.35), V(0, 1.4, 1.1), 0.85, cloth, M.Fabric, true, 0.2)
+		r:Box(head, V(0.95, 1.0, 0.3), CF(0, -0.1, fz + 0.15), C.Bone, M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(head, V(0.3, 0.26, 0.06), CF(0.24 * s, 0.02, fz - 0.01), rgb(10, 8, 14), M.Plastic)
+			r:Neon(head, V(0.14, 0.12, 0.06), CF(0.24 * s, 0.01, fz - 0.04), glow)
+		end
+		r:Box(head, V(0.6, 0.12, 0.06), CF(0, -0.38, fz - 0.01), rgb(10, 8, 14), M.Plastic)
+		-- наплечная накидка с рваными концами
+		for _, s in ipairs({ -1, 1 }) do
+			bevel(r, B, V(1.0, 0.45, 1.4), CF(1.0 * s, 1.15, 0) * ANG(0, 0, rad(-20 * s)), cloth, clothHi, M.Fabric)
+			spike(r, B, V(1.35 * s, 0.9, 0), V(1.6 * s, 0.1, 0.1), 0.6, cloth, M.Fabric, true, 0.1)
+		end
+		-- руки-кости с косой
+		local armR = hub(r, "ArmR", B, CF(1.3, 0.75, 0))
+		bar(r, armR, V(0, 0, 0), V(0.1, -1.0, -0.4), V2(0.6, 0.6), cloth)
+		r:Box(armR, V(0.35, 0.35, 0.35), CF(0.1, -1.15, -0.45), C.Bone, M.Plastic)
+		r:Box(armR, V(0.2, 5.4, 0.2), CF(0.1, -0.9, -0.55), HC.Burnt, WOOD)
+		local top = V(0.1, 1.75, -0.55)
+		local pts = { top, top + V(0, 0.2, -0.8), top + V(0, -0.15, -1.9), top + V(0, -0.8, -2.5) }
+		for i = 1, 3 do
+			bar(r, armR, pts[i], pts[i + 1], V2(0.1, 0.45 - i * 0.08), HC.IronHi, M.Metal)
+		end
+		bar(r, armR, pts[2] + V(0, -0.2, 0), pts[3] + V(0, -0.15, 0), V2(0.12, 0.06), glow, M.Neon)
+		local armL = hub(r, "ArmL", B, CF(-1.3, 0.75, 0))
+		bar(r, armL, V(0, 0, 0), V(-0.1, -1.0, -0.4), V2(0.6, 0.6), cloth)
+		for k = -1, 1 do
+			spike(r, armL, V(-0.1 + k * 0.1, -1.2, -0.45), V(-0.15 + k * 0.15, -1.75, -0.65), 0.12, C.Bone, M.Plastic, true, 0.05)
+		end
+		-- оболочка щита: фиолетовые плиты вокруг (скрыты, включает Renderer)
+		local shell = hub(r, "OrbitShield", B, CF(0, 0, 0), { Speed = 0.6 })
+		local plates = {}
+		for i = 0, 5 do
+			local a = i / 6 * PI * 2
+			local p = r:Box(shell, V(1.5, 2.6, 0.12), CF(math.cos(a) * 2.2, 0, math.sin(a) * 2.2) * ANG(0, -a + PI / 2, 0), glow, M.Neon, { Transparency = 0.6 })
+			p.Name = "ShieldFX"
+			plates[#plates + 1] = p
+		end
+		hide(plates, 0.6)
+		local e = emitPoint(r, B, CF(0, -2.6, 0.2), V(1.2, 0.4, 1.2))
+		emitter(e, rgb(60, 30, 90), { Smoke = true, Rate = 6, Size = 1.0, SizeEnd = 1.8, LifeMin = 0.7, LifeMax = 1.2, Accel = V(0, 0.8, 0), T0 = 0.55 })
+		r:Glow(head, glow, 8, 1)
+		return finishCreature(r, scale, 3.4, 5.2)
+	end
+
+	------------------------------------------------------------------------
+	-- 10. GRAVE WARDEN (босс, Лёгкая) — каменно-железный страж кладбища: надгробие-щит, молот,
+	-- фонарь на поясе. 66% — трещины по броне, 33% — плиты брони отваливаются.
+	------------------------------------------------------------------------
+	local function GraveWarden(scale)
+		local r = newBiped("GraveWarden", V(1.35, 1.3, 1.35))
+		setup(r, { Style = "Heavy", Gait = { Speed = 0.7, Stride = 0.36, Bob = 0.2, Sway = 0.08, Shake = 0.3, Lean = 3 }, Death = "Collapse", Spawn = "Titan" })
+		r.SpawnFX = "GraveBreak"
+		r.DeathFX = "GraveBreak"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		local glow = HC.Green
+		local function stone(limb, size, cf, light)
+			return bevel(r, limb, size, cf, light and HC.Stone or HC.StoneDark, light and HC.StoneHi or HC.Stone, M.Slate)
+		end
+		local plates = {}
+		local function pl(list)
+			for _, p in ipairs(list) do
+				plates[#plates + 1] = p
+			end
+			return list
+		end
+		-- каменное тело
+		r:Box(T, V(2.1, 2.0, 1.2), CF(0, 0.1, 0.05), HC.Green, M.Neon)
+		stone(T, V(1.2, 1.15, 1.45), CF(-0.6, 0.6, 0.05) * ANG(rad(3), rad(5), rad(4)), false)
+		stone(T, V(1.2, 1.1, 1.45), CF(0.62, 0.62, 0.05) * ANG(rad(-3), rad(-4), rad(-5)), true)
+		stone(T, V(2.2, 0.95, 1.4), CF(0, -0.45, 0), false)
+		-- железные латы (отваливаются на 33%)
+		pl(bevel(r, T, V(2.6, 1.2, 0.5), CF(0, 0.6, -0.8), HC.Iron, HC.IronHi))
+		pl({ r:Wedge(T, V(2.4, 0.5, 0.5), CF(0, -0.2, -0.8) * ANG(PI, PI, 0), HC.Iron, M.Metal) })
+		pl(gem(r, T, 0.45, CF(0, 0.6, -1.08), glow, HC.GoldDark))
+		bevel(r, T, V(2.3, 0.45, 1.6), CF(0, -1.0, 0), HC.Rust, HC.IronHi)
+		-- фонарь на поясе
+		r:Box(T, V(0.08, 0.4, 0.08), CF(-0.8, -1.3, -0.82), HC.Iron, M.Metal)
+		bevel(r, T, V(0.55, 0.12, 0.55), CF(-0.8, -1.5, -0.82), HC.Iron, HC.IronHi)
+		r:Neon(T, V(0.38, 0.5, 0.38), CF(-0.8, -1.8, -0.82), HC.Fire)
+		bevel(r, T, V(0.55, 0.12, 0.55), CF(-0.8, -2.1, -0.82), HC.Iron, HC.IronHi)
+		r:Glow(T, HC.Fire, 8, 0.8)
+		-- шлем-череп с короной-зубцами надгробий
+		stone(Hd, V(1.3, 1.25, 1.3), CF(0, -0.05, 0.05), true)
+		pl(bevel(r, Hd, V(1.5, 0.7, 1.45), CF(0, 0.35, -0.05), HC.Iron, HC.IronHi))
+		r:Box(Hd, V(1.0, 0.16, 0.06), CF(0, 0.0, -0.68), rgb(10, 12, 10), M.Plastic)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Neon(Hd, V(0.26, 0.1, 0.06), CF(0.25 * s, 0.0, -0.71), glow)
+		end
+		for i = -1, 1 do
+			stone(Hd, V(0.4, 0.55 + (i == 0 and 0.25 or 0), 0.25), CF(i * 0.45, 0.95, 0.1), i == 0)
+		end
+		-- наплечники-плиты
+		for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
+			local A, s = a[1], a[2]
+			pl(pauldron(r, A, s, 1.2, HC.Iron, HC.IronHi, glow, 1))
+			stone(A, V(1.05, 1.0, 1.05), CF(0, 0.1, 0) * ANG(0, rad(10), rad(4 * s)), false)
+			stone(A, V(1.2, 0.9, 1.2), CF(0, -0.75, 0), true)
+			bevel(r, A, V(1.4, 0.7, 1.4), CF(0, -1.45, -0.05), HC.Iron, HC.IronHi)
+		end
+		-- большой молот-надгробие в правой руке
+		r:Box(RA, V(0.3, 0.3, 4.2), CF(0, -1.45, -1.7), HC.Burnt, WOOD)
+		stone(RA, V(1.5, 1.2, 1.0), CF(0, -1.45, -4.0), true)
+		r:Box(RA, V(0.15, 0.7, 0.1), CF(0, -1.4, -4.52), HC.StoneDark, M.Slate)
+		r:Box(RA, V(0.5, 0.15, 0.1), CF(0, -1.25, -4.52), HC.StoneDark, M.Slate)
+		-- надгробие-щит в левой руке: плита с закруглённым верхом и крестом
+		stone(LA, V(0.45, 2.8, 2.0), CF(-0.7, -0.7, -0.35), false)
+		stone(LA, V(0.45, 0.6, 1.5), CF(-0.7, 0.95, -0.35), false)
+		stone(LA, V(0.45, 0.35, 0.9), CF(-0.7, 1.35, -0.35), false)
+		r:Neon(LA, V(0.08, 1.4, 0.2), CF(-0.95, -0.1, -0.35), glow)
+		r:Neon(LA, V(0.08, 0.2, 0.9), CF(-0.95, 0.25, -0.35), glow)
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(LA, V(0.5, 0.5, 0.25), CF(-0.7, -1.9, -0.35 + s * 0.85), HC.Moss, GRASS)
+		end
+		for _, Lg in ipairs({ RL, LL }) do
+			stone(Lg, V(1.15, 1.05, 1.15), CF(0, 0.45, 0), true)
+			pl(bevel(r, Lg, V(1.2, 0.7, 1.2), CF(0, -0.42, 0), HC.Iron, HC.IronHi))
+			bootA(r, Lg, HC.Rust, HC.IronHi, 1.25)
+		end
+		-- мох на плечах и цепь
+		r:Box(T, V(1.0, 0.25, 0.9), CF(0.55, 1.1, 0.2), HC.Moss, M.Fabric)
+		chain(r, T, 4, 0.4, HC.IronHi, CF(0.9, 0.9, -1.1) * ANG(0, 0, rad(30)))
+		local aura = emitter(T, glow, { Rate = 6, Size = 0.4, Accel = V(0, 2, 0) })
+		-- 66%: светящиеся трещины по камню и латам
+		local cracks = hide(join(
+			crack(r, T, { V(-1.0, 1.15, -1.06), V(-0.55, 0.7, -1.07), V(-0.8, 0.2, -1.06) }, 0.09, glow),
+			crack(r, T, { V(0.95, 0.95, -1.06), V(0.5, 0.4, -1.07) }, 0.08, glow),
+			crack(r, Hd, { V(-0.4, 0.6, -0.78), V(-0.15, 0.35, -0.78), V(-0.3, 0.1, -0.78) }, 0.06, glow),
+			crack(r, RL, { V(0.3, 0.7, -0.6), V(-0.1, 0.2, -0.6) }, 0.07, glow),
+			crack(r, LL, { V(-0.3, 0.6, -0.6), V(0.15, 0.1, -0.6) }, 0.07, glow)
+		))
+		local dust = emitter(T, HC.StoneHi, { Rate = 12, Size = 0.35, SpeedMin = 2, SpeedMax = 4, Accel = V(0, -8, 0), Off = true })
+		-- 33%: под латами светится ядро
+		local core = hide({ r:Box(T, V(1.6, 0.8, 0.3), CF(0, 0.6, -0.8), glow, M.Neon) })
+		local rage = emitter(T, HC.GreenSoft, { Rate = 18, Size = 0.4, SpeedMin = 3, SpeedMax = 6, Off = true })
+		r.Phases = {
+			{ At = 0.66, Reveal = cracks, Emit = { dust, aura }, Aggro = 1.1 },
+			{ At = 0.33, Reveal = core, Break = plates, Emit = { rage }, Aggro = 1.3 },
+		}
+		return finishBiped(r, scale, { Root = { 6, 0, 0 }, RS = { 15, 0, 8 }, LS = { 25, 0, -10 } }, 6.6)
+	end
+
+	------------------------------------------------------------------------
+	-- 11. FOG REAPER (босс, Средняя) — огромный жнец из тумана с двойной косой.
+	-- 50% — красное свечение (глаза и ядро), ярость.
+	------------------------------------------------------------------------
+	local function FogReaper(scale)
+		local r = newCreature("FogReaper", V(2.4, 2.2, 1.4))
+		setup(r, { Style = "Float", Gait = { Bob = 0.35 }, Death = "Implode", Spawn = "Fade" })
+		r.SpawnFX = "FogVortex"
+		r.DeathFX = "Fog"
+		local B = r.Torso
+		local cloth, clothHi = rgb(40, 44, 48), rgb(120, 130, 134)
+		local fogT = { Transparency = 0.35 }
+		-- слоистый балахон из тумана
+		bevel(r, B, V(2.6, 1.8, 1.5), CF(0, 0.6, 0), cloth, clothHi, M.Fabric)
+		bevel(r, B, V(2.3, 1.4, 1.35), CF(0, -0.9, 0.05), cloth, clothHi, M.Fabric)
+		r:Box(B, V(2.0, 1.2, 1.2), CF(0, -2.1, 0.1), HC.FogDark, M.Fabric, fogT)
+		r:Box(B, V(1.5, 1.0, 0.9), CF(0, -3.0, 0.2), HC.Fog, M.Fabric, { Transparency = 0.55 })
+		tatter(r, B, -1.6, -0.7, 2.3, 6, cloth, M.Fabric, 2)
+		for i = 0, 3 do
+			local a = i / 4 * PI * 2 + 0.4
+			spike(r, B, V(math.cos(a) * 0.9, -1.4, math.sin(a) * 0.6), V(math.cos(a) * 1.4, -3.4, math.sin(a) * 0.9), 0.7, HC.FogDark, M.Fabric, true, 0.1)
+		end
+		-- ключицы-кости и рёбра под плащом
+		r:Box(B, V(2.0, 0.2, 0.2), CF(0, 1.2, -0.75), C.Bone, M.Plastic)
+		for i = 0, 2 do
+			r:Box(B, V(1.3 - i * 0.2, 0.12, 0.1), CF(0, 0.75 - i * 0.28, -0.78), C.BoneDark, M.Plastic)
+		end
+		-- капюшон с черепом
+		local head = hub(r, "BobHead", B, CF(0, 2.05, 0), { Amp = 0.07, Speed = 1.4 })
+		local fz = deepHood(r, head, 1.8, 1.7, cloth, clothHi)
+		spike(r, head, V(0, 0.75, 0.4), V(0, 1.6, 1.3), 1.0, cloth, M.Fabric, true, 0.2)
+		r:Box(head, V(1.05, 1.1, 0.3), CF(0, -0.12, fz + 0.15), C.Bone, M.Plastic)
+		local whiteEyes, redEyes = {}, {}
+		for _, s in ipairs({ -1, 1 }) do
+			r:Box(head, V(0.34, 0.28, 0.06), CF(0.26 * s, 0.02, fz - 0.01), rgb(10, 10, 14), M.Plastic)
+			whiteEyes[#whiteEyes + 1] = r:Neon(head, V(0.16, 0.13, 0.06), CF(0.26 * s, 0.01, fz - 0.04), HC.Ghost)
+			redEyes[#redEyes + 1] = r:Neon(head, V(0.2, 0.16, 0.06), CF(0.26 * s, 0.01, fz - 0.06), HC.Red)
+		end
+		r:Box(head, V(0.7, 0.12, 0.06), CF(0, -0.45, fz - 0.01), rgb(10, 10, 14), M.Plastic)
+		-- высокий воротник и наплечная накидка
+		bevel(r, B, V(2.9, 0.6, 1.8), CF(0, 1.45, 0.1), cloth, clothHi, M.Fabric)
+		for _, s in ipairs({ -1, 1 }) do
+			spike(r, B, V(1.2 * s, 1.6, 0.1), V(1.9 * s, 2.4, 0.4), 0.8, cloth, M.Fabric, true, 0.12)
+			spike(r, B, V(1.45 * s, 1.1, 0), V(1.8 * s, 0.0, 0.1), 0.7, cloth, M.Fabric, true, 0.1)
+		end
+		-- руки с двойной косой
+		local armR = hub(r, "ArmR", B, CF(1.55, 0.95, 0))
+		bar(r, armR, V(0, 0, 0), V(0.15, -1.1, -0.45), V2(0.7, 0.7), cloth)
+		r:Box(armR, V(0.4, 0.4, 0.4), CF(0.15, -1.25, -0.5), C.Bone, M.Plastic)
+		r:Box(armR, V(0.22, 6.4, 0.22), CF(0.15, -1.25, -0.6), HC.Iron, M.Metal)
+		for _, e in ipairs({ { 1.95, 1 }, { -4.45, -1 } }) do
+			local top = V(0.15, e[1], -0.6)
+			local d = e[2]
+			local pts = { top, top + V(0, 0.25 * d, -0.9), top + V(0, -0.1 * d, -2.0), top + V(0, -0.75 * d, -2.6) }
+			for i = 1, 3 do
+				bar(r, armR, pts[i], pts[i + 1], V2(0.1, 0.5 - i * 0.09), HC.IronHi, M.Metal)
+			end
+			bar(r, armR, pts[2] + V(0, -0.22 * d, 0), pts[3] + V(0, -0.17 * d, 0), V2(0.12, 0.07), HC.Ghost, M.Neon)
+		end
+		local armL = hub(r, "ArmL", B, CF(-1.55, 0.95, 0))
+		bar(r, armL, V(0, 0, 0), V(-0.15, -1.1, -0.45), V2(0.7, 0.7), cloth)
+		for k = -1, 1 do
+			spike(r, armL, V(-0.15 + k * 0.12, -1.35, -0.5), V(-0.2 + k * 0.18, -2.0, -0.75), 0.14, C.Bone, M.Plastic, true, 0.05)
+		end
+		-- вращающиеся клочья тумана
+		local orb = hub(r, "OrbitFog", B, CF(0, -0.4, 0), { Speed = 0.8 })
+		for i = 0, 4 do
+			local a = i / 5 * PI * 2
+			r:Box(orb, V(1.0, 0.5, 0.5), CF(math.cos(a) * 2.6, math.sin(a * 2) * 0.5, math.sin(a) * 2.6) * ANG(0, -a, rad(20)), HC.Fog, M.Fabric, { Transparency = 0.5 })
+		end
+		local light = r:Glow(head, HC.Ghost, 10, 1.1)
+		local e = emitPoint(r, B, CF(0, -3.2, 0.2), V(2.2, 0.5, 2.2))
+		emitter(e, HC.Fog, { Smoke = true, Rate = 8, Size = 1.6, SizeEnd = 3.2, LifeMin = 1, LifeMax = 1.8, SpeedMin = 0.3, SpeedMax = 1, Accel = V(0, 0.6, 0), T0 = 0.6 })
+		local fog = emitter(e, rgb(170, 180, 175), { Smoke = true, Rate = 40, Size = 3, SizeEnd = 7, LifeMin = 1.2, LifeMax = 2.2, SpeedMin = 4, SpeedMax = 8, T0 = 0.55, Off = true })
+		if fog then
+			fog.Name = "FogFX"
+		end
+		-- 50%: красные глаза и ядро, красный дым
+		local core = hide(join(redEyes, { r:Box(B, V(0.7, 0.7, 0.2), CF(0, 0.55, -0.82) * ANG(0, 0, rad(45)), HC.Red, M.Neon) }))
+		local red = emitter(B, HC.Red, { Rate = 14, Size = 0.45, SpeedMin = 1, SpeedMax = 3, Accel = V(0, 2, 0), Off = true })
+		local redSmoke = emitter(e, rgb(150, 30, 30), { Smoke = true, Rate = 6, Size = 1.4, SizeEnd = 2.8, LifeMin = 0.8, LifeMax = 1.4, T0 = 0.6, Off = true })
+		r.Phases = {
+			{ At = 0.5, Reveal = core, Break = whiteEyes, Emit = { red, redSmoke }, Lights = { { light, 3 } }, Aggro = 1.3 },
+		}
+		if light then
+			r.RedLight = light
+		end
+		return finishCreature(r, scale, 3.6, 6.0)
+	end
+
+	------------------------------------------------------------------------
+	-- 12. CURSED MONARCH (босс, Сложная) — тёмный король с тыквой-головой в золотой короне,
+	-- королевский плащ, посох-фонарь, огненная аура. 50% — красные глаза, огненные трещины на латах.
+	------------------------------------------------------------------------
+	local function CursedMonarch(scale)
+		local r = newBiped("CursedMonarch", V(1.5, 1.4, 1.5))
+		setup(r, { Style = "Heavy", Gait = { Speed = 0.7, Stride = 0.34, Bob = 0.18, Sway = 0.08, Shake = 0.35, Lean = 2 }, Death = "Implode", Spawn = "Titan" })
+		r.SpawnFX = "MonarchPortal"
+		r.DeathFX = "MonarchDeath"
+		local T, Hd, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		local armorC, armorHi = rgb(30, 22, 34), HC.Gold
+		-- торс: чёрные латы с золотым кантом, бордовый табард
+		bevel(r, T, V(2.3, 2.1, 1.25), CF(0, 0.05, 0.05), armorC, armorHi)
+		bevel(r, T, V(2.8, 1.1, 1.55), CF(0, 0.6, -0.05), rgb(44, 32, 50), armorHi)
+		r:Wedge(T, V(2.5, 0.55, 0.5), CF(0, 0.6, -1.0) * ANG(PI, PI, 0), armorC, M.Metal)
+		gem(r, T, 0.5, CF(0, 0.6, -0.88), HC.Fire, HC.Gold)
+		bevel(r, T, V(1.1, 2.4, 0.15), CF(0, -1.1, -0.66), HC.Burgundy, HC.Gold, M.Fabric)
+		tatter(r, T, -2.3, -0.66, 1.1, 3, HC.Burgundy, M.Fabric, 1)
+		bevel(r, T, V(2.3, 0.45, 1.5), CF(0, -0.95, 0), armorC, armorHi)
+		for _, s in ipairs({ -1, 1 }) do
+			bevel(r, T, V(0.8, 0.9, 1.2), CF(0.85 * s, -1.4, -0.05) * ANG(0, 0, rad(12 * s)), armorC, armorHi)
+		end
+		-- королевский плащ с меховым воротником
+		bevel(r, T, V(2.9, 0.5, 1.7), CF(0, 1.05, 0.1), rgb(220, 210, 190), rgb(160, 150, 130), M.Fabric)
+		local cape = hub(r, "Cape", T, CF(0, 0.95, 0.8), nil)
+		r:Box(cape, V(2.8, 2.6, 0.15), CF(0, -1.3, 0), HC.Burgundy, M.Fabric)
+		local cape2 = hub(r, "Cape2", cape, CF(0, -2.6, 0), nil)
+		r:Box(cape2, V(2.9, 2.2, 0.15), CF(0, -1.1, 0), HC.Burgundy, M.Fabric)
+		r:Box(cape2, V(2.94, 0.16, 0.18), CF(0, -2.1, 0), HC.Gold, M.Metal)
+		tatter(r, cape2, -2.2, 0, 2.9, 5, HC.Burgundy, M.Fabric, 4)
+		-- тыква-голова (тёмная, выжженная)
+		local ps = 1.2
+		local _, eyesP, mouth = pumpkin(r, Hd, CF(0, 0.2, 0), ps, { Color = rgb(150, 66, 20), Dark = rgb(90, 36, 14), Edge = rgb(220, 120, 50) })
+		local redEyes = {}
+		for i in ipairs(eyesP) do
+			local side = i == 1 and -1 or 1
+			redEyes[i] = r:Neon(Hd, V(0.4, 0.34, 0.06) * ps, CF(0.36 * side * ps, 0.2 + 0.18 * ps, -0.84 * ps) * ANG(0, 0, rad(30 * side)), HC.Red)
+		end
+		local cy = 0.2 + 0.64 * ps + 0.1
+		-- золотая корона (атрибут Crown)
+		local crownParts = {}
+		local function cp(list)
+			for _, p in ipairs(list) do
+				crownParts[#crownParts + 1] = p
+			end
+		end
+		for i = 0, 3 do
+			cp({ r:Box(Hd, V(1.6, 0.32, 0.14), CF(0, cy, 0) * ANG(0, i * PI / 2, 0) * CF(0, 0, -0.75), HC.Gold, M.Metal) })
+		end
+		for i = 0, 7 do
+			local a = i / 8 * PI * 2
+			local p = V(math.sin(a) * 0.75, cy + 0.1, -math.cos(a) * 0.75)
+			cp(spike(r, Hd, p, p + V(0, (i % 2 == 0) and 0.8 or 0.5, 0), 0.34, HC.Gold, M.Metal, true, 0.1))
+		end
+		cp(gem(r, Hd, 0.26, CF(0, cy, -0.84), HC.Red))
+		mark(crownParts, "Crown")
+		local headLight = r:Glow(Hd, HC.Fire, 12, 1.4)
+		-- наплечники и латные руки
+		for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
+			local A, s = a[1], a[2]
+			pauldron(r, A, s, 1.25, armorC, armorHi, HC.Fire, 2)
+			bevel(r, A, V(1.1, 1.0, 1.1), CF(0, 0.1, 0), armorC, armorHi)
+			bevel(r, A, V(1.25, 1.0, 1.25), CF(0, -0.75, 0), rgb(44, 32, 50), armorHi)
+			bevel(r, A, V(1.15, 0.6, 1.15), CF(0, -1.45, -0.05), armorC, armorHi)
+		end
+		-- посох-фонарь: древко, золотая клетка, огненная тыква
+		r:Box(RA, V(0.26, 6.2, 0.26), CF(0, -0.4, -0.6), rgb(26, 18, 22), M.Metal)
+		local topY = 2.7
+		r:Box(RA, V(0.9, 0.16, 0.9), CF(0, topY, -0.6), HC.Gold, M.Metal)
+		for i = 0, 3 do
+			r:Box(RA, V(0.1, 1.1, 0.1), CF(0, topY + 0.6, -0.6) * ANG(0, i * PI / 2 + PI / 4, 0) * CF(0.45, 0, 0), HC.Gold, M.Metal)
+		end
+		r:Box(RA, V(0.9, 0.16, 0.9), CF(0, topY + 1.2, -0.6), HC.Gold, M.Metal)
+		spike(r, RA, V(0, topY + 1.25, -0.6), V(0, topY + 1.9, -0.6), 0.35, HC.Gold, M.Metal)
+		r:Neon(RA, V(0.55, 0.55, 0.55), CF(0, topY + 0.6, -0.6) * ANG(0, rad(45), 0), HC.Fire)
+		r:Glow(RA, HC.Fire, 8, 1)
+		for _, Lg in ipairs({ RL, LL }) do
+			bevel(r, Lg, V(1.2, 1.0, 1.2), CF(0, 0.45, 0), armorC, armorHi)
+			bevel(r, Lg, V(1.2, 0.7, 1.2), CF(0, -0.4, 0), rgb(44, 32, 50), armorHi)
+			bootA(r, Lg, armorC, armorHi, 1.3)
+		end
+		-- огненная аура всегда (вокруг ног)
+		local feet = emitPoint(r, T, CF(0, -2.7, 0), V(3, 0.4, 3))
+		emitter(feet, HC.Fire, { Rate = 14, Size = 0.5, SizeEnd = 0.1, LifeMin = 0.5, LifeMax = 1.0, SpeedMin = 1, SpeedMax = 2.5, Accel = V(0, 4, 0) })
+		emitter(feet, rgb(80, 30, 10), { Smoke = true, Rate = 4, Size = 1.2, SizeEnd = 2.4, LifeMin = 0.8, LifeMax = 1.4, Accel = V(0, 1.5, 0), T0 = 0.6 })
+		-- 50%: красные глаза вместо оранжевых, огненные трещины, больше огня
+		local cracks = hide(join(
+			redEyes,
+			crack(r, T, { V(-1.05, 1.1, -0.84), V(-0.6, 0.7, -0.84), V(-0.85, 0.2, -0.84) }, 0.09, HC.Fire),
+			crack(r, T, { V(1.0, 1.05, -0.84), V(0.55, 0.5, -0.84), V(0.8, 0.05, -0.84) }, 0.09, HC.Fire),
+			crack(r, RA, { V(0.3, 0.3, -0.62), V(0.0, -0.3, -0.64), V(0.25, -0.9, -0.64) }, 0.07, HC.Fire),
+			crack(r, LA, { V(-0.3, 0.3, -0.62), V(0.0, -0.3, -0.64), V(-0.25, -0.9, -0.64) }, 0.07, HC.Fire),
+			crack(r, RL, { V(0.3, 0.7, -0.62), V(-0.1, 0.2, -0.62) }, 0.07, HC.Fire),
+			crack(r, LL, { V(-0.3, 0.6, -0.62), V(0.15, 0.1, -0.62) }, 0.07, HC.Fire)
+		))
+		local rage = emitter(feet, HC.Red, { Rate = 22, Size = 0.6, SpeedMin = 2, SpeedMax = 4, Accel = V(0, 5, 0), Off = true })
+		local embers = emitter(T, HC.FireSoft, { Rate = 12, Size = 0.25, SpeedMin = 2, SpeedMax = 5, Off = true })
+		r.Phases = {
+			{ At = 0.5, Reveal = cracks, Break = join(eyesP, mouth), Emit = { rage, embers }, Lights = { { headLight, 3 } }, Aggro = 1.3 },
+		}
+		return finishBiped(r, scale, { Root = { 4, 0, 0 }, RS = { 18, 0, 8 }, LS = { 6, 0, -10 } }, 7.0)
+	end
+
+	EnemyModels.Register("CursedDead", CursedDead)
+	EnemyModels.Register("PumpkinRunner", PumpkinRunner)
+	EnemyModels.Register("PhantomWarrior", PhantomWarrior)
+	EnemyModels.Register("BoneGuard", BoneGuard)
+	EnemyModels.Register("LivingScarecrow", LivingScarecrow)
+	EnemyModels.Register("StrawMinion", StrawMinion)
+	EnemyModels.Register("FogWarlock", FogWarlock)
+	EnemyModels.Register("PumpkinBrute", PumpkinBrute)
+	EnemyModels.Register("NightReaper", NightReaper)
+	EnemyModels.Register("GraveWarden", GraveWarden)
+	EnemyModels.Register("FogReaper", FogReaper)
+	EnemyModels.Register("CursedMonarch", CursedMonarch)
+end
 ]======] }
 FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "EnemyModels" }, "ModuleScript", [======[
 --!nocheck
@@ -4175,6 +6962,21 @@ local Builders = {
 	TheEntity = TheEntity,
 }
 
+-- Хелперы для модулей-расширений (HalloweenEnemies)
+EnemyModels.H = {
+	newCreature = newCreature, newBiped = newBiped, setup = setup, hub = hub, emitter = emitter,
+	emitPoint = emitPoint, darkTrail = darkTrail, finishCreature = finishCreature, finishBiped = finishBiped,
+	C = C, M = M, rgb = rgb, lite = lite, SMOKE_TEXTURE = SMOKE_TEXTURE,
+}
+
+function EnemyModels.Register(enemyId, builder)
+	Builders[enemyId] = builder
+end
+
+function EnemyModels.Has(enemyId)
+	return Builders[enemyId] ~= nil
+end
+
 function EnemyModels.Build(enemyId)
 	local def = Config.Enemies[enemyId]
 	local builder = Builders[enemyId]
@@ -4200,6 +7002,8 @@ function EnemyModels.Build(enemyId)
 	return rig
 end
 
+require(script.Parent:WaitForChild("HalloweenEnemies"))(EnemyModels)
+
 return EnemyModels
 ]======] }
 FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "CaseModels" }, "ModuleScript", [======[
@@ -4207,6 +7011,7 @@ FILES[#FILES + 1] = { "ReplicatedStorage", { "VoidTD", "CaseModels" }, "ModuleSc
 -- VOID TD :: CaseModels
 -- 3D-модели кейсов (витрины в лобби и анимация открытия). Все детали заякорены.
 -- CaseModels.Build(caseId) -> { Model, Body, Lid, Core, Shards = {...}, Cracks = {...} }
+-- Halloween дополнительно: Chains, Eyes, Fire (ParticleEmitter), LidParts, Hinge (CFrame петли крышки)
 
 local CaseModels = {}
 
@@ -4334,7 +7139,149 @@ local function BloodMoon(m)
 	return r
 end
 
-local Builders = { VoidCase = VoidCase, ShatteredReality = ShatteredReality, BloodMoon = BloodMoon }
+------------------------------------------------------------------------
+-- HALLOWEEN: чёрно-золотой проклятый сундук — светящиеся глаза, цепи с замком, оранжевый огонь.
+-- Крышка — отдельный набор деталей (LidParts) с петлёй Hinge на заднем верхнем ребре корпуса.
+------------------------------------------------------------------------
+local function wedge(parent, size, cf, color, material)
+	local w = Instance.new("WedgePart")
+	w.Anchored = true
+	w.CanCollide = false
+	w.CanTouch = false
+	w.CanQuery = false
+	w.Size = size
+	w.CFrame = cf
+	w.Color = color
+	w.Material = material or Enum.Material.SmoothPlastic
+	w.Parent = parent
+	return w
+end
+
+-- цепь из звеньев между точками a и b
+local function chainLinks(parent, list, a, b, color)
+	local d = b - a
+	local n = math.max(2, math.floor(d.Magnitude / 0.36))
+	local up = math.abs(d.Unit.Y) > 0.98 and V(0, 0, 1) or V(0, 1, 0)
+	for i = 0, n - 1 do
+		local p = a + d * ((i + 0.5) / n)
+		local cf = CFrame.lookAt(p, p + d, up) * ANG(0, 0, (i % 2 == 0) and 0 or math.pi / 2)
+		list[#list + 1] = part(parent, V(0.3, 0.1, 0.44), cf, color, Enum.Material.Metal)
+	end
+end
+
+local function fireEmitter(parent, list, cf, size, rate)
+	local p = part(parent, V(size, 0.2, size), cf, Color3.new(), Enum.Material.SmoothPlastic, { Transparency = 1 })
+	local e = Instance.new("ParticleEmitter")
+	e.Name = "CursedFire"
+	e.Color = ColorSequence.new(Color3.fromRGB(255, 200, 90), Color3.fromRGB(255, 70, 20))
+	e.LightEmission = 1
+	e.LightInfluence = 0
+	e.Rate = rate or 14
+	e.Lifetime = NumberRange.new(0.5, 0.9)
+	e.Speed = NumberRange.new(1.5, 3)
+	e.EmissionDirection = Enum.NormalId.Top
+	e.SpreadAngle = Vector2.new(12, 12)
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.15), NumberSequenceKeypoint.new(1, 1) })
+	e.Parent = p
+	list[#list + 1] = e
+	return p
+end
+
+local function Halloween(m)
+	local r = { Shards = {}, Cracks = {}, Chains = {}, Eyes = {}, Fire = {}, LidParts = {} }
+	local black, coal = Color3.fromRGB(20, 14, 22), Color3.fromRGB(38, 26, 40)
+	local gold, goldDark = Color3.fromRGB(214, 168, 70), Color3.fromRGB(140, 100, 40)
+	local orange, ember = Color3.fromRGB(255, 130, 30), Color3.fromRGB(255, 190, 80)
+	local iron = Color3.fromRGB(70, 64, 76)
+	local W, Hh, D = 4.0, 2.4, 2.8
+	-- корпус
+	r.Body = part(m, V(W, Hh, D), CF(0, 0.3 + Hh / 2, 0), black, Enum.Material.Slate)
+	part(m, V(W + 0.3, 0.35, D + 0.3), CF(0, 0.18, 0), gold, Enum.Material.Metal)
+	part(m, V(W - 0.4, 0.12, D - 0.4), CF(0, 0.02, 0), goldDark, Enum.Material.Metal)
+	-- ножки-когти
+	for _, x in ipairs({ -1, 1 }) do
+		for _, z in ipairs({ -1, 1 }) do
+			wedge(m, V(0.5, 0.45, 0.5), CF(x * (W / 2 - 0.1), 0.0, z * (D / 2 - 0.1)) * ANG(0, (z < 0) and 0 or math.pi, 0) * ANG(math.pi, 0, 0), gold, Enum.Material.Metal)
+		end
+	end
+	-- золотые рёбра и тёмные доски
+	for _, x in ipairs({ -1, 1 }) do
+		for _, z in ipairs({ -1, 1 }) do
+			part(m, V(0.3, Hh + 0.05, 0.3), CF(x * (W / 2 - 0.08), 0.3 + Hh / 2, z * (D / 2 - 0.08)), gold, Enum.Material.Metal)
+		end
+	end
+	for _, y in ipairs({ 0.95, 1.75 }) do
+		part(m, V(W - 0.4, 0.06, 0.06), CF(0, y, -D / 2 - 0.01), coal, Enum.Material.Wood)
+	end
+	part(m, V(W + 0.06, 0.2, D + 0.06), CF(0, 0.3 + Hh - 0.1, 0), gold, Enum.Material.Metal)
+	-- светящиеся глаза со злыми бровями
+	for _, s in ipairs({ -1, 1 }) do
+		local eye = neon(m, V(0.62, 0.3, 0.12), CF(0.85 * s, 1.95, -D / 2 - 0.04) * ANG(0, 0, math.rad(-14 * s)), orange)
+		table.insert(r.Eyes, eye)
+		table.insert(r.Eyes, neon(m, V(0.16, 0.16, 0.14), CF(0.85 * s, 1.93, -D / 2 - 0.06) * ANG(0, 0, math.rad(45)), ember))
+		part(m, V(0.8, 0.14, 0.12), CF(0.8 * s, 2.22, -D / 2 - 0.05) * ANG(0, 0, math.rad(22 * s)), gold, Enum.Material.Metal)
+	end
+	-- клыкастая пасть под глазами
+	part(m, V(2.2, 0.32, 0.08), CF(0, 1.52, -D / 2 - 0.02), Color3.fromRGB(60, 16, 10))
+	for k = -3, 3 do
+		wedge(m, V(0.08, 0.22, 0.2), CF(k * 0.3, 1.57, -D / 2 - 0.08) * ANG(0, math.pi / 2, 0) * ANG(math.pi, 0, 0), Color3.fromRGB(230, 220, 200))
+	end
+	-- цепи крест-накрест по фасаду и замок
+	local fz = -D / 2 - 0.12
+	chainLinks(m, r.Chains, V(-W / 2 + 0.2, 0.5, fz), V(-0.3, 1.0, fz), iron)
+	chainLinks(m, r.Chains, V(W / 2 - 0.2, 0.5, fz), V(0.3, 1.0, fz), iron)
+	chainLinks(m, r.Chains, V(0, 1.35, fz - 0.05), V(0, 2.65, fz - 0.05), iron)
+	-- цепи по бокам
+	for _, x in ipairs({ -1, 1 }) do
+		chainLinks(m, r.Chains, V(x * (W / 2 + 0.1), 2.6, -D / 2 + 0.2), V(x * (W / 2 + 0.1), 0.45, D / 2 - 0.2), iron)
+	end
+	local lock = part(m, V(0.8, 0.75, 0.3), CF(0, 0.95, fz - 0.15), gold, Enum.Material.Metal)
+	table.insert(r.Chains, lock)
+	for _, s in ipairs({ -1, 1 }) do
+		table.insert(r.Chains, part(m, V(0.12, 0.4, 0.12), CF(0.25 * s, 1.45, fz - 0.15), goldDark, Enum.Material.Metal))
+	end
+	table.insert(r.Chains, part(m, V(0.62, 0.12, 0.12), CF(0, 1.62, fz - 0.15), goldDark, Enum.Material.Metal))
+	r.Core = neon(m, V(0.2, 0.32, 0.08), CF(0, 0.9, fz - 0.32), orange)
+	table.insert(r.Chains, r.Core)
+	-- крышка (на петле сзади)
+	local lidY = 0.3 + Hh
+	local function lid(p)
+		table.insert(r.LidParts, p)
+		return p
+	end
+	r.Lid = lid(part(m, V(W + 0.1, 0.55, D + 0.1), CF(0, lidY + 0.28, 0), black, Enum.Material.Slate))
+	lid(part(m, V(W - 0.3, 0.42, D - 0.5), CF(0, lidY + 0.76, 0), coal, Enum.Material.Slate))
+	lid(wedge(m, V(W - 0.3, 0.42, 0.25), CF(0, lidY + 0.76, -D / 2 + 0.12), coal, Enum.Material.Slate))
+	lid(wedge(m, V(W - 0.3, 0.42, 0.25), CF(0, lidY + 0.76, D / 2 - 0.12) * ANG(0, math.pi, 0), coal, Enum.Material.Slate))
+	lid(part(m, V(W + 0.2, 0.16, D + 0.2), CF(0, lidY + 0.06, 0), gold, Enum.Material.Metal))
+	lid(part(m, V(W - 0.2, 0.12, 0.3), CF(0, lidY + 0.98, 0), gold, Enum.Material.Metal))
+	for _, x in ipairs({ -1, 1 }) do
+		lid(part(m, V(0.3, 0.62, D + 0.16), CF(x * (W / 2 - 0.1), lidY + 0.3, 0), gold, Enum.Material.Metal))
+		-- рога по углам крышки
+		local base = V(x * (W / 2 - 0.35), lidY + 1.0, -D / 2 + 0.4)
+		lid(wedge(m, V(0.3, 0.7, 0.4), CFrame.new(base + V(x * 0.15, 0.3, 0)) * ANG(0, 0, math.rad(-25 * x)) * ANG(0, math.pi, 0), gold, Enum.Material.Metal))
+	end
+	-- оранжевый камень-око на крышке
+	lid(neon(m, V(0.42, 0.42, 0.14), CF(0, lidY + 0.3, -D / 2 - 0.1) * ANG(0, 0, math.rad(45)), orange))
+	-- петли
+	for _, x in ipairs({ -1.2, 1.2 }) do
+		part(m, V(0.5, 0.3, 0.2), CF(x, lidY, D / 2 + 0.08), gold, Enum.Material.Metal)
+	end
+	r.Hinge = CF(0, lidY, D / 2)
+	-- огонь по углам и угли вокруг
+	for _, x in ipairs({ -1, 1 }) do
+		fireEmitter(m, r.Fire, CF(x * (W / 2 + 0.2), 0.45, -D / 2 - 0.2), 0.5, 12)
+		fireEmitter(m, r.Fire, CF(x * (W / 2 - 0.35), lidY + 1.35, -D / 2 + 0.4), 0.3, 8)
+	end
+	for i = 0, 3 do
+		local a = i / 4 * math.pi * 2 + 0.4
+		table.insert(r.Shards, neon(m, V(0.25, 0.25, 0.25), CF(math.cos(a) * 2.8, 3.4 + (i % 2) * 0.6, math.sin(a) * 2.6) * ANG(math.rad(45), a, math.rad(45)), ember))
+	end
+	return r
+end
+
+local Builders = { VoidCase = VoidCase, ShatteredReality = ShatteredReality, BloodMoon = BloodMoon, Halloween = Halloween }
 
 function CaseModels.Build(caseId)
 	local m = Instance.new("Model")
@@ -4377,6 +7324,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local MapBuilder = require(script:WaitForChild("MapBuilder"))
 local DataService = require(script:WaitForChild("DataService"))
 local GameService = require(script:WaitForChild("GameService"))
+local HalloweenService = require(script:WaitForChild("HalloweenService"))
 
 -- Remotes / State
 local function folder(parent, name)
@@ -4407,7 +7355,14 @@ local state = folder(Shared, "State")
 local unitsFolder = folder(Shared, "Units")
 
 local map = MapBuilder.Build()
-GameService.Init(remotes, state, unitsFolder, map)
+-- Хэллоуин: остров с порталом и карта Haunted Hollow
+local okH, halloweenMap = pcall(MapBuilder.BuildHalloween)
+if not okH then
+	warn("[VOID TD] Хэллоуин-мир не построен: " .. tostring(halloweenMap))
+	halloweenMap = nil
+end
+GameService.Init(remotes, state, unitsFolder, map, { Void = map, Halloween = halloweenMap })
+HalloweenService.Init(GameService, state)
 
 local function pushProfile(player)
 	local snap = DataService.Snapshot(player)
@@ -4415,6 +7370,7 @@ local function pushProfile(player)
 		remotes.Profile:FireClient(player, snap)
 	end
 end
+GameService.OnProfileChanged = pushProfile
 
 local function onPlayerAdded(player)
 	DataService.Load(player)
@@ -4552,6 +7508,34 @@ handlers.Summon = function(player, data)
 	return ok, result
 end
 
+handlers.EquipRune = function(player, data)
+	if type(data) ~= "table" or type(data.Unit) ~= "string" then
+		return false, "Неверный запрос"
+	end
+	local runeId = type(data.Rune) == "string" and data.Rune or nil
+	local ok, err = DataService.EquipRune(player, data.Unit, runeId)
+	if ok then
+		pushProfile(player)
+	end
+	return ok, err
+end
+
+handlers.Teleport = function(player, data)
+	return HalloweenService.Teleport(player, type(data) == "table" and data.To or nil)
+end
+
+handlers.QueueDifficulty = function(player, data)
+	return HalloweenService.SetDifficulty(player, type(data) == "table" and data.Difficulty or nil)
+end
+
+handlers.QueueStart = function(player)
+	return HalloweenService.StartNow(player)
+end
+
+handlers.QueueLeave = function(player)
+	return HalloweenService.Leave(player)
+end
+
 handlers.Equip = function(player, data)
 	if type(data) ~= "table" then
 		return false, "Неверный запрос"
@@ -4605,8 +7589,9 @@ task.spawn(function()
 		task.wait(5)
 		for _, p in ipairs(Players:GetPlayers()) do
 			local prof = DataService.Get(p)
-			if prof and p:GetAttribute("LastGems") ~= prof.Gems then
+			if prof and (p:GetAttribute("LastGems") ~= prof.Gems or p:GetAttribute("LastCoins") ~= prof.HalloweenCoins) then
 				p:SetAttribute("LastGems", prof.Gems)
+				p:SetAttribute("LastCoins", prof.HalloweenCoins)
 				pushProfile(p)
 				DataService.Save(p)
 			end
@@ -5440,6 +8425,23 @@ local function calm(root)
 	end
 end
 
+-- Круг-зона: встал — открылось меню (или сработал портал)
+local function zoneCircle(parent, key, z, zc, subtitle, padColor)
+	local zm = Instance.new("Model")
+	zm.Name = key
+	zm.Parent = parent
+	cylinderY(zm, "PadBase", z.Radius + 1.2, 0.6, zc + V(0, 0.3, 0), C.Stone2)
+	cylinderY(zm, "PadEdge", z.Radius + 0.5, 0.65, zc + V(0, 0.33, 0), z.Color, Enum.Material.Neon)
+	local pad = cylinderY(zm, "Pad", z.Radius, 0.7, zc + V(0, 0.36, 0), padColor or Color3.fromRGB(25, 15, 40), Enum.Material.Glass, { Transparency = 0.15 })
+	local beam = cylinderY(zm, "LightBeam", z.Radius * 0.9, 26, zc + V(0, 13, 0), z.Color, Enum.Material.Neon, { CanCollide = false, Transparency = 0.88 })
+	beam.CastShadow = false
+	emitter(pad, z.Color, { Rate = 14, Size = 0.5, SpeedMin = 2, SpeedMax = 4, Spread = 10, Dir = Enum.NormalId.Right, LifeMin = 1.5, LifeMax = 2.5 })
+	light(pad, z.Color, 18, 2)
+	billboard(zm, zc + V(0, 8.5, 0), z.Title, subtitle or (z.Teleport and "войди в портал" or "встань в круг"), z.Color, 12)
+	zm:SetAttribute("Zone", key)
+	return zm
+end
+
 function MapBuilder.BuildLobby()
 	local existing = workspace:FindFirstChild("VoidTDLobby")
 	if existing then
@@ -5489,19 +8491,7 @@ function MapBuilder.BuildLobby()
 	zonesFolder.Name = "Zones"
 	zonesFolder.Parent = m
 	for key, z in pairs(L.Zones) do
-		local zc = c + z.Offset
-		local zm = Instance.new("Model")
-		zm.Name = key
-		zm.Parent = zonesFolder
-		cylinderY(zm, "PadBase", z.Radius + 1.2, 0.6, zc + V(0, 0.3, 0), C.Stone2)
-		cylinderY(zm, "PadEdge", z.Radius + 0.5, 0.65, zc + V(0, 0.33, 0), z.Color, Enum.Material.Neon)
-		local pad = cylinderY(zm, "Pad", z.Radius, 0.7, zc + V(0, 0.36, 0), Color3.fromRGB(25, 15, 40), Enum.Material.Glass, { Transparency = 0.15 })
-		local beam = cylinderY(zm, "LightBeam", z.Radius * 0.9, 26, zc + V(0, 13, 0), z.Color, Enum.Material.Neon, { CanCollide = false, Transparency = 0.88 })
-		beam.CastShadow = false
-		emitter(pad, z.Color, { Rate = 14, Size = 0.5, SpeedMin = 2, SpeedMax = 4, Spread = 10, Dir = Enum.NormalId.Right, LifeMin = 1.5, LifeMax = 2.5 })
-		light(pad, z.Color, 18, 2)
-		billboard(zm, zc + V(0, 8.5, 0), z.Title, "встань в круг", z.Color, 12)
-		zm:SetAttribute("Zone", key)
+		zoneCircle(zonesFolder, key, z, c + z.Offset)
 	end
 
 	-- КЕЙСЫ: витрины с вращающимися 3D-кейсами за каждым кругом
@@ -5630,6 +8620,18 @@ function MapBuilder.BuildLobby()
 	return m
 end
 
+-- Хелперы для HalloweenWorld
+MapBuilder.H = {
+	part = part, light = light, emitter = emitter, cylinderY = cylinderY, billboard = billboard,
+	statue = statue, calm = calm, zoneCircle = zoneCircle, lobbyPortal = lobbyPortal, C = C,
+}
+
+-- Хэллоуин-остров, портал в лобби и карта Haunted Hollow
+function MapBuilder.BuildHalloween()
+	local HalloweenWorld = require(script.Parent:WaitForChild("HalloweenWorld"))
+	return HalloweenWorld.Build(MapBuilder.H)
+end
+
 ------------------------------------------------------------------------
 function MapBuilder.Build()
 	local existing = workspace:FindFirstChild("VoidTDMap")
@@ -5703,6 +8705,8 @@ local function defaultProfile()
 		LastDaily = 0,
 		Receipts = {},
 		HalloweenCoins = 0,
+		Runes = {},       -- RuneId -> количество
+		RuneSlots = {},   -- UnitId -> RuneId (1 руна на юнита)
 	}
 	for i, id in ipairs(s.StarterUnits) do
 		p.Inventory[id] = 1
@@ -5723,7 +8727,28 @@ local function sanitize(p)
 	p.Settings = type(p.Settings) == "table" and p.Settings or {}
 	p.LastDaily = tonumber(p.LastDaily) or 0
 	p.Receipts = type(p.Receipts) == "table" and p.Receipts or {}
-	p.HalloweenCoins = tonumber(p.HalloweenCoins) or 0
+	p.HalloweenCoins = math.max(0, math.floor(tonumber(p.HalloweenCoins) or 0))
+	-- руны: только известные, слоты — только у своих юнитов и не больше, чем рун есть
+	local runes = {}
+	if type(p.Runes) == "table" then
+		for id, n in pairs(p.Runes) do
+			n = math.floor(tonumber(n) or 0)
+			if Config.Runes[id] and n > 0 then
+				runes[id] = n
+			end
+		end
+	end
+	p.Runes = runes
+	local slots, used = {}, {}
+	if type(p.RuneSlots) == "table" then
+		for unitId, runeId in pairs(p.RuneSlots) do
+			if Config.Units[unitId] and (p.Inventory[unitId] or 0) > 0 and runes[runeId] and (used[runeId] or 0) < runes[runeId] then
+				slots[unitId] = runeId
+				used[runeId] = (used[runeId] or 0) + 1
+			end
+		end
+	end
+	p.RuneSlots = slots
 	-- убрать неизвестные юниты
 	for id in pairs(p.Inventory) do
 		if not Config.Units[id] then
@@ -5764,6 +8789,7 @@ function DataService.Load(player)
 	end
 	DataService.Profiles[player] = profile
 	player:SetAttribute("Gems", profile.Gems)
+	player:SetAttribute("HalloweenCoins", profile.HalloweenCoins)
 	return profile
 end
 
@@ -5833,7 +8859,65 @@ function DataService.Snapshot(player)
 		Settings = deepCopy(p.Settings or {}),
 		DailyReadyAt = (tonumber(p.LastDaily) or 0) + Config.Settings.DailyCooldown,
 		HalloweenCoins = p.HalloweenCoins or 0,
+		Runes = deepCopy(p.Runes or {}),
+		RuneSlots = deepCopy(p.RuneSlots or {}),
 	}
+end
+
+function DataService.AddCurrency(player, currency, amount)
+	local p = DataService.Profiles[player]
+	if not p then
+		return
+	end
+	if currency == "Gems" then
+		DataService.AddGems(player, amount)
+		return
+	end
+	p[currency] = math.max(0, (p[currency] or 0) + math.floor(amount))
+	player:SetAttribute(currency, p[currency])
+end
+
+------------------------------------------------------------------------
+-- РУНЫ: 1 руна на юнита, снимается и переносится на другого, работает только надетой
+------------------------------------------------------------------------
+function DataService.GetRune(player, unitId)
+	local p = DataService.Profiles[player]
+	return p and p.RuneSlots and p.RuneSlots[unitId] or nil
+end
+
+local function runesUsed(p, runeId, exceptUnit)
+	local n = 0
+	for unitId, r in pairs(p.RuneSlots) do
+		if r == runeId and unitId ~= exceptUnit then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+-- runeId = nil — снять руну с юнита
+function DataService.EquipRune(player, unitId, runeId)
+	local p = DataService.Profiles[player]
+	if not p then
+		return false, "Профиль не загружен"
+	end
+	if not Config.Units[unitId] or (p.Inventory[unitId] or 0) <= 0 then
+		return false, "Юнита нет в инвентаре"
+	end
+	if runeId == nil then
+		p.RuneSlots[unitId] = nil
+		DataService.Save(player)
+		return true
+	end
+	if not Config.Runes[runeId] then
+		return false, "Неизвестная руна"
+	end
+	if runesUsed(p, runeId, unitId) >= (p.Runes[runeId] or 0) then
+		return false, "Все такие руны уже надеты — сними руну с другого юнита"
+	end
+	p.RuneSlots[unitId] = runeId
+	DataService.Save(player)
+	return true
 end
 
 ------------------------------------------------------------------------
@@ -5895,7 +8979,13 @@ function DataService.Summon(player, caseId, count)
 	end
 	local s = Config.Settings
 	count = (count == 10) and 10 or 1
+	if case.Single and count ~= 1 then
+		return false, "Этот кейс открывается по одному"
+	end
 	local cost = (count == 10) and case.Cost10 or case.Cost1
+	if not cost then
+		return false, "Неверный запрос"
+	end
 	local currency = case.Currency or "Gems"
 	if (p[currency] or 0) < cost then
 		return false, currency == "Gems" and "Недостаточно кристаллов" or "Недостаточно Halloween Coins"
@@ -5903,6 +8993,46 @@ function DataService.Summon(player, caseId, count)
 	p[currency] = p[currency] - cost
 	if currency == "Gems" then
 		player:SetAttribute("Gems", p.Gems)
+	end
+	-- кейс с полным списком наград (юниты и руны): один бросок на открытие
+	if case.Rewards then
+		local total = 0
+		for _, r in ipairs(case.Rewards) do
+			total = total + r.Rate
+		end
+		local roll, acc, pick = rng:NextNumber() * total, 0, case.Rewards[#case.Rewards]
+		for _, r in ipairs(case.Rewards) do
+			acc = acc + r.Rate
+			if roll < acc then
+				pick = r
+				break
+			end
+		end
+		local result
+		if pick.Rune then
+			local isNew = (p.Runes[pick.Rune] or 0) == 0
+			p.Runes[pick.Rune] = (p.Runes[pick.Rune] or 0) + 1
+			result = { Rune = pick.Rune, New = isNew }
+		else
+			local id = pick.Unit
+			local isNew = (p.Inventory[id] or 0) == 0
+			p.Inventory[id] = (p.Inventory[id] or 0) + 1
+			result = { Id = id, New = isNew }
+			if isNew then
+				for slot = 1, s.EquipSlots do
+					if not p.Equipped[slot] then
+						p.Equipped[slot] = id
+						break
+					end
+				end
+			end
+		end
+		if currency ~= "Gems" then
+			player:SetAttribute(currency, p[currency])
+		end
+		p.Stats.Summons = (p.Stats.Summons or 0) + 1
+		DataService.Save(player, true)
+		return true, { result }
 	end
 	local pool = unitsByRarity(case)
 	local results = {}
@@ -6051,6 +9181,7 @@ local S = Config.Settings
 local GameService = {}
 
 local Remotes, State, UnitsFolder, Map
+local MapModels = {}
 local rng = Random.new()
 
 local enemies = {}
@@ -6073,6 +9204,20 @@ local waveSpawning = false
 local nextWaveAt = 0
 local lastSync = 0
 local lastAttrFlush = 0
+-- режим матча: Void (обычный) или Halloween (карта Haunted Hollow, вход только из очереди на острове)
+local matchMode = "Void"
+local maxWave = S.MaxWave
+local roster = {}       -- участники Хэллоуин-матча (UserId -> true)
+local coinsPaid = {}    -- matchId -> true: награда за победу выдана (повторно не платится)
+-- союзники (призывы): идут по дороге от базы к порталу
+local allies = {}
+local nextAllyId = 0
+local allyRemoved = {}
+local allyIndex = {}
+for i, id in ipairs(Config.AllyOrder or {}) do
+	allyIndex[id] = i
+end
+local echoAttack = false -- true, пока выполняется повтор атаки «Призрачной короны»
 
 local function now()
 	return workspace:GetServerTimeNow()
@@ -6148,12 +9293,16 @@ local function teleport(player, pos)
 end
 
 local function toBattle(player)
-	teleport(player, Config.BattleSpawn)
+	local m = Config.Maps[matchMode] or Config.Map
+	teleport(player, m.BattleSpawn or Config.BattleSpawn)
 end
 
-local function toLobby(player)
-	teleport(player, Config.Lobby.Spawn)
+local function toLobby(player, island)
+	player:SetAttribute("Island", island == true)
+	teleport(player, island and Config.HalloweenIsland.Spawn or Config.Lobby.Spawn)
 end
+GameService.ToLobby = toLobby
+GameService.Teleport = teleport
 
 ------------------------------------------------------------------------
 -- ВРАГИ
@@ -6208,6 +9357,21 @@ local function spawnEnemy(typeId, startDist, lateral)
 	if def.Summon then
 		e.NextSummon = now() + def.Summon.Interval
 	end
+	-- особое поведение хэллоуинских врагов
+	local t0 = now()
+	e.BaseArmor = e.Armor
+	if def.Phase then
+		e.NextPhase = t0 + def.Phase.Every * rng:NextNumber(0.5, 1)
+	end
+	if def.Fog then
+		e.NextFog = t0 + def.Fog.Every * rng:NextNumber(0.4, 0.8)
+	end
+	if def.Shield then
+		e.NextShield = t0 + def.Shield.Every * 0.6
+	end
+	if def.Haste then
+		e.NextHaste = t0 + def.Haste.Every * 0.7
+	end
 	e.Pos = enemyPos(e)
 	enemies[e.Id] = e
 	Remotes.EnemySpawn:FireAllClients({ e.Id, typeId, hp, e.Speed, e.Lateral, e.Dist })
@@ -6237,7 +9401,66 @@ local function killEnemy(e)
 		notifyAll({ Type = "Toast", Text = e.Def.Name .. " повержен! +" .. g .. " гемов", Kind = "boss" })
 		notifyAll({ Type = "BossDown" })
 	end
+	if e.Def.OnDeath then
+		pendingSpawns[#pendingSpawns + 1] = { e.Def.OnDeath.Enemy, e.Def.OnDeath.Count, e.Dist + 1.5, e.Pos, "Straw" }
+	end
 	removeEnemy(e, "kill")
+end
+
+local function enemyState(e, state, dur)
+	Remotes.Impact:FireAllClients({ K = "EnemyState", I = e.Id, S = state, DUR = dur, P = e.Pos })
+end
+
+-- множитель получаемого урона: фаза призрака, защита, метка проклятия
+local function takenMult(e, t)
+	local m = 1
+	if (e.PhasedUntil or 0) > t then
+		m = m * e.Def.Phase.Taken
+	end
+	if (e.ShieldUntil or 0) > t then
+		m = m * e.Def.Shield.Taken
+	end
+	if (e.MarkUntil or 0) > t then
+		m = m * (1 + (e.Mark or 0))
+	end
+	return m
+end
+
+-- броня с учётом участков дороги (Проклятый монарх)
+local function armorOf(e)
+	local a = e.Armor
+	local zones = e.Def.ArmorZones
+	if zones then
+		local f = PathUtil.Fraction(e.Dist)
+		for _, z in ipairs(zones) do
+			if f >= z[1] and f <= z[2] then
+				a = a + z[3]
+			end
+		end
+	end
+	return math.min(a, 0.9)
+end
+
+-- пороги HP: ломается броня, ярость, вторая фаза
+local function checkThresholds(e)
+	local def = e.Def
+	local ratio = e.Health / e.MaxHealth
+	if def.ArmorScale then
+		e.Armor = e.BaseArmor * math.max(ratio, 0)
+	end
+	if def.ArmorBreak and not e.ArmorBroken and ratio <= def.ArmorBreak.At then
+		e.ArmorBroken = true
+		e.Armor = def.ArmorBreak.Armor
+		enemyState(e, "ArmorBreak")
+	end
+	if def.Enrage and not e.Enraged and ratio <= def.Enrage.At then
+		e.Enraged = true
+		e.EnrageSpeed = def.Enrage.Speed or 0
+		enemyState(e, "Enrage")
+		if def.Enrage.Spawn then
+			pendingSpawns[#pendingSpawns + 1] = { def.Enrage.Spawn[1], def.Enrage.Spawn[2], math.max(e.Dist - 4, 0), e.Pos, "Fire" }
+		end
+	end
 end
 
 local function pushDamage(id, amount, flag)
@@ -6253,7 +9476,7 @@ local function damageEnemy(e, amount, crit, unit, noDodge)
 		pushDamage(e.Id, 0, 2)
 		return 0
 	end
-	local dmg = math.max(1, math.floor(amount * (1 - e.Armor) + 0.5))
+	local dmg = math.max(1, math.floor(amount * (1 - armorOf(e)) * takenMult(e, now()) + 0.5))
 	e.Health = e.Health - dmg
 	pushDamage(e.Id, dmg, crit and 1 or 0)
 	if unit then
@@ -6261,6 +9484,28 @@ local function damageEnemy(e, amount, crit, unit, noDodge)
 	end
 	if e.Health <= 0 then
 		killEnemy(e)
+	else
+		checkThresholds(e)
+	end
+	return dmg
+end
+
+-- чистый урон без брони и уклонения (столкновение с союзником)
+local function rawDamage(e, amount, unit)
+	if not e.Alive or amount <= 0 then
+		return 0
+	end
+	local dmg = math.min(amount, e.Health)
+	e.Health = e.Health - dmg
+	pushDamage(e.Id, math.floor(dmg + 0.5), 0)
+	if unit and unit.Alive then
+		unit.DamageDealt = unit.DamageDealt + dmg
+	end
+	if e.Health <= 0.5 then
+		e.Health = 0
+		killEnemy(e)
+	else
+		checkThresholds(e)
 	end
 	return dmg
 end
@@ -6295,7 +9540,22 @@ local function endMatch(victory)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Victory", Wave = wave, Gems = g, Reset = S.ResetDelay, Difficulty = difficultyKey })
+		-- Halloween Coins: каждому участнику за победу, один раз за матч
+		local coins = 0
+		if matchMode == "Halloween" and not coinsPaid[myMatch] then
+			coinsPaid[myMatch] = true
+			coins = Config.Halloween.Coins[difficultyKey] or 0
+			for _, pl in ipairs(matchPlayers()) do
+				if roster[pl.UserId] then
+					DataService.AddCurrency(pl, "HalloweenCoins", coins)
+					DataService.Save(pl, true)
+					if GameService.OnProfileChanged then
+						GameService.OnProfileChanged(pl)
+					end
+				end
+			end
+		end
+		notifyAll({ Type = "Victory", Wave = wave, Gems = g, Coins = coins > 0 and coins or nil, Reset = S.ResetDelay, Difficulty = difficultyKey, Mode = matchMode })
 	else
 		for _, pl in ipairs(matchPlayers()) do
 			local prof = DataService.Get(pl)
@@ -6304,7 +9564,7 @@ local function endMatch(victory)
 				DataService.Save(pl, true)
 			end
 		end
-		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay, Difficulty = difficultyKey })
+		notifyAll({ Type = "Defeat", Wave = wave, Reset = S.ResetDelay, Difficulty = difficultyKey, Mode = matchMode })
 		clearEnemies()
 	end
 	task.delay(S.ResetDelay, function()
@@ -6330,7 +9590,7 @@ local function waveCleared()
 	local reward = math.floor((S.WaveRewardBase + S.WaveRewardPerWave * wave) * D.Money + 0.5)
 	addMoneyAll(reward)
 	local gems = addGemsAll(S.WaveGemsBase + S.WaveGemsPerWave * wave)
-	if wave >= S.MaxWave then
+	if wave >= maxWave then
 		endMatch(true)
 		return
 	end
@@ -6350,7 +9610,12 @@ local function startWave()
 	setState("Wave", wave)
 	setState("Phase", phase)
 	setState("NextWaveAt", 0)
-	local groups = Config.Waves[wave] or {}
+	local source = matchMode == "Halloween" and Config.Maps.Halloween.Waves or Config.Waves
+	local groups = {}
+	for i, g in ipairs(source[wave] or {}) do
+		-- BOSS — финальный босс выбранной сложности
+		groups[i] = g[1] == "BOSS" and { Config.Halloween.Bosses[difficultyKey] or "GraveWarden", g[2], g[3] } or g
+	end
 	local bossName
 	for _, g in ipairs(groups) do
 		local def = Config.Enemies[g[1]]
@@ -6410,11 +9675,26 @@ local function unitCountFor(player, unitId)
 	return total, same
 end
 
+local function removeAlly(a, reason)
+	if not a.Alive then
+		return
+	end
+	a.Alive = false
+	allies[a.Id] = nil
+	allyRemoved[#allyRemoved + 1] = { a.Id, reason }
+end
+
 local function removeUnit(u)
 	u.Alive = false
 	units[u.Uid] = nil
 	if u.Folder then
 		u.Folder:Destroy()
+	end
+	-- проданный юнит забирает своих союзников
+	for _, a in pairs(allies) do
+		if a.Owner == u then
+			removeAlly(a, "sold")
+		end
 	end
 end
 
@@ -6455,8 +9735,8 @@ function GameService.PlaceUnit(player, unitId, pos, rotation)
 		return false, why
 	end
 	-- проверяем, что под ногами остров
-	raycastParams.FilterDescendantsInstances = { Map }
-	local hit = workspace:Raycast(Vector3.new(pos.X, Config.Map.GroundY + 30, pos.Z), Vector3.new(0, -60, 0), raycastParams)
+	raycastParams.FilterDescendantsInstances = { MapModels[matchMode] or Map }
+	local hit = workspace:Raycast(Vector3.new(pos.X, PathUtil.Map.GroundY + 30, pos.Z), Vector3.new(0, -60, 0), raycastParams)
 	if not hit or not hit.Instance:GetAttribute("Placeable") then
 		return false, "Сюда ставить нельзя"
 	end
@@ -6504,6 +9784,19 @@ function GameService.PlaceUnit(player, unitId, pos, rotation)
 	end
 	if def.TimeStorm then
 		u.NextStorm = u.PlacedAt + def.TimeStorm.FirstDelay
+	end
+	-- призыв союзников: первый — через интервал текущего уровня
+	if def.Summon then
+		u.NextSummon = u.PlacedAt + def.Summon.Levels[1].Interval
+		u.SummonCount = 0
+	end
+	-- руна: читается из профиля в момент установки
+	u.Rune = DataService.GetRune(player, unitId)
+	if u.Rune then
+		f:SetAttribute("Rune", u.Rune)
+		if u.Rune == "CursedThreads" then
+			u.NextRuneSummon = u.PlacedAt + Config.Runes.CursedThreads.Summon.Interval
+		end
 	end
 	units[u.Uid] = u
 	return true, u.Uid
@@ -6626,7 +9919,7 @@ local function rollDamage(stats)
 end
 
 local function fireAttack(u, targetIds, extra)
-	local payload = { U = u.Uid, T = targetIds, L = u.Level }
+	local payload = { U = u.Uid, T = targetIds, L = u.Level, EC = echoAttack or nil }
 	if extra then
 		for k, v in pairs(extra) do
 			payload[k] = v
@@ -6652,6 +9945,9 @@ local function applyDot(e, dps, duration, u, kind)
 end
 
 local function applySlow(e, amount, duration)
+	if not e then
+		return
+	end
 	if not e.Alive or not amount then
 		return
 	end
@@ -6702,7 +9998,10 @@ local function aoeHit(u, center, radius, stats, kind, opts)
 	for _, e in ipairs(hitSet) do
 		local dmg, crit = rollDamage(stats)
 		if opts.Bleed then
-			applyDot(e, opts.Bleed, opts.BleedTime or 3, u, "Bleed")
+			applyDot(e, opts.Bleed, opts.BleedTime or 3, u, opts.DotKind or "Bleed")
+		end
+		if opts.Slow then
+			applySlow(e, opts.Slow, opts.SlowTime or 1.5)
 		end
 		damageEnemy(e, dmg * (opts.Mult or 1), crit, u)
 	end
@@ -6825,7 +10124,24 @@ local function updateChrono(u, stats, t)
 	end
 end
 
+-- ядовитая/огненная зона: урон раз в 0.5 с всем внутри
+local function poisonZone(u, pos, radius, duration, dps, kind, delay)
+	if dps <= 0 then
+		return
+	end
+	local t = now() + (delay or 0)
+	zones[#zones + 1] = {
+		Pos = pos, Radius = radius, Until = t + duration, NextTick = t, Tick = 0.5,
+		TickDamage = dps * 0.5, Slow = 0, Unit = u,
+	}
+	Remotes.Impact:FireAllClients({ K = kind, P = pos, R = radius, DUR = duration, DL = delay, U = u.Uid, L = u.Level })
+end
+
 local function attack(u, stats, list)
+	list = list or {}
+	if not list[1] then
+		return
+	end
 	local def = u.Def
 	local myMatch = matchId
 	local hitDelay = def.HitDelay or 0.2
@@ -6854,7 +10170,7 @@ local function attack(u, stats, list)
 
 	if atype == "Melee" or atype == "Laser" then
 		local mult, power = 1, false
-		if def.EveryNth then
+		if def.EveryNth and not echoAttack then
 			u.HitCount = (u.HitCount or 0) + 1
 			if u.HitCount % def.EveryNth.N == 0 then
 				mult, power = def.EveryNth.Mult, true
@@ -6882,7 +10198,7 @@ local function attack(u, stats, list)
 				local center = e.Pos
 				strike(e)
 				if stats.Explode then
-					aoeHit(u, center, stats.Explode, stats, "Crystal", { Exclude = e, Mult = def.ExplodeMult or 0.5 })
+					aoeHit(u, center, stats.Explode, stats, def.ExplodeKind or "Crystal", { Exclude = e, Mult = def.ExplodeMult or 0.5 })
 				end
 			end)
 		end
@@ -7067,8 +10383,10 @@ local function attack(u, stats, list)
 		end
 		-- ПОЛОМКА ВРЕМЕНИ: каждая 8-я обычная атака, но не чаще раза в 18 с
 		local tb = def.TimeBreak
-		u.ChronoCount = (u.ChronoCount or 0) + 1
-		if u.ChronoCount >= tb.EveryNth and t0 - (u.LastBreak or -1e9) >= tb.MinInterval then
+		if not echoAttack then
+			u.ChronoCount = (u.ChronoCount or 0) + 1
+		end
+		if not echoAttack and u.ChronoCount >= tb.EveryNth and t0 - (u.LastBreak or -1e9) >= tb.MinInterval then
 			u.ChronoCount = 0
 			u.LastBreak = t0
 			u.NextAttack = math.max(u.NextAttack or 0, t0 + 1.6)
@@ -7076,6 +10394,22 @@ local function attack(u, stats, list)
 				castTimeBreak(u, stats)
 			end)
 		end
+	elseif atype == "Pulse" then
+		-- звуковая волна вокруг самого юнита
+		fireAttack(u, { target.Id }, { D = hitDelay })
+		later(hitDelay, function()
+			aoeHit(u, u.Pos, stats.AOERadius or stats.Range, stats, def.ImpactKind or "BellWave")
+		end)
+	elseif atype == "Flask" then
+		-- колба: взрыв по области и ядовитая лужа (урон по времени)
+		local travel = PathUtil.FlatDistance(u.Pos, target.Pos) / (def.ProjectileSpeed or 45)
+		local saved = target.Pos
+		fireAttack(u, { target.Id }, { D = hitDelay, TR = travel })
+		later(hitDelay + travel, function()
+			local center = target.Alive and target.Pos or saved
+			aoeHit(u, center, stats.Explode or 5, stats, "FlaskSplash")
+			poisonZone(u, center, (stats.Explode or 5) * 0.8, def.PoisonTime or 3, stats.PoisonDps or 0, "Poison")
+		end)
 	elseif atype == "Pierce" then
 		-- луч насквозь: все враги на линии от юнита через цель
 		local dir = Vector3.new(target.Pos.X - u.Pos.X, 0, target.Pos.Z - u.Pos.Z)
@@ -7085,7 +10419,7 @@ local function attack(u, stats, list)
 		local endPos = u.Pos + dir.Unit * (stats.Range + 4)
 		fireAttack(u, { target.Id }, { D = hitDelay, E = endPos })
 		later(hitDelay, function()
-			Remotes.Impact:FireAllClients({ K = "Pierce", P = u.Pos, E = endPos, L = u.Level, U = u.Uid })
+			Remotes.Impact:FireAllClients({ K = def.ImpactKindPierce or "Pierce", P = u.Pos, E = endPos, L = u.Level, U = u.Uid })
 			local half = (def.PierceWidth or 3) / 2
 			local hitSet = {}
 			for _, e in pairs(enemies) do
@@ -7097,6 +10431,277 @@ local function attack(u, stats, list)
 				strike(e)
 			end
 		end)
+	end
+end
+
+------------------------------------------------------------------------
+-- HALLOWEEN: обычная атака с рунами, способности Power, союзники
+------------------------------------------------------------------------
+-- через сколько секунд обычная атака попадает в цель
+local function impactDelay(u, target)
+	local def = u.Def
+	local d = def.HitDelay or 0.2
+	if def.ProjectileSpeed and def.AttackType ~= "Chrono" then
+		d = d + PathUtil.FlatDistance(u.Pos, target.Pos) / def.ProjectileSpeed
+	elseif def.AttackType == "Chrono" then
+		d = d + PathUtil.FlatDistance(u.Pos, target.Pos) / (def.ProjectileSpeed or 70)
+	end
+	return d
+end
+
+local function nearestTo(center, radius, exclude, maxCount)
+	local list = {}
+	for _, e in pairs(enemies) do
+		if e.Alive and not exclude[e] then
+			local d = PathUtil.FlatDistance(e.Pos, center)
+			if d <= radius + (e.IsBoss and 1 or 0.3) then
+				e._dr = d
+				list[#list + 1] = e
+			end
+		end
+	end
+	table.sort(list, function(a, b)
+		return a._dr < b._dr
+	end)
+	while #list > maxCount do
+		table.remove(list)
+	end
+	return list
+end
+
+-- Руны после обычной атаки (повтор «Призрачной короны» руны не запускает)
+local function runeAfterAttack(u, stats, list)
+	local runeId = u.Rune
+	local rune = runeId and Config.Runes[runeId]
+	if not rune or echoAttack then
+		return
+	end
+	local target = list[1]
+	local myMatch = matchId
+	if runeId == "LanternHeart" then
+		-- каждая 3-я обычная атака: огненный взрыв 20% урона, радиус 4, до 4 дополнительных врагов
+		u.RuneCount = (u.RuneCount or 0) + 1
+		if u.RuneCount % rune.EveryNth == 0 then
+			local saved = target.Pos
+			task.delay(impactDelay(u, target), function()
+				if not valid(u, myMatch) then
+					return
+				end
+				local center = target.Alive and target.Pos or saved
+				local extra = nearestTo(center, rune.Radius, { [target] = true }, rune.MaxTargets)
+				Remotes.Impact:FireAllClients({ K = "LanternHeart", P = center, R = rune.Radius, U = u.Uid, L = u.Level, N = #extra })
+				for _, e in ipairs(extra) do
+					damageEnemy(e, stats.Damage * rune.Mult, false, u, true)
+				end
+			end)
+		end
+	elseif runeId == "CursedThreads" then
+		-- каждая 5-я обычная атака: замедление до 3 врагов на 25% (боссы — вдвое слабее), не суммируется
+		u.RuneCount = (u.RuneCount or 0) + 1
+		if u.RuneCount % rune.EveryNth == 0 then
+			task.delay(impactDelay(u, target), function()
+				if not valid(u, myMatch) then
+					return
+				end
+				local first = target.Alive and target or nil
+				local center = first and first.Pos or target.Pos
+				local list2 = first and { first } or {}
+				for _, e in ipairs(nearestTo(center, 8, { [target] = true }, rune.MaxTargets - #list2)) do
+					list2[#list2 + 1] = e
+				end
+				local ids = {}
+				for i, e in ipairs(list2) do
+					applySlow(e, rune.Slow, rune.SlowTime)
+					ids[i] = e.Id
+				end
+				Remotes.Impact:FireAllClients({ K = "CursedThreads", P = center, A = ids, U = u.Uid, L = u.Level, DUR = rune.SlowTime })
+			end)
+		end
+	elseif runeId == "PhantomCrown" then
+		-- 30%: призрачная копия повторяет атаку через 0.3 с со 100% урона, не задерживая следующую атаку
+		if rng:NextNumber() < rune.Chance then
+			task.delay(rune.Delay, function()
+				if not valid(u, myMatch) or phase ~= "Wave" and phase ~= "Intermission" and phase ~= "Prep" then
+					return
+				end
+				local pool = candidates(u, stats.Range)
+				if target.Alive and PathUtil.FlatDistance(target.Pos, u.Pos) <= stats.Range then
+					for i, e in ipairs(pool) do
+						if e == target then
+							table.remove(pool, i)
+							break
+						end
+					end
+					table.insert(pool, 1, target)
+				end
+				if #pool == 0 then
+					return -- целей нет — повтор отменяется
+				end
+				Remotes.Impact:FireAllClients({ K = "PhantomEcho", P = u.Pos, U = u.Uid, L = u.Level })
+				echoAttack = true
+				local ok, err = pcall(attack, u, stats, pool)
+				echoAttack = false
+				if not ok then
+					warn("[VOID TD] echo: " .. tostring(err))
+				end
+			end)
+		end
+	end
+end
+
+local function normalAttack(u, stats, list)
+	attack(u, stats, list)
+	if u.Rune then
+		runeAfterAttack(u, stats, list)
+	end
+end
+
+-- Способность вместо каждой N-й обычной атаки
+local function castPower(u, stats, list)
+	local def = u.Def
+	local P = def.Power
+	local target = list[1]
+	local myMatch = matchId
+	local delay = P.Delay or 0.45
+	local saved = target.Pos
+	-- длинная анимация способности не обрывается следующей атакой
+	u.NextAttack = math.max(u.NextAttack, now() + delay + 0.25)
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = { target.Id }, L = u.Level, D = delay, AB = P.Anim })
+	task.delay(delay, function()
+		if not valid(u, myMatch) then
+			return
+		end
+		local center = target.Alive and target.Pos or saved
+		if P.Mode == "Single" then
+			local e = target.Alive and target or candidates(u, stats.Range + 2)[1]
+			if not e then
+				return
+			end
+			Remotes.Impact:FireAllClients({ K = P.Kind, P = e.Pos, I = e.Id, U = u.Uid, L = u.Level, DUR = P.MarkTime })
+			if P.Mark then
+				e.Mark = P.Mark
+				e.MarkUntil = now() + (P.MarkTime or 3)
+			end
+			local dmg, crit = rollDamage(stats)
+			damageEnemy(e, dmg * (P.Mult or 1), crit or true, u)
+		elseif P.Mode == "Zone" then
+			local radius = (stats.Explode or 5) * (P.RadiusMult or 1.5)
+			aoeHit(u, center, radius, stats, P.Kind .. "Burst", { Mult = 0.5 })
+			poisonZone(u, center, radius, P.Duration or 5, (stats.PoisonDps or stats.Damage * 0.3) * (P.Mult or 1), P.Kind)
+		else
+			local radius = stats.PowerRadius or P.Radius or ((stats.AOERadius or 5) + (P.RadiusAdd or 0))
+			if P.Mode == "Self" then
+				center = u.Pos
+				radius = stats.PowerRadius or P.Radius or ((stats.AOERadius or stats.Range) + (P.RadiusAdd or 1))
+			end
+			aoeHit(u, center, radius, stats, P.Kind, {
+				Mult = P.Mult, Slow = P.Slow, SlowTime = P.SlowTime,
+				Bleed = P.Burn and stats.Damage * P.Burn or nil, BleedTime = P.BurnTime, DotKind = "Burn",
+			})
+		end
+	end)
+end
+
+-- СОЮЗНИКИ
+local function spawnAlly(u, allyId, hp, source, index)
+	nextAllyId = nextAllyId + 1
+	local a = {
+		Id = nextAllyId,
+		AllyId = allyId,
+		HP = hp,
+		MaxHP = hp,
+		Dist = math.max(1, PathUtil.Length - (S.AllyStartBack or 4) - (index or 0) * 2.2),
+		Lateral = rng:NextNumber(-1.6, 1.6),
+		Speed = S.AllySpeed or 6,
+		Owner = u,
+		Source = source,
+		Born = now(),
+		Alive = true,
+	}
+	a.Pos = PathUtil.OffsetPositionAt(a.Dist, a.Lateral)
+	allies[a.Id] = a
+	return a
+end
+
+local function alliesOf(u, source)
+	local list = {}
+	for _, a in pairs(allies) do
+		if a.Owner == u and a.Source == source then
+			list[#list + 1] = a
+		end
+	end
+	table.sort(list, function(x, y)
+		return x.Id < y.Id
+	end)
+	return list
+end
+
+-- Призыв Кукловода / Иллюзиониста: не больше Max живых, лишние не появляются
+local function castSummon(u, t)
+	local sm = u.Def.Summon
+	local lv = sm.Levels[u.Level]
+	u.NextSummon = t + lv.Interval
+	local alive = #alliesOf(u, "Summon")
+	local count = math.min(lv.Count, sm.Max - alive)
+	if count <= 0 then
+		return
+	end
+	u.SummonCount = (u.SummonCount or 0) + 1
+	local golden = sm.Golden and u.Level >= #u.Def.Levels and u.SummonCount % sm.Golden.Every == 0
+	local ids = {}
+	for i = 1, count do
+		local a
+		if golden and i == 1 then
+			a = spawnAlly(u, sm.Golden.Ally, sm.Golden.HP, "Summon", i - 1)
+		else
+			a = spawnAlly(u, lv.Ally, lv.HP, "Summon", i - 1)
+		end
+		ids[i] = a.Id
+	end
+	Remotes.Attack:FireAllClients({ U = u.Uid, T = {}, L = u.Level, D = 0.6, AB = "Summon" })
+	Remotes.Impact:FireAllClients({ K = "SummonPortal", S = sm.Portal, P = PathUtil.PositionAt(PathUtil.Length - (S.AllyStartBack or 4)), U = u.Uid, L = u.Level, A = ids, G = golden or nil })
+end
+
+-- «Проклятые нити»: ровно каждые 60 с, не больше 3 живых, лишний — самый старый — исчезает
+local function runeSummon(u, t)
+	local sm = Config.Runes.CursedThreads.Summon
+	u.NextRuneSummon = u.NextRuneSummon + sm.Interval
+	local lv = sm.Levels[u.Level]
+	local ids = {}
+	for i = 1, lv.Count do
+		local a = spawnAlly(u, lv.Ally, lv.HP, "Rune", i - 1)
+		ids[i] = a.Id
+	end
+	local list = alliesOf(u, "Rune")
+	for i = 1, #list - sm.Max do
+		removeAlly(list[i], "replaced")
+	end
+	Remotes.Impact:FireAllClients({ K = "CursedCircle", P = PathUtil.PositionAt(PathUtil.Length - (S.AllyStartBack or 4)), U = u.Uid, L = u.Level, A = ids })
+end
+
+local function updateAllies(t, dt)
+	for _, a in pairs(allies) do
+		if a.Alive then
+			a.Dist = a.Dist - a.Speed * dt
+			if a.Dist <= 0 then
+				removeAlly(a, "portal")
+			else
+				a.Pos = PathUtil.OffsetPositionAt(a.Dist, a.Lateral)
+				-- столкновение: враг дошёл до союзника (окно с запасом для большого dt)
+				for _, e in pairs(enemies) do
+					if e.Alive and e.Dist >= a.Dist - 1.4 - (e.IsBoss and 1.2 or 0) and e.Dist <= a.Dist + 3 then
+						local cost = e.Def.FireAura or 1
+						local dealt = rawDamage(e, math.min(a.HP / cost, e.Health), a.Owner)
+						a.HP = a.HP - dealt * cost
+						Remotes.Impact:FireAllClients({ K = "AllyHit", P = a.Pos, I = a.Id, E = e.Id, F = cost > 1 or nil })
+						if a.HP <= 0.5 then
+							removeAlly(a, "dead")
+							break
+						end
+					end
+				end
+			end
+		end
 	end
 end
 
@@ -7143,9 +10748,11 @@ local function updateZones(t)
 			z.NextTick = z.NextTick + z.Tick
 			for _, e in pairs(enemies) do
 				if e.Alive and PathUtil.FlatDistance(e.Pos, z.Pos) <= z.Radius then
-					local slow = z.Slow * (e.IsBoss and S.BossSlowResist or 1)
-					e.SlowUntil = t + z.Tick + 0.15
-					e.SlowAmount = math.max(slow, (e.SlowUntil > t and e.SlowAmount) or 0)
+					if z.Slow and z.Slow > 0 then
+						local slow = z.Slow * (e.IsBoss and S.BossSlowResist or 1)
+						e.SlowUntil = t + z.Tick + 0.15
+						e.SlowAmount = math.max(slow, (e.SlowUntil > t and e.SlowAmount) or 0)
+					end
 					damageEnemy(e, z.TickDamage, false, z.Unit, true)
 				end
 			end
@@ -7175,6 +10782,12 @@ local function updateUnits(t)
 		if u.Def.TimeHaste or u.Def.TimeStorm then
 			updateChrono(u, stats, t)
 		end
+		if u.Def.Summon and t >= u.NextSummon then
+			castSummon(u, t)
+		end
+		if u.NextRuneSummon and t >= u.NextRuneSummon then
+			runeSummon(u, t)
+		end
 		if t >= u.NextAttack then
 			local list = candidates(u, stats.Range)
 			if #list > 0 then
@@ -7184,7 +10797,15 @@ local function updateUnits(t)
 					cd = cd / (1 + (u.Haste or 0))
 				end
 				u.NextAttack = t + cd
-				attack(u, stats, list)
+				local P = u.Def.Power
+				if P then
+					u.PowerCount = (u.PowerCount or 0) + 1
+				end
+				if P and u.PowerCount % P.N == 0 then
+					castPower(u, stats, list)
+				else
+					normalAttack(u, stats, list)
+				end
 			end
 		end
 	end
@@ -7204,6 +10825,43 @@ local function updateEnemies(t, dt)
 		else
 			e.SlowAmount = 0
 		end
+		-- ускорения: туман, рывок босса, ярость (замедление и заморозка действуют поверх)
+		local boost = (e.EnrageSpeed or 0)
+		if (e.FogUntil or 0) > t then
+			boost = boost + (e.FogAmount or 0)
+		end
+		if (e.HasteUntil or 0) > t then
+			boost = boost + e.Def.Haste.Speed
+		end
+		mult = mult * (1 + boost)
+		local def = e.Def
+		if e.NextPhase and t >= e.NextPhase then
+			e.NextPhase = t + def.Phase.Every
+			e.PhasedUntil = t + def.Phase.Duration
+			enemyState(e, "Phase", def.Phase.Duration)
+		end
+		if e.NextShield and t >= e.NextShield then
+			e.NextShield = t + def.Shield.Every
+			e.ShieldUntil = t + def.Shield.Duration
+			enemyState(e, "Shield", def.Shield.Duration)
+		end
+		if e.NextHaste and t >= e.NextHaste then
+			e.NextHaste = t + def.Haste.Every
+			e.HasteUntil = t + def.Haste.Duration
+			enemyState(e, "Haste", def.Haste.Duration)
+		end
+		if e.NextFog and t >= e.NextFog then
+			-- туман: враги рядом (и сам колдун) ускоряются; одинаковый туман не суммируется
+			local fog = def.Fog
+			e.NextFog = t + fog.Every
+			for _, o in pairs(enemies) do
+				if PathUtil.FlatDistance(o.Pos, e.Pos) <= fog.Radius then
+					o.FogAmount = math.max((o.FogUntil or 0) > t and o.FogAmount or 0, fog.Speed)
+					o.FogUntil = math.max(o.FogUntil or 0, t + fog.Duration)
+				end
+			end
+			Remotes.Impact:FireAllClients({ K = "Fog", P = e.Pos, R = fog.Radius, I = e.Id, DUR = fog.Duration })
+		end
 		e.Dist = e.Dist + e.Speed * mult * dt
 		e.Pos = enemyPos(e)
 		if e.NextSummon and t >= e.NextSummon then
@@ -7222,7 +10880,7 @@ local function updateEnemies(t, dt)
 		local list = pendingSpawns
 		pendingSpawns = {}
 		for _, s in ipairs(list) do
-			Remotes.Impact:FireAllClients({ K = "Summon", P = s[4], R = 6 })
+			Remotes.Impact:FireAllClients({ K = s[5] or "Summon", P = s[4], R = 6 })
 			for k = 1, s[2] do
 				spawnEnemy(s[1], s[3] - k * 1.5)
 			end
@@ -7238,15 +10896,29 @@ local function sync(t)
 		list[#list + 1] = math.max(0, e.Health)
 		list[#list + 1] = ((e.FrozenUntil or 0) > t) and 2 or ((e.SlowUntil > t) and 1 or 0)
 	end
-	Remotes.Sync:FireAllClients({ T = t, E = list, DMG = damageBuffer, RM = removedBuffer })
+	-- союзники: id, дистанция, HP, тип (индекс в Config.AllyOrder), максимум HP
+	local al
+	if next(allies) or #allyRemoved > 0 then
+		al = {}
+		for _, a in pairs(allies) do
+			al[#al + 1] = a.Id
+			al[#al + 1] = math.floor(a.Dist * 100) / 100
+			al[#al + 1] = math.floor(a.HP + 0.5)
+			al[#al + 1] = allyIndex[a.AllyId] or 1
+			al[#al + 1] = a.MaxHP
+		end
+	end
+	Remotes.Sync:FireAllClients({ T = t, E = list, DMG = damageBuffer, RM = removedBuffer, AL = al, RA = #allyRemoved > 0 and allyRemoved or nil })
 	damageBuffer = {}
 	removedBuffer = {}
+	allyRemoved = {}
 end
 
 local function step(dt)
 	local t = now()
 	if phase == "Wave" or phase == "Intermission" or phase == "Prep" then
 		updateEnemies(t, dt)
+		updateAllies(t, dt)
 		updateZones(t)
 		updateDots(t)
 		updateUnits(t)
@@ -7275,6 +10947,10 @@ local function clearMatch()
 		removeUnit(u)
 	end
 	units = {}
+	for _, a in pairs(allies) do
+		removeAlly(a, "clear")
+	end
+	allies = {}
 	wave = 0
 	waveSpawning = false
 	nextWaveAt = 0
@@ -7284,7 +10960,16 @@ local function clearMatch()
 end
 
 -- Матч закончен (или все ушли): все возвращаются в лобби
+local function setMapMode(mode)
+	matchMode = mode
+	PathUtil.SetMap(mode)
+	maxWave = (Config.Maps[mode] and Config.Maps[mode].MaxWave) or S.MaxWave
+	setState("Map", mode)
+	setState("MaxWave", maxWave)
+end
+
 resetMatch = function()
+	local wasHalloween = matchMode == "Halloween"
 	clearMatch()
 	phase = "Idle"
 	setState("Phase", phase)
@@ -7293,18 +10978,21 @@ resetMatch = function()
 		if inMatch(pl) then
 			pl:SetAttribute("InMatch", false)
 			setMoney(pl, 0)
-			-- чёрный экран-переход, затем телепорт в лобби
-			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = "ЛОББИ" })
+			-- чёрный экран-переход, затем телепорт в лобби (после Хэллоуин-матча — на остров)
+			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = wasHalloween and "HALLOWEEN" or "ЛОББИ" })
 			task.delay(0.45, function()
-				toLobby(pl)
+				toLobby(pl, wasHalloween)
 			end)
 		end
 	end
+	roster = {}
+	setMapMode("Void")
 	notifyAll({ Type = "Reset" })
 end
 
-local function startNewMatch(diffKey)
+local function startNewMatch(diffKey, mode)
 	clearMatch()
+	setMapMode(mode or "Void")
 	difficultyKey = diffKey
 	D = Config.Difficulties[diffKey]
 	coreHP = D.CoreHP
@@ -7322,6 +11010,9 @@ function GameService.JoinMatch(player, diffKey)
 	if phase == "Victory" or phase == "Defeat" then
 		return false, "Матч завершается, подожди пару секунд"
 	end
+	if phase ~= "Idle" and matchMode == "Halloween" then
+		return false, "Сейчас идёт Хэллоуин-матч. Подожди, пока он закончится"
+	end
 	if phase == "Idle" then
 		if not Config.Difficulties[diffKey] then
 			return false, "Выбери сложность"
@@ -7336,6 +11027,43 @@ function GameService.JoinMatch(player, diffKey)
 	return true, difficultyKey
 end
 
+-- Хэллоуин-матч: все игроки из очереди попадают в один матч
+function GameService.CanStartHalloween()
+	return phase == "Idle"
+end
+
+function GameService.StartHalloween(players, diffKey)
+	if phase ~= "Idle" then
+		return false, "Арена занята — идёт другой матч"
+	end
+	if not table.find(Config.Halloween.Difficulties, diffKey) then
+		return false, "Неверная сложность"
+	end
+	startNewMatch(diffKey, "Halloween")
+	roster = {}
+	for _, pl in ipairs(players) do
+		if pl.Parent and not inMatch(pl) then
+			roster[pl.UserId] = true
+			pl:SetAttribute("InMatch", true)
+			setMoney(pl, S.StartMoney * D.Money)
+			Remotes.Notify:FireClient(pl, { Type = "Fade", Text = "HAUNTED HOLLOW" })
+			task.delay(0.45, function()
+				toBattle(pl)
+			end)
+		end
+	end
+	if #matchPlayers() == 0 then
+		resetMatch()
+		return false, "Никого нет в очереди"
+	end
+	notifyAll({ Type = "Toast", Text = "🎃 Хэллоуин-матч начался (" .. D.Name .. ")", Kind = "good" })
+	return true
+end
+
+function GameService.GetMode()
+	return matchMode, phase
+end
+
 function GameService.LeaveMatch(player)
 	if not inMatch(player) then
 		return false, "Ты не в матче"
@@ -7347,7 +11075,7 @@ function GameService.LeaveMatch(player)
 	end
 	player:SetAttribute("InMatch", false)
 	setMoney(player, 0)
-	toLobby(player)
+	toLobby(player, matchMode == "Halloween")
 	if #matchPlayers() == 0 and phase ~= "Idle" then
 		resetMatch()
 	end
@@ -7355,7 +11083,7 @@ function GameService.LeaveMatch(player)
 end
 
 function GameService.GetMatchInfo()
-	return { Phase = phase, Difficulty = difficultyKey, Wave = wave, Players = #matchPlayers() }
+	return { Phase = phase, Difficulty = difficultyKey, Wave = wave, Players = #matchPlayers(), Mode = matchMode }
 end
 
 ------------------------------------------------------------------------
@@ -7377,7 +11105,7 @@ function GameService.PlayerAdded(player)
 		if inMatch(player) then
 			toBattle(player)
 		else
-			toLobby(player)
+			toLobby(player, player:GetAttribute("Island") == true)
 		end
 	end)
 end
@@ -7404,8 +11132,10 @@ function GameService.GetEnemySnapshot()
 	return list
 end
 
-function GameService.Init(remotes, state, unitsFolder, map)
+function GameService.Init(remotes, state, unitsFolder, map, maps)
 	Remotes, State, UnitsFolder, Map = remotes, state, unitsFolder, map
+	MapModels = maps or { Void = map }
+	MapModels.Void = MapModels.Void or map
 	setState("MaxWave", S.MaxWave)
 	setState("CoreMaxHP", S.CoreMaxHP)
 	setState("CoreHP", S.CoreMaxHP)
@@ -7417,10 +11147,1144 @@ end
 
 -- Доступ к внутреннему состоянию для автотестов (в игре не используется)
 function GameService.Debug()
-	return { Units = units, Enemies = enemies, Spawn = spawnEnemy, Now = now }
+	return {
+		Units = units, Enemies = enemies, Spawn = spawnEnemy, Now = now,
+		Allies = function()
+			return allies
+		end,
+		Mode = function()
+			return matchMode, roster
+		end,
+	}
 end
 
 return GameService
+]======] }
+FILES[#FILES + 1] = { "ServerScriptService", { "VoidTDServer", "HalloweenService" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenService
+-- Хэллоуин-остров: телепорты через порталы и очередь в Хэллоуин-матч на 4 светящихся квадратах.
+-- Встал на квадрат — в очереди. Первый в очереди — хост: выбирает сложность и может ускорить старт.
+-- После обратного отсчёта все из очереди попадают в один и тот же матч.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage:WaitForChild("VoidTD"):WaitForChild("Config"))
+
+local HalloweenService = {}
+
+local GameService, State
+local Q = Config.HalloweenIsland.Queue
+local queue = {}          -- игроки по порядку входа
+local difficulty = "Easy"
+local countdownAt = 0     -- серверное время телепорта (0 — отсчёт не идёт)
+local leftUntil = {}      -- игрок нажал «Выйти»: не возвращаем в очередь, пока не сойдёт с квадрата
+
+local function now()
+	return workspace:GetServerTimeNow()
+end
+
+local function queueCenter()
+	return Config.HalloweenIsland.Center + Q.Offset
+end
+
+-- стоит ли игрок на одном из квадратов
+local function onPad(player)
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return false
+	end
+	local c = queueCenter()
+	local pos = root.Position
+	if math.abs(pos.Y - c.Y) > 9 then
+		return false
+	end
+	local half = Q.Pad / 2 + 0.4
+	for _, off in ipairs(Q.Pads) do
+		local p = c + off
+		if math.abs(pos.X - p.X) <= half and math.abs(pos.Z - p.Z) <= half then
+			return true
+		end
+	end
+	return false
+end
+
+local function publish()
+	local names = {}
+	for _, pl in ipairs(queue) do
+		names[#names + 1] = pl.DisplayName
+	end
+	State:SetAttribute("HQ_Members", table.concat(names, "\n"))
+	State:SetAttribute("HQ_Count", #queue)
+	State:SetAttribute("HQ_Host", queue[1] and queue[1].UserId or 0)
+	State:SetAttribute("HQ_Diff", difficulty)
+	State:SetAttribute("HQ_At", countdownAt)
+	State:SetAttribute("HQ_Busy", not GameService.CanStartHalloween())
+end
+
+local function remove(player)
+	local i = table.find(queue, player)
+	if i then
+		table.remove(queue, i)
+		if i == 1 then
+			difficulty = "Easy" -- новый хост выбирает заново
+		end
+	end
+end
+
+local function tick()
+	local t = now()
+	-- ушедшие с квадратов и вошедшие в матч выбывают
+	for i = #queue, 1, -1 do
+		local pl = queue[i]
+		if not pl.Parent or pl:GetAttribute("InMatch") or not onPad(pl) then
+			remove(pl)
+		end
+	end
+	for _, pl in ipairs(Players:GetPlayers()) do
+		if #queue >= Q.MaxPlayers then
+			break
+		end
+		if not table.find(queue, pl) and not pl:GetAttribute("InMatch") then
+			local standing = onPad(pl)
+			if leftUntil[pl] and not standing then
+				leftUntil[pl] = nil
+			end
+			if standing and not leftUntil[pl] then
+				queue[#queue + 1] = pl
+				GameService.Toast(pl, "Ты в очереди Хэллоуин-матча (" .. #queue .. "/" .. Q.MaxPlayers .. ")", "good")
+			end
+		end
+	end
+	if #queue == 0 or not GameService.CanStartHalloween() then
+		countdownAt = 0
+	elseif countdownAt == 0 then
+		countdownAt = t + Q.Countdown
+	elseif t >= countdownAt then
+		local list = table.clone(queue)
+		local diff = difficulty
+		queue = {}
+		countdownAt = 0
+		difficulty = "Easy"
+		local ok, err = GameService.StartHalloween(list, diff)
+		if not ok then
+			for _, pl in ipairs(list) do
+				GameService.Toast(pl, err or "Не удалось начать матч")
+			end
+		end
+	end
+	publish()
+end
+
+------------------------------------------------------------------------
+-- ЗАПРОСЫ КЛИЕНТА
+------------------------------------------------------------------------
+function HalloweenService.SetDifficulty(player, diff)
+	if queue[1] ~= player then
+		return false, "Сложность выбирает хост (первый в очереди)"
+	end
+	if not table.find(Config.Halloween.Difficulties, diff) then
+		return false, "Неверная сложность"
+	end
+	difficulty = diff
+	publish()
+	return true
+end
+
+function HalloweenService.StartNow(player)
+	if queue[1] ~= player then
+		return false, "Начать может только хост"
+	end
+	if countdownAt == 0 then
+		return false, "Арена занята — подожди окончания матча"
+	end
+	countdownAt = math.min(countdownAt, now() + Q.StartNow)
+	publish()
+	return true
+end
+
+function HalloweenService.Leave(player)
+	if not table.find(queue, player) then
+		return false, "Ты не в очереди"
+	end
+	remove(player)
+	leftUntil[player] = true
+	-- отводим игрока с квадратов
+	GameService.Teleport(player, queueCenter() + Vector3.new(0, 0, 16))
+	publish()
+	return true
+end
+
+-- Портал лобби <-> остров. Проверяем, что игрок стоит у портала и не в матче.
+function HalloweenService.Teleport(player, where)
+	if player:GetAttribute("InMatch") then
+		return false, "Сначала выйди из матча"
+	end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return false, "Персонаж не загружен"
+	end
+	local zone, center
+	if where == "Halloween" then
+		zone, center = Config.Lobby.Zones.HalloweenPortal, Config.Lobby.Center
+	elseif where == "Lobby" then
+		zone, center = Config.HalloweenIsland.Zones.ReturnPortal, Config.HalloweenIsland.Center
+	else
+		return false, "Неверный портал"
+	end
+	local p = center + zone.Offset
+	local d = Vector3.new(root.Position.X - p.X, 0, root.Position.Z - p.Z).Magnitude
+	if d > zone.Radius + 8 then
+		return false, "Подойди к порталу"
+	end
+	GameService.ToLobby(player, where == "Halloween")
+	return true
+end
+
+function HalloweenService.Init(gameService, state)
+	GameService, State = gameService, state
+	Players.PlayerRemoving:Connect(function(pl)
+		remove(pl)
+		leftUntil[pl] = nil
+	end)
+	publish()
+	task.spawn(function()
+		while true do
+			task.wait(0.25)
+			local ok, err = pcall(tick)
+			if not ok then
+				warn("[VOID TD] HalloweenService: " .. tostring(err))
+			end
+		end
+	end)
+end
+
+HalloweenService._tick = tick -- для автотестов
+HalloweenService._queue = function()
+	return queue, difficulty, countdownAt
+end
+
+return HalloweenService
+]======] }
+FILES[#FILES + 1] = { "ServerScriptService", { "VoidTDServer", "HalloweenWorld" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenWorld
+-- Хэллоуин-мир из примитивов (без внешних ассетов):
+--   • огромный портал HALLOWEEN EVENT в главном лобби;
+--   • Хэллоуин-остров: луна, готический замок, кладбище, тыквенные поля, мёртвые деревья, призраки,
+--     летучие мыши, вороны, фонари, туман, руны, разрушенные башни, мост, домики; кейс, 4 квадрата
+--     входа в бой, доска наград, превью хэллоуинских юнитов и бестиарий;
+--   • карта Haunted Hollow: длинная извилистая дорога, кладбище, поля тыкв, готические здания, лес,
+--     база игрока (VoidCore) и портал врагов (VoidPortal).
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("VoidTD")
+local Config = require(Shared:WaitForChild("Config"))
+local PathUtil = require(Shared:WaitForChild("PathUtil"))
+
+local HalloweenWorld = {}
+
+local V = Vector3.new
+local CF = CFrame.new
+local ANG = CFrame.Angles
+local rad = math.rad
+
+local H -- хелперы MapBuilder (part, light, emitter, cylinderY, billboard, statue, calm, zoneCircle)
+
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+-- палитра: чёрный, тёмно-фиолетовый, оранжевый, бордовый, золото
+local C = {
+	Black = rgb(14, 10, 16),
+	Ground = rgb(34, 26, 36),
+	Ground2 = rgb(44, 30, 40),
+	Grass = rgb(46, 34, 30),
+	GrassP = rgb(42, 24, 54),
+	Rock = rgb(30, 24, 32),
+	Rock2 = rgb(44, 36, 46),
+	Stone = rgb(78, 70, 82),
+	Stone2 = rgb(58, 52, 64),
+	Road = rgb(64, 54, 58),
+	RoadEdge = rgb(44, 36, 42),
+	Purple = rgb(70, 30, 110),
+	DeepPurple = rgb(36, 18, 56),
+	Orange = rgb(255, 130, 30),
+	Ember = rgb(255, 90, 20),
+	Pumpkin = rgb(220, 110, 30),
+	PumpkinD = rgb(170, 70, 20),
+	Stem = rgb(60, 70, 30),
+	Burgundy = rgb(100, 20, 34),
+	Gold = rgb(200, 156, 60),
+	Bark = rgb(32, 24, 26),
+	Bone = rgb(200, 192, 176),
+	Ghost = rgb(220, 225, 255),
+	Fog = rgb(150, 140, 170),
+	Moon = rgb(255, 214, 150),
+	Window = rgb(255, 160, 60),
+	Rune = rgb(170, 70, 255),
+}
+
+local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
+
+------------------------------------------------------------------------
+-- ДЕТАЛИ
+------------------------------------------------------------------------
+local function block(parent, size, cf, color, mat, props)
+	local o = { Size = size, CFrame = cf, Color = color, Material = mat or Enum.Material.Slate }
+	if props then
+		for k, v in pairs(props) do
+			o[k] = v
+		end
+	end
+	return H.part(parent, o)
+end
+
+local function neon(parent, size, cf, color, props)
+	local o = { CanCollide = false }
+	if props then
+		for k, v in pairs(props) do
+			o[k] = v
+		end
+	end
+	return block(parent, size, cf, color, Enum.Material.Neon, o)
+end
+
+local function wedge(parent, size, cf, color, mat, collide)
+	return H.part(parent, { Class = "WedgePart", Size = size, CFrame = cf, Color = color, Material = mat or Enum.Material.Slate, CanCollide = collide == true })
+end
+
+local function fogEmitter(p, color, rate, size)
+	local e = Instance.new("ParticleEmitter")
+	e.Name = "Fog"
+	e.Texture = SMOKE
+	e.Color = ColorSequence.new(color or C.Fog)
+	e.LightEmission = 0.1
+	e.LightInfluence = 0.6
+	e.Rate = rate or 2
+	e.Lifetime = NumberRange.new(5, 8)
+	e.Speed = NumberRange.new(0.3, 1)
+	e.SpreadAngle = Vector2.new(180, 10)
+	e.Rotation = NumberRange.new(0, 360)
+	e.RotSpeed = NumberRange.new(-10, 10)
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size or 6), NumberSequenceKeypoint.new(1, (size or 6) * 1.8) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, 0.75), NumberSequenceKeypoint.new(1, 1) })
+	e.Parent = p
+	return e
+end
+
+-- угловатая тыква: 6 рёбер-долек вокруг оси, хвостик; carved — вырезанное светящееся лицо
+local function pumpkin(parent, pos, s, carved, yaw)
+	local m = Instance.new("Model")
+	m.Name = "Pumpkin"
+	m.Parent = parent
+	local base = CF(pos + V(0, 0.55 * s, 0)) * ANG(0, yaw or 0, 0)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		block(m, V(0.62 * s, 1.0 * s, 0.62 * s), base * ANG(0, a, 0) * CF(0, 0, -0.38 * s), (i % 2 == 0) and C.Pumpkin or C.PumpkinD, Enum.Material.SmoothPlastic, { CanCollide = false })
+	end
+	block(m, V(0.18 * s, 0.4 * s, 0.18 * s), base * CF(0, 0.62 * s, 0) * ANG(0, 0, rad(12)), C.Stem, Enum.Material.Wood, { CanCollide = false })
+	if carved then
+		local f = base * CF(0, 0, -0.72 * s)
+		for _, sx in ipairs({ -1, 1 }) do
+			neon(m, V(0.2 * s, 0.2 * s, 0.06), f * CF(0.2 * s * sx, 0.15 * s, 0) * ANG(0, 0, rad(45)), C.Orange)
+		end
+		neon(m, V(0.5 * s, 0.1 * s, 0.06), f * CF(0, -0.2 * s, 0), C.Orange)
+		if s >= 1.2 then
+			H.light(m:FindFirstChildWhichIsA("BasePart"), C.Orange, 8 * s, 0.8)
+		end
+	end
+	return m
+end
+
+local function deadTree(parent, rng, pos, s)
+	s = s or 1
+	local m = Instance.new("Model")
+	m.Name = "DeadTree"
+	m.Parent = parent
+	local h = rng:NextNumber(9, 14) * s
+	local lean = rad(rng:NextNumber(-6, 6))
+	local trunk = CF(pos) * ANG(lean, rng:NextNumber(0, 6), lean * 0.5)
+	block(m, V(1.4 * s, h, 1.4 * s), trunk * CF(0, h / 2, 0), C.Bark, Enum.Material.Wood)
+	block(m, V(2.4 * s, 1.2 * s, 2.4 * s), trunk * CF(0, 0.4 * s, 0) * ANG(0, rad(45), 0), C.Bark, Enum.Material.Wood)
+	for i = 1, 4 do
+		local a = i / 4 * math.pi * 2 + rng:NextNumber(-0.4, 0.4)
+		local y = h * rng:NextNumber(0.5, 0.95)
+		local L = rng:NextNumber(3, 5.5) * s
+		local br = trunk * CF(0, y, 0) * ANG(0, a, 0) * ANG(0, 0, rad(rng:NextNumber(45, 65)))
+		block(m, V(0.5 * s, L, 0.5 * s), br * CF(0, L / 2, 0), C.Bark, Enum.Material.Wood, { CanCollide = false })
+		local tw = br * CF(0, L, 0) * ANG(0, 0, rad(-35))
+		block(m, V(0.3 * s, L * 0.5, 0.3 * s), tw * CF(0, L * 0.25, 0), C.Bark, Enum.Material.Wood, { CanCollide = false })
+	end
+	return m
+end
+
+local function tombstone(parent, rng, pos, yaw)
+	local kind = rng:NextInteger(1, 3)
+	local cf = CF(pos) * ANG(rad(rng:NextNumber(-6, 6)), yaw or 0, rad(rng:NextNumber(-8, 8)))
+	if kind == 1 then
+		block(parent, V(2, 2.6, 0.5), cf * CF(0, 1.3, 0), C.Stone2)
+		block(parent, V(1.6, 0.6, 0.5), cf * CF(0, 2.8, 0) * ANG(0, 0, rad(45)), C.Stone2)
+	elseif kind == 2 then
+		block(parent, V(0.45, 3.2, 0.45), cf * CF(0, 1.6, 0), C.Stone)
+		block(parent, V(1.8, 0.45, 0.45), cf * CF(0, 2.3, 0), C.Stone)
+	else
+		block(parent, V(2.4, 1.6, 0.7), cf * CF(0, 0.8, 0), C.Stone2)
+		block(parent, V(2.6, 0.3, 0.9), cf * CF(0, 1.7, 0), C.Stone)
+	end
+	-- холмик могилы
+	block(parent, V(2.2, 0.4, 3.6), cf * CF(0, 0.15, 1.9), C.Grass, Enum.Material.Ground, { CanCollide = false })
+end
+
+local function fence(parent, a, b, color)
+	local d = b - a
+	local n = math.max(1, math.floor(d.Magnitude / 2.2))
+	for i = 0, n do
+		local p = a + d * (i / n)
+		block(parent, V(0.3, 2.6, 0.3), CF(p + V(0, 1.3, 0)), color or C.Black, Enum.Material.Metal)
+		wedge(parent, V(0.3, 0.5, 0.3), CF(p + V(0, 2.85, 0)), color or C.Black, Enum.Material.Metal)
+	end
+	local mid = (a + b) / 2
+	local cf = CFrame.lookAt(mid, b)
+	block(parent, V(0.18, 0.18, d.Magnitude), cf * CF(0, 2.1, 0), color or C.Black, Enum.Material.Metal)
+	block(parent, V(0.18, 0.18, d.Magnitude), cf * CF(0, 0.8, 0), color or C.Black, Enum.Material.Metal)
+end
+
+local function lanternPost(parent, pos, h)
+	h = h or 7
+	block(parent, V(0.5, h, 0.5), CF(pos + V(0, h / 2, 0)), C.Black, Enum.Material.Metal)
+	block(parent, V(1.8, 0.3, 0.3), CF(pos + V(0.6, h - 0.3, 0)), C.Black, Enum.Material.Metal)
+	local cage = block(parent, V(0.9, 1.1, 0.9), CF(pos + V(1.3, h - 1.2, 0)), C.Black, Enum.Material.Metal, { CanCollide = false, Transparency = 0.2 })
+	local flame = neon(parent, V(0.55, 0.7, 0.55), CF(pos + V(1.3, h - 1.2, 0)), C.Orange)
+	H.light(flame, C.Orange, 16, 1.4)
+	wedge(parent, V(1.1, 0.5, 1.1), CF(pos + V(1.3, h - 0.45, 0)), C.Black, Enum.Material.Metal)
+	return cage
+end
+
+local function bat(parent, pos, r, speed)
+	local m = Instance.new("Model")
+	m.Name = "Bat"
+	m.Parent = parent
+	local body = block(m, V(0.6, 0.5, 0.9), CF(pos + V(r, 0, 0)), C.Black, Enum.Material.SmoothPlastic, { CanCollide = false })
+	for _, s in ipairs({ -1, 1 }) do
+		wedge(m, V(0.1, 0.6, 1.6), CF(pos + V(r + 0.9 * s, 0.1, 0)) * ANG(0, 0, rad(-70 * s)), C.Black, Enum.Material.SmoothPlastic)
+	end
+	neon(m, V(0.3, 0.1, 0.05), CF(pos + V(r, 0.08, -0.46)), C.Ember)
+	-- летает по кругу вокруг pos (вращается вся модель)
+	m.WorldPivot = CF(pos)
+	m:SetAttribute("Spin", speed)
+	m:SetAttribute("SpinAxis", "Y")
+	m:SetAttribute("BobAmp", 0.8)
+	m:SetAttribute("BobSpeed", 2.2)
+	m.PrimaryPart = body
+	return m
+end
+
+local function crow(parent, pos, yaw)
+	local cf = CF(pos) * ANG(0, yaw or 0, 0)
+	block(parent, V(0.5, 0.5, 0.9), cf * CF(0, 0.35, 0), C.Black, Enum.Material.SmoothPlastic, { CanCollide = false })
+	block(parent, V(0.4, 0.4, 0.4), cf * CF(0, 0.75, -0.4), C.Black, Enum.Material.SmoothPlastic, { CanCollide = false })
+	wedge(parent, V(0.15, 0.15, 0.4), cf * CF(0, 0.7, -0.75) * ANG(rad(90), 0, 0), C.Gold, Enum.Material.SmoothPlastic)
+	wedge(parent, V(0.3, 0.12, 0.6), cf * CF(0, 0.3, 0.6) * ANG(rad(180), 0, 0), C.Black, Enum.Material.SmoothPlastic)
+end
+
+local function ghost(parent, pos, s)
+	s = s or 1
+	local m = Instance.new("Model")
+	m.Name = "Ghost"
+	m.Parent = parent
+	local body = block(m, V(2.2 * s, 2.4 * s, 1.8 * s), CF(pos + V(0, 1.6 * s, 0)), C.Ghost, Enum.Material.SmoothPlastic, { CanCollide = false, Transparency = 0.55 })
+	block(m, V(1.8 * s, 1.6 * s, 1.6 * s), CF(pos + V(0, 3.4 * s, 0)), C.Ghost, Enum.Material.SmoothPlastic, { CanCollide = false, Transparency = 0.55 })
+	for i = -1, 1 do
+		wedge(m, V(0.7 * s, 0.9 * s, 1.6 * s), CF(pos + V(i * 0.7 * s, 0.05, 0)) * ANG(0, 0, rad(180)), C.Ghost, Enum.Material.SmoothPlastic).Transparency = 0.55
+	end
+	for _, sx in ipairs({ -1, 1 }) do
+		block(m, V(0.3 * s, 0.45 * s, 0.05), CF(pos + V(0.35 * s * sx, 3.5 * s, -0.81 * s)), C.Black, Enum.Material.SmoothPlastic, { CanCollide = false })
+	end
+	m.PrimaryPart = body
+	m:SetAttribute("BobAmp", 1.2)
+	m:SetAttribute("BobSpeed", 1.1)
+	return m
+end
+
+-- готическая крыша-шпиль из уменьшающихся блоков
+local function spire(parent, cf, w, h, color)
+	local n = 5
+	for i = 0, n - 1 do
+		local k = 1 - i / n
+		block(parent, V(w * k, h / n, w * k), cf * CF(0, h / n * (i + 0.5), 0) * ANG(0, rad(45 * (i % 2)), 0), color or C.DeepPurple)
+	end
+	block(parent, V(0.3, h * 0.35, 0.3), cf * CF(0, h + h * 0.17, 0), C.Gold, Enum.Material.Metal, { CanCollide = false })
+end
+
+local function tower(parent, base, w, h, ruined, rng)
+	block(parent, V(w, h, w), CF(base + V(0, h / 2, 0)), C.Stone2)
+	-- окна
+	for i = 1, math.floor(h / 7) do
+		for k = 0, 3 do
+			local cf = CF(base + V(0, i * 7 - 2, 0)) * ANG(0, k * math.pi / 2, 0) * CF(0, 0, -w / 2 - 0.05)
+			neon(parent, V(1.1, 2.2, 0.1), cf, C.Window)
+			wedge(parent, V(1.1, 0.7, 0.12), cf * CF(0, 1.45, 0), C.Window, Enum.Material.Neon)
+		end
+	end
+	if ruined then
+		for i = 1, 5 do
+			local a = i / 5 * math.pi * 2
+			local hh = rng:NextNumber(1, 4)
+			block(parent, V(w * 0.35, hh, w * 0.35), CF(base + V(math.cos(a) * w * 0.35, h + hh / 2, math.sin(a) * w * 0.35)) * ANG(0, a, rad(rng:NextNumber(-10, 10))), C.Stone2)
+		end
+	else
+		block(parent, V(w + 1.2, 1, w + 1.2), CF(base + V(0, h + 0.5, 0)), C.Stone)
+		spire(parent, CF(base + V(0, h + 1, 0)), w + 0.4, w * 2.2, C.DeepPurple)
+	end
+end
+
+local function house(parent, pos, yaw, s)
+	s = s or 1
+	local cf = CF(pos) * ANG(0, yaw, 0)
+	block(parent, V(10 * s, 7 * s, 8 * s), cf * CF(0, 3.5 * s, 0), C.Rock2, Enum.Material.WoodPlanks)
+	for _, sx in ipairs({ -1, 1 }) do
+		wedge(parent, V(10.6 * s, 4.5 * s, 4.6 * s), cf * CF(0, 9.25 * s, 2.3 * s * sx) * ANG(0, sx == 1 and math.pi or 0, 0), C.Burgundy, Enum.Material.Slate, true)
+	end
+	block(parent, V(1.2 * s, 4 * s, 1.2 * s), cf * CF(3 * s, 10 * s, 1.5 * s), C.Stone2)
+	block(parent, V(2.2 * s, 3.8 * s, 0.2), cf * CF(0, 1.9 * s, -4.05 * s), C.Bark, Enum.Material.Wood)
+	for _, sx in ipairs({ -1, 1 }) do
+		neon(parent, V(1.6 * s, 1.6 * s, 0.1), cf * CF(3 * s * sx, 4 * s, -4.05 * s), C.Window)
+	end
+	H.light(block(parent, V(0.5, 0.5, 0.5), cf * CF(0, 4 * s, -5 * s), C.Black, Enum.Material.SmoothPlastic, { Transparency = 1, CanCollide = false }), C.Window, 14, 1)
+end
+
+local function runeCircle(parent, pos, r, color)
+	for i = 0, 7 do
+		local a = i / 8 * math.pi * 2
+		neon(parent, V(0.5, 0.06, 1.4), CF(pos + V(math.cos(a) * r, 0.06, math.sin(a) * r)) * ANG(0, -a, 0), color or C.Rune)
+	end
+	for i = 0, 2 do
+		neon(parent, V(r * 1.6, 0.05, 0.25), CF(pos + V(0, 0.05, 0)) * ANG(0, i * math.pi / 3, 0), color or C.Rune, { Transparency = 0.3 })
+	end
+end
+
+-- круглый остров со скальным низом
+local function islandDisc(parent, center, R, rng, placeable)
+	local top = H.cylinderY(parent, "IslandTop", R, 4, center + V(0, -2, 0), C.Ground)
+	top:SetAttribute("Placeable", placeable or nil)
+	local layers = { { 0.95, 10, -8 }, { 0.78, 14, -19 }, { 0.56, 16, -33 }, { 0.32, 16, -48 }, { 0.14, 14, -62 } }
+	for i, l in ipairs(layers) do
+		H.cylinderY(parent, "Bedrock" .. i, R * l[1], l[2], center + V(rng:NextNumber(-4, 4), l[3], rng:NextNumber(-4, 4)), (i % 2 == 0) and C.Rock or C.Rock2)
+	end
+	for i = 0, 23 do
+		local a = i / 24 * math.pi * 2
+		local s = rng:NextNumber(10, 18)
+		block(parent, V(s, rng:NextNumber(5, 8), s), CF(center + V(math.cos(a) * (R - 4), -3.5, math.sin(a) * (R - 4))) * ANG(0, a + rng:NextNumber(-0.3, 0.3), 0), (i % 2 == 0) and C.Rock or C.Rock2)
+	end
+	local tip = neon(parent, V(8, 18, 8), CF(center + V(0, -76, 0)) * ANG(rad(8), rad(45), 0), C.Ember)
+	H.light(tip, C.Orange, 40, 2)
+	return top
+end
+
+local function patches(parent, center, R, rng, n, placeable)
+	for i = 1, n do
+		local a, d = rng:NextNumber(0, math.pi * 2), rng:NextNumber(0, R - 14)
+		local w, l = rng:NextNumber(10, 26), rng:NextNumber(10, 22)
+		local p = block(parent, V(w, 0.2, l), CF(center + V(math.cos(a) * d, 0.02 + i * 0.001, math.sin(a) * d)) * ANG(0, rng:NextNumber(0, 3), 0),
+			(i % 3 == 0) and C.GrassP or ((i % 3 == 1) and C.Grass or C.Ground2), Enum.Material.Grass, { CastShadow = false })
+		p:SetAttribute("Placeable", placeable or nil)
+	end
+end
+
+local function surfaceSign(parent, cf, size, title, sub, titleColor, frameColor)
+	local sign = block(parent, size, cf, C.Black)
+	neon(parent, size + V(1, 1, -size.Z + 0.3), cf * CF(0, 0, size.Z / 2 + 0.1), frameColor or C.Orange)
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Front
+	sg.LightInfluence = 0
+	sg.PixelsPerStud = 30
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	sg.Parent = sign
+	local t = Instance.new("TextLabel")
+	t.BackgroundTransparency = 1
+	t.Size = UDim2.fromScale(1, sub and 0.62 or 1)
+	t.Font = Enum.Font.FredokaOne
+	t.TextScaled = true
+	t.RichText = true
+	t.Text = title
+	t.TextColor3 = titleColor or C.Orange
+	t.TextStrokeTransparency = 0
+	t.Parent = sg
+	if sub then
+		local st = t:Clone()
+		st.Position = UDim2.fromScale(0.04, 0.62)
+		st.Size = UDim2.fromScale(0.92, 0.34)
+		st.Font = Enum.Font.GothamBold
+		st.Text = sub
+		st.TextColor3 = rgb(245, 230, 210)
+		st.Parent = sg
+	end
+	return sign
+end
+
+------------------------------------------------------------------------
+-- ПОРТАЛ HALLOWEEN EVENT В ГЛАВНОМ ЛОББИ
+------------------------------------------------------------------------
+local function buildLobbyPortal()
+	local lobby = workspace:FindFirstChild("VoidTDLobby")
+	if not lobby or lobby:FindFirstChild("HalloweenGate") then
+		return
+	end
+	local L = Config.Lobby
+	local z = L.Zones.HalloweenPortal
+	if not z then
+		return
+	end
+	local m = Instance.new("Model")
+	m.Name = "HalloweenGate"
+	local zc = L.Center + z.Offset
+	local out = V(z.Offset.X, 0, z.Offset.Z).Unit
+	local pc = zc + out * 9
+	local face = CFrame.lookAt(pc, pc - out)
+	local R = 13
+	-- готическая арка: камни по окружности + шипы
+	for i = 0, 19 do
+		local a = i / 20 * math.pi * 2
+		local cf = face * CF(math.cos(a) * R, R + 1 + math.sin(a) * R, 0) * ANG(0, 0, a)
+		block(m, V(4, 3.4, 3), cf, (i % 2 == 0) and C.Stone2 or C.Black)
+		if i % 2 == 0 then
+			wedge(m, V(1.2, 2.4, 1.2), cf * CF(1.8, 0, 0) * ANG(0, 0, rad(-90)), C.Black, Enum.Material.Slate)
+		end
+		if i % 5 == 0 then
+			neon(m, V(0.6, 1.4, 0.3), cf * CF(0, 0, -1.6), C.Orange)
+		end
+	end
+	local disc = H.part(m, { Name = "PortalDisc", Shape = Enum.PartType.Cylinder, Size = V(0.4, R * 2 - 3, R * 2 - 3), CFrame = face * CF(0, R + 1, 0) * ANG(0, rad(90), 0), Color = rgb(150, 60, 20), Material = Enum.Material.Neon, Transparency = 0.25, CanCollide = false })
+	for i = 0, 2 do
+		local sw = neon(m, V(0.7, R * 1.7, 0.6), face * CF(0, R + 1, -0.4) * ANG(0, 0, rad(i * 60)), (i == 1) and C.Purple or C.Orange, { Transparency = 0.35 })
+		sw:SetAttribute("Spin", -1.2 - i * 0.3)
+		sw:SetAttribute("SpinAxis", "Z")
+	end
+	H.light(disc, C.Orange, 50, 3)
+	H.emitter(disc, C.Orange, { Rate = 26, Size = 0.7, SpeedMin = 2, SpeedMax = 5 })
+	fogEmitter(block(m, V(20, 1, 6), face * CF(0, 0.5, 0), C.Stone2), C.Fog, 3, 7)
+	-- тыквы и фонари по сторонам
+	for _, sx in ipairs({ -1, 1 }) do
+		pumpkin(m, (face * CF(sx * 16, 0, 2)).Position, 2.2, true, 0)
+		pumpkin(m, (face * CF(sx * 19, 0, -1)).Position, 1.4, true, 0.5)
+		lanternPost(m, (face * CF(sx * 12, 0, 5)).Position, 9)
+	end
+	surfaceSign(m, face * CF(0, R * 2 + 7, 0) * ANG(0, math.pi, 0), V(30, 7, 1), "HALLOWEEN EVENT", "🎃 остров, кейс, боссы и Halloween Coins", C.Orange, C.Orange)
+	for i = 1, 3 do
+		bat(m, zc + V(0, 22 + i * 3, 0), 8 + i * 3, 0.6 + i * 0.2)
+	end
+	H.calm(m)
+	m.Parent = lobby
+end
+
+------------------------------------------------------------------------
+-- ХЭЛЛОУИН-ОСТРОВ
+------------------------------------------------------------------------
+local function buildIsland()
+	local existing = workspace:FindFirstChild("VoidTDHalloween")
+	if existing then
+		return existing
+	end
+	local I = Config.HalloweenIsland
+	local c = I.Center
+	local rng = Random.new(1031)
+	local m = Instance.new("Model")
+	m.Name = "VoidTDHalloween"
+
+	islandDisc(m, c, I.Radius, rng, false)
+	patches(m, c, I.Radius, rng, 14, false)
+
+	-- ЛУНА и туман
+	local moon = neon(m, V(70, 70, 70), CF(c + V(-40, 150, -330)), C.Moon, { Shape = Enum.PartType.Ball })
+	block(m, V(68, 68, 68), CF(c + V(-22, 156, -318)), rgb(20, 12, 28), Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Ball, CanCollide = false, Transparency = 0.25 })
+	H.light(moon, C.Moon, 60, 1)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		fogEmitter(block(m, V(30, 1, 30), CF(c + V(math.cos(a) * 55, 0.5, math.sin(a) * 55)), C.Ground, Enum.Material.Slate, { Transparency = 1, CanCollide = false }), C.Fog, 1.5, 9)
+	end
+
+	-- ЗАМОК на дальнем краю
+	local cz = c + V(0, 0, -90)
+	block(m, V(46, 22, 16), CF(cz + V(0, 11, 0)), C.Stone2)
+	block(m, V(48, 1.5, 18), CF(cz + V(0, 22.7, 0)), C.Stone)
+	for i = -5, 5 do
+		block(m, V(2.4, 2.4, 2), CF(cz + V(i * 4.2, 24.6, -8.2)), C.Stone2)
+	end
+	tower(m, cz + V(0, 0, 2), 12, 36, false, rng)
+	tower(m, cz + V(-25, 0, 2), 9, 30, false, rng)
+	tower(m, cz + V(25, 0, 2), 9, 30, false, rng)
+	for _, sx in ipairs({ -1, 1 }) do
+		for k = 0, 3 do
+			local cf = CF(cz + V(sx * (6 + k * 4.5), 9, -8.05))
+			neon(m, V(1.6, 4, 0.1), cf, C.Window)
+			wedge(m, V(1.6, 1.2, 0.12), cf * CF(0, 2.6, 0), C.Window, Enum.Material.Neon)
+		end
+	end
+	-- ворота замка
+	block(m, V(8, 11, 0.6), CF(cz + V(0, 5.5, -8.3)), C.Bark, Enum.Material.Wood)
+	neon(m, V(1, 1, 0.1), CF(cz + V(0, 7, -8.65)) * ANG(0, 0, rad(45)), C.Orange)
+	surfaceSign(m, CF(cz + V(0, 30, -9)) * ANG(0, math.pi, 0), V(26, 6, 1), "HAUNTED HOLLOW", "Хэллоуин-остров VOID TD", C.Orange, C.Burgundy)
+	-- разрушенные башни по краям
+	tower(m, c + V(-78, 0, -48), 8, 18, true, rng)
+	tower(m, c + V(80, 0, -44), 8, 22, true, rng)
+
+	-- ЗОНЫ-КРУГИ
+	local zf = Instance.new("Folder")
+	zf.Name = "Zones"
+	zf.Parent = m
+	for key, z in pairs(I.Zones) do
+		local sub = z.Case and "500 🎃 Halloween Coins" or nil
+		H.zoneCircle(zf, key, z, c + z.Offset, sub, rgb(30, 14, 18))
+	end
+
+	-- КЕЙС: проклятый сундук на постаменте за кругом
+	do
+		local z = I.Zones.Case_Halloween
+		local zc = c + z.Offset
+		local out = V(z.Offset.X, 0, z.Offset.Z).Unit
+		local sp = zc + out * 13
+		H.part(m, { Name = "CaseStand", Shape = Enum.PartType.Cylinder, Size = V(2.5, 10, 10), CFrame = CF(sp + V(0, 1.25, 0)) * ANG(0, 0, rad(90)), Color = C.Black, Material = Enum.Material.Slate })
+		H.part(m, { Name = "CaseStandRing", Shape = Enum.PartType.Cylinder, Size = V(0.3, 10.4, 10.4), CFrame = CF(sp + V(0, 2.4, 0)) * ANG(0, 0, rad(90)), Color = C.Gold, Material = Enum.Material.Neon, CanCollide = false })
+		local okCM, CaseModels = pcall(require, Shared:WaitForChild("CaseModels"))
+		if okCM then
+			local cm = CaseModels.Build("Halloween").Model
+			cm:ScaleTo(1.7)
+			cm:PivotTo(CF(sp + V(0, 2.6, 0)) * CFrame.lookAt(Vector3.zero, -out).Rotation)
+			cm:SetAttribute("Spin", 0.4)
+			cm:SetAttribute("SpinAxis", "Y")
+			cm.Parent = m
+		end
+		local glow = block(m, V(0.5, 0.5, 0.5), CF(sp + V(0, 6, 0)), C.Black, Enum.Material.SmoothPlastic, { Transparency = 1, CanCollide = false })
+		H.light(glow, C.Orange, 24, 2)
+		H.billboard(m, sp + V(0, 13.5, 0), "HALLOWEEN CASE", "🎃 500 Halloween Coins", C.Orange, 14)
+		for i = 0, 5 do
+			local a = i / 6 * math.pi * 2
+			pumpkin(m, sp + V(math.cos(a) * 7.5, 0, math.sin(a) * 7.5), 1 + (i % 2) * 0.4, i % 2 == 0, a)
+		end
+	end
+
+	-- ОЧЕРЕДЬ: 4 светящихся квадрата входа в бой
+	do
+		local Q = I.Queue
+		local qc = c + Q.Offset
+		block(m, V(30, 0.6, 22), CF(qc + V(0, 0.3, 0)), C.Black)
+		for i, off in ipairs(Q.Pads) do
+			local p = qc + off
+			neon(m, V(Q.Pad + 0.6, 0.65, Q.Pad + 0.6), CF(p + V(0, 0.33, 0)), C.Orange)
+			local pad = block(m, V(Q.Pad, 0.7, Q.Pad), CF(p + V(0, 0.36, 0)), rgb(40, 16, 10), Enum.Material.Glass, { Transparency = 0.15 })
+			pad.Name = "QueuePad" .. i
+			H.light(pad, C.Orange, 14, 1.5)
+			H.emitter(pad, C.Orange, { Rate = 10, Size = 0.4, SpeedMin = 2, SpeedMax = 4, Spread = 15, Dir = Enum.NormalId.Top, LifeMin = 1, LifeMax = 2 })
+			local beam = neon(m, V(Q.Pad * 0.8, 18, Q.Pad * 0.8), CF(p + V(0, 9, 0)), C.Orange, { Transparency = 0.9 })
+			beam.CastShadow = false
+		end
+		-- арка над входом и вывеска
+		for _, sx in ipairs({ -1, 1 }) do
+			block(m, V(2.4, 16, 2.4), CF(qc + V(sx * 16, 8, -12)), C.Stone2)
+			pumpkin(m, qc + V(sx * 16, 16, -12), 1.6, true, 0)
+		end
+		block(m, V(34, 2, 2.4), CF(qc + V(0, 15, -12)), C.Stone2)
+		surfaceSign(m, CF(qc + V(0, 20, -12)) * ANG(0, math.pi, 0), V(26, 6, 1), "HALLOWEEN TD", "встань на квадрат • до 4 игроков • хост выбирает сложность", C.Orange, C.Orange)
+		H.billboard(m, qc + V(0, 7, 0), "ВХОД В БОЙ", "встань на светящийся квадрат", C.Orange, 13)
+		-- доска наград
+		surfaceSign(m, CF(qc + V(24, 6, 6)) * ANG(0, rad(-90), 0) * ANG(0, math.pi, 0), V(12, 9, 0.8),
+			"НАГРАДЫ", "ЛЁГКАЯ — 100 🎃\nСРЕДНЯЯ — 150 🎃\nСЛОЖНАЯ — 250 🎃\nтолько за победу", C.Gold, C.Gold)
+		block(m, V(0.8, 2, 0.8), CF(qc + V(24, 1, 6)), C.Black)
+	end
+
+	-- ПРЕВЬЮ ХЭЛЛОУИНСКИХ ЮНИТОВ: статуи у круга
+	do
+		local uz = c + I.Zones.HalloweenUnits.Offset
+		local list = { "LanternKing", "HalloweenPuppeteer", "HeadlessExecutioner", "PlagueDoctor", "PhantomKnight" }
+		for i, id in ipairs(list) do
+			local a = rad(140 + (i - 1) * 25)
+			pcall(H.statue, m, id, uz + V(math.cos(a) * 15, 0, math.sin(a) * 15), uz, i == 1 and 4 or 3)
+		end
+	end
+
+	-- БЕСТИАРИЙ: боссы на постаментах
+	do
+		local bz = c + I.Zones.Bestiary.Offset
+		local okE, EnemyModels = pcall(require, Shared:WaitForChild("EnemyModels"))
+		if okE then
+			for i, id in ipairs({ "GraveWarden", "FogReaper", "CursedMonarch" }) do
+				local pos = bz + V(16, 0, (i - 2) * 12)
+				block(m, V(7, 3, 7), CF(pos + V(0, 1.5, 0)), C.Stone2)
+				neon(m, V(7.4, 0.25, 7.4), CF(pos + V(0, 2.6, 0)), ({ rgb(90, 220, 120), rgb(255, 205, 70), rgb(255, 90, 80) })[i])
+				local ok, rig = pcall(EnemyModels.Build, id)
+				if ok and rig then
+					local model = rig.Model
+					model:ScaleTo(0.75)
+					local hip = (rig.HipHeight or 3) * 0.75
+					local base = pos + V(0, 3 + hip, 0)
+					model:PivotTo(CFrame.lookAt(base, V(bz.X, base.Y, bz.Z)))
+					for _, d in ipairs(model:GetDescendants()) do
+						if d:IsA("BasePart") then
+							d.Anchored = true
+							d.CanCollide = false
+						end
+					end
+					model.Name = "Bestiary_" .. id
+					model.Parent = m
+				end
+				H.billboard(m, pos + V(0, 13, 0), Config.Enemies[id].Name, ({ "босс ЛЁГКОЙ", "босс СРЕДНЕЙ", "босс СЛОЖНОЙ" })[i], ({ rgb(90, 220, 120), rgb(255, 205, 70), rgb(255, 90, 80) })[i], 10)
+			end
+		end
+	end
+
+	-- КЛАДБИЩЕ (восток)
+	do
+		local g = c + V(52, 0, 44)
+		for x = 0, 3 do
+			for zz = 0, 2 do
+				tombstone(m, rng, g + V(x * 6 - 9, 0, zz * 7 - 7), rng:NextNumber(-0.3, 0.3))
+			end
+		end
+		fence(m, g + V(-14, 0, -12), g + V(14, 0, -12))
+		fence(m, g + V(14, 0, -12), g + V(14, 0, 14))
+		fence(m, g + V(-14, 0, 14), g + V(14, 0, 14))
+		crow(m, g + V(14, 2.9, 2), rad(-90))
+		crow(m, g + V(-6, 2.9, -12), 0)
+		ghost(m, g + V(2, 2, 2), 1.1)
+		fogEmitter(block(m, V(26, 1, 24), CF(g + V(0, 0.5, 0)), C.Ground, Enum.Material.Slate, { Transparency = 1, CanCollide = false }), rgb(120, 200, 130), 2, 6)
+	end
+
+	-- ТЫКВЕННОЕ ПОЛЕ (юго-запад)
+	do
+		local f = c + V(-50, 0, 58)
+		block(m, V(30, 0.25, 20), CF(f + V(0, 0.12, 0)), rgb(40, 28, 20), Enum.Material.Ground, { CanCollide = false })
+		for x = 0, 4 do
+			for zz = 0, 3 do
+				pumpkin(m, f + V(x * 6 - 12 + rng:NextNumber(-1, 1), 0, zz * 5 - 7.5 + rng:NextNumber(-1, 1)), rng:NextNumber(0.8, 1.5), rng:NextInteger(1, 4) == 1, rng:NextNumber(0, 6))
+			end
+		end
+		-- пугало
+		block(m, V(0.5, 8, 0.5), CF(f + V(0, 4, -11)), C.Bark, Enum.Material.Wood)
+		block(m, V(6, 0.5, 0.5), CF(f + V(0, 6, -11)), C.Bark, Enum.Material.Wood)
+		block(m, V(2.2, 3, 1.2), CF(f + V(0, 5, -11)), rgb(90, 60, 40), Enum.Material.Fabric)
+		pumpkin(m, f + V(0, 6.6, -11), 1.5, true, 0)
+		crow(m, f + V(2.6, 6.3, -11), 0.4)
+	end
+
+	-- ДОМИКИ, МОСТ, ДЕРЕВЬЯ, ФОНАРИ, ПРИЗРАКИ, МЫШИ, РУНЫ
+	house(m, c + V(-80, 0, 0), rad(80), 1)
+	house(m, c + V(78, 0, 8), rad(-85), 0.9)
+	-- мост к маленькому парящему островку с руинами
+	do
+		local a = c + V(-96, 0, -20)
+		local b = a + V(-28, 0, -6)
+		local mid = (a + b) / 2
+		local cf = CFrame.lookAt(mid, b)
+		for i = -6, 6 do
+			block(m, V(5, 0.4, 1.8), cf * CF(0, -0.1 + math.abs(i) * 0.08, i * 2.1) , C.Bark, Enum.Material.WoodPlanks)
+		end
+		for _, sx in ipairs({ -1, 1 }) do
+			block(m, V(0.2, 0.2, 28), cf * CF(sx * 2.4, 1.6, 0), C.Bark, Enum.Material.Wood, { CanCollide = false })
+		end
+		local isl = b + V(-8, 0, -2)
+		H.cylinderY(m, "Islet", 12, 4, isl + V(0, -2, 0), C.Ground)
+		H.cylinderY(m, "IsletRock", 8, 12, isl + V(0, -10, 0), C.Rock)
+		tower(m, isl, 7, 14, true, rng)
+		runeCircle(m, isl + V(0, 0, 8), 4, C.Rune)
+	end
+	local taken = { c + V(0, 0, 70) }
+	for _, z in pairs(I.Zones) do
+		taken[#taken + 1] = c + z.Offset
+	end
+	taken[#taken + 1] = c + I.Queue.Offset
+	for i = 1, 26 do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local d = rng:NextNumber(70, I.Radius - 6)
+		local p = c + V(math.cos(a) * d, 0, math.sin(a) * d)
+		local free = p.Z > c.Z - 70
+		for _, t in ipairs(taken) do
+			if (V(p.X - t.X, 0, p.Z - t.Z)).Magnitude < 15 then
+				free = false
+			end
+		end
+		if free then
+			taken[#taken + 1] = p
+			deadTree(m, rng, p, rng:NextNumber(0.9, 1.3))
+		end
+	end
+	for i = 0, 9 do
+		local a = i / 10 * math.pi * 2 + 0.2
+		lanternPost(m, c + V(math.cos(a) * 34, 0, math.sin(a) * 34), 7)
+	end
+	ghost(m, c + V(-30, 3, -40), 1.3)
+	ghost(m, c + V(36, 4, -60), 1)
+	ghost(m, c + V(-70, 2, 30), 0.9)
+	for i = 1, 6 do
+		bat(m, c + V(rng:NextNumber(-60, 60), rng:NextNumber(26, 40), rng:NextNumber(-70, 40)), rng:NextNumber(8, 18), rng:NextNumber(0.5, 1.2))
+	end
+	runeCircle(m, c + V(0, 0, 18), 8, C.Rune)
+	runeCircle(m, c + V(-20, 0, -64), 5, C.Orange)
+
+	-- точка прибытия (не SpawnLocation: игроки появляются в главном лобби)
+	block(m, V(10, 1, 10), CF(I.Spawn + V(0, 0.5, 0)), rgb(60, 26, 20))
+	H.cylinderY(m, "SpawnGlow", 4.6, 0.08, I.Spawn + V(0, 1.03, 0), C.Orange, Enum.Material.Neon, { CanCollide = false, Transparency = 0.5 })
+	-- портал в лобби
+	do
+		local z = I.Zones.ReturnPortal
+		local zc = c + z.Offset
+		local face = CFrame.lookAt(zc + V(0, 0, 8), zc)
+		for i = 0, 11 do
+			local a = i / 12 * math.pi * 2
+			block(m, V(2.6, 2.2, 1.8), face * CF(math.cos(a) * 7, 8 + math.sin(a) * 7, 0) * ANG(0, 0, a), (i % 2 == 0) and C.Stone or C.Stone2)
+		end
+		local disc = H.part(m, { Name = "ReturnDisc", Shape = Enum.PartType.Cylinder, Size = V(0.4, 12, 12), CFrame = face * CF(0, 8, 0) * ANG(0, rad(90), 0), Color = rgb(120, 40, 210), Material = Enum.Material.Neon, Transparency = 0.25, CanCollide = false })
+		H.light(disc, rgb(170, 80, 255), 24, 2)
+	end
+
+	m.WorldPivot = CF(c)
+	H.calm(m)
+	m.Parent = workspace
+	return m
+end
+
+------------------------------------------------------------------------
+-- КАРТА HAUNTED HOLLOW
+------------------------------------------------------------------------
+local function buildMap()
+	local existing = workspace:FindFirstChild("VoidTDHalloweenMap")
+	if existing then
+		return existing
+	end
+	local MC = Config.Maps.Halloween
+	local c = MC.Center
+	local GY = MC.GroundY
+	local size = MC.IslandSize
+	local rng = Random.new(666)
+	PathUtil.SetMap("Halloween")
+	local m = Instance.new("Model")
+	m.Name = "VoidTDHalloweenMap"
+
+	-- земля (на неё можно ставить юнитов)
+	local ground = Instance.new("Folder")
+	ground.Name = "Ground"
+	ground.Parent = m
+	local top = block(ground, V(size.X, 4, size.Y), CF(c.X, GY - 2, c.Z), C.Ground)
+	top.Name = "IslandTop"
+	top:SetAttribute("Placeable", true)
+	for i = 1, 22 do
+		local w, d = rng:NextNumber(14, 34), rng:NextNumber(14, 30)
+		local x = rng:NextNumber(-size.X / 2 + w / 2 + 2, size.X / 2 - w / 2 - 2)
+		local z = rng:NextNumber(-size.Y / 2 + d / 2 + 2, size.Y / 2 - d / 2 - 2)
+		local p = block(ground, V(w, 0.2, d), CF(c.X + x, GY + 0.02 + i * 0.001, c.Z + z) * ANG(0, rad(rng:NextNumber(-20, 20)), 0),
+			(i % 3 == 0) and C.GrassP or ((i % 3 == 1) and C.Grass or C.Ground2), Enum.Material.Grass, { CastShadow = false })
+		p:SetAttribute("Placeable", true)
+	end
+	-- скальный низ
+	local under = Instance.new("Folder")
+	under.Name = "Underside"
+	under.Parent = m
+	for i, l in ipairs({ { 0.92, 12, -9 }, { 0.72, 16, -22 }, { 0.5, 18, -38 }, { 0.28, 18, -55 } }) do
+		block(under, V(size.X * l[1], l[2], size.Y * l[1]), CF(c.X + rng:NextNumber(-6, 6), GY + l[3], c.Z + rng:NextNumber(-6, 6)) * ANG(0, rad(rng:NextNumber(-8, 8)), 0), (i % 2 == 0) and C.Rock or C.Rock2)
+	end
+	for x = -size.X / 2, size.X / 2, 18 do
+		for _, zs in ipairs({ -1, 1 }) do
+			local s = rng:NextNumber(10, 18)
+			block(under, V(s, rng:NextNumber(5, 8), s), CF(c.X + x, GY - 3.5, c.Z + zs * size.Y / 2) * ANG(0, rng:NextNumber(0, 2), 0), C.Rock2)
+		end
+	end
+	for z = -size.Y / 2 + 18, size.Y / 2 - 18, 18 do
+		for _, xs in ipairs({ -1, 1 }) do
+			local s = rng:NextNumber(10, 18)
+			block(under, V(s, rng:NextNumber(5, 8), s), CF(c.X + xs * size.X / 2, GY - 3.5, c.Z + z) * ANG(0, rng:NextNumber(0, 2), 0), C.Rock)
+		end
+	end
+
+	-- ДОРОГА: тёмная брусчатка, оранжевые трещины, фонари по краям
+	local road = Instance.new("Folder")
+	road.Name = "Path"
+	road.Parent = m
+	local pts = PathUtil.Points
+	local w = MC.PathWidth
+	for i = 2, #pts do
+		local a, b = pts[i - 1], pts[i]
+		local len = (b - a).Magnitude
+		local mid = (a + b) / 2
+		local cf = CFrame.lookAt(V(mid.X, GY + 0.15, mid.Z), V(b.X, GY + 0.15, b.Z))
+		block(road, V(w, 0.3, len + w), cf, C.Road, Enum.Material.Cobblestone).Name = "Road"
+		block(road, V(w + 1.6, 0.22, len + w + 1.6), cf * CF(0, -0.06, 0), C.RoadEdge).Name = "RoadEdge"
+		if i % 2 == 0 then
+			neon(road, V(0.35, 0.05, math.min(len * 0.4, 12)), cf * CF(rng:NextNumber(-2, 2), 0.16, 0) * ANG(0, rad(rng:NextNumber(-25, 25)), 0), C.Ember)
+		end
+		local steps = math.floor(len / 26)
+		local dir = (b - a).Unit
+		local right = V(-dir.Z, 0, dir.X)
+		for s2 = 1, steps do
+			local p = a:Lerp(b, s2 / (steps + 1)) + right * ((s2 % 2 == 0) and 1 or -1) * (w / 2 + 2)
+			lanternPost(road, V(p.X, GY, p.Z), 6)
+		end
+	end
+
+	-- ПОРТАЛ ВРАГОВ (VoidPortal: PortalDisc/PortalCore нужны для вспышки при боссе)
+	do
+		local pm = Instance.new("Model")
+		pm.Name = "VoidPortal"
+		pm.Parent = m
+		local start = pts[1]
+		local dir = (pts[2] - start).Unit
+		local R = 10
+		local center = start - dir * 4 + V(0, R + 1, 0)
+		local face = CFrame.lookAt(center, center + dir)
+		for i = 0, 17 do
+			local a = i / 18 * math.pi * 2
+			local cf = face * CF(math.cos(a) * R, math.sin(a) * R, 0) * ANG(0, 0, a)
+			block(pm, V(3.4, 3, 2.6), cf, (i % 2 == 0) and C.Stone2 or C.Black)
+			if i % 3 == 0 then
+				wedge(pm, V(1, 2.2, 1), cf * CF(1.6, 0, 0) * ANG(0, 0, rad(-90)), C.Bone, Enum.Material.SmoothPlastic)
+			end
+		end
+		local disc = H.part(pm, { Name = "PortalDisc", Shape = Enum.PartType.Cylinder, Size = V(0.4, R * 2 - 2.4, R * 2 - 2.4), CFrame = face * ANG(0, rad(90), 0), Color = rgb(140, 50, 20), Material = Enum.Material.Neon, Transparency = 0.2, CanCollide = false })
+		local core = neon(pm, V(2, 2, 2), face * CF(0, 0, -0.3) * ANG(rad(45), rad(45), 0), C.Orange)
+		core.Name = "PortalCore"
+		H.light(core, C.Orange, 40, 3)
+		H.emitter(disc, C.Ember, { Rate = 26, Size = 0.7, SpeedMin = 2, SpeedMax = 5 })
+		for i = 0, 2 do
+			local sw = neon(pm, V(0.6, R * 1.6, 0.7), face * ANG(0, 0, rad(i * 60)) * CF(0, 0, -0.4), (i == 1) and C.Purple or C.Orange, { Transparency = 0.35 })
+			sw:SetAttribute("Spin", -1.4 - i * 0.3)
+			sw:SetAttribute("SpinAxis", "Z")
+		end
+		fogEmitter(disc, C.Fog, 3, 6)
+	end
+
+	-- БАЗА ИГРОКА (VoidCore): святилище-фонарь
+	do
+		local cm = Instance.new("Model")
+		cm.Name = "VoidCore"
+		cm.Parent = m
+		local pos = pts[#pts]
+		H.cylinderY(cm, "CoreBase", 9, 1.5, pos + V(0, 0.75, 0), C.Stone2)
+		H.cylinderY(cm, "CoreRing", 9.4, 0.4, pos + V(0, 1.6, 0), C.Gold, Enum.Material.Neon, { CanCollide = false })
+		for k = 0, 3 do
+			local a = k / 4 * math.pi * 2 + rad(45)
+			local pp = pos + V(math.cos(a) * 6.5, 0, math.sin(a) * 6.5)
+			block(cm, V(1.6, 14, 1.6), CF(pp + V(0, 7, 0)), C.Black, Enum.Material.Metal)
+			pumpkin(cm, pp + V(0, 14, 0), 1.3, true, a)
+		end
+		block(cm, V(10, 1, 10), CF(pos + V(0, 14.5, 0)) * ANG(0, rad(45), 0), C.Black, Enum.Material.Metal)
+		spire(cm, CF(pos + V(0, 15, 0)), 9, 9, C.Burgundy)
+		local flame = neon(cm, V(4, 6, 4), CF(pos + V(0, 8, 0)) * ANG(0, rad(45), 0), C.Orange, { Transparency = 0.15 })
+		flame.Name = "CoreCrystal"
+		flame:SetAttribute("Spin", 0.6)
+		flame:SetAttribute("SpinAxis", "Y")
+		H.light(flame, C.Orange, 40, 3)
+		H.emitter(flame, C.Ember, { Rate = 20, Size = 0.6, SpeedMin = 1, SpeedMax = 3, Accel = V(0, 3, 0) })
+		cm:SetAttribute("CoreCenter", pos + V(0, 8, 0))
+	end
+
+	-- ДЕКОР: кладбище, тыквенные поля, готические здания, лес — только вдали от дороги
+	local taken = { pts[1], pts[#pts], MC.BattleSpawn }
+	local function free(p, pathDist, sep)
+		if PathUtil.DistanceToPath(p) < pathDist then
+			return false
+		end
+		if math.abs(p.X - c.X) > size.X / 2 - 6 or math.abs(p.Z - c.Z) > size.Y / 2 - 6 then
+			return false
+		end
+		for _, t in ipairs(taken) do
+			if V(p.X - t.X, 0, p.Z - t.Z).Magnitude < sep then
+				return false
+			end
+		end
+		return true
+	end
+	local function spot(pathDist, sep, tries)
+		for _ = 1, tries or 40 do
+			local p = V(c.X + rng:NextNumber(-size.X / 2, size.X / 2), GY, c.Z + rng:NextNumber(-size.Y / 2, size.Y / 2))
+			if free(p, pathDist, sep) then
+				taken[#taken + 1] = p
+				return p
+			end
+		end
+	end
+	local decor = Instance.new("Folder")
+	decor.Name = "Decor"
+	decor.Parent = m
+	-- кладбище
+	for _ = 1, 3 do
+		local g = spot(16, 26)
+		if g then
+			for k = 1, 6 do
+				tombstone(decor, rng, g + V(rng:NextNumber(-7, 7), 0, rng:NextNumber(-7, 7)), rng:NextNumber(-0.4, 0.4))
+			end
+			if rng:NextInteger(1, 2) == 1 then
+				crow(decor, g + V(0, 2.9, 0), rng:NextNumber(0, 6))
+			end
+			fogEmitter(block(decor, V(16, 1, 16), CF(g + V(0, 0.5, 0)), C.Ground, Enum.Material.Slate, { Transparency = 1, CanCollide = false }), rgb(120, 200, 130), 1, 5)
+		end
+	end
+	-- поля тыкв
+	for _ = 1, 4 do
+		local f = spot(12, 20)
+		if f then
+			for k = 1, 7 do
+				pumpkin(decor, f + V(rng:NextNumber(-6, 6), 0, rng:NextNumber(-6, 6)), rng:NextNumber(0.8, 1.6), rng:NextInteger(1, 3) == 1, rng:NextNumber(0, 6))
+			end
+		end
+	end
+	-- готические здания
+	for k = 1, 3 do
+		local p = spot(22, 34)
+		if p then
+			if k == 1 then
+				tower(decor, p, 10, 26, false, rng)
+			elseif k == 2 then
+				house(decor, p, rng:NextNumber(0, 6), 1.1)
+			else
+				tower(decor, p, 8, 16, true, rng)
+			end
+		end
+	end
+	-- лес мёртвых деревьев
+	for _ = 1, 30 do
+		local p = spot(9, 9, 12)
+		if p then
+			deadTree(decor, rng, p, rng:NextNumber(0.8, 1.3))
+		end
+	end
+	-- призраки, мыши, туман, руны
+	for _ = 1, 4 do
+		local p = spot(10, 12, 12)
+		if p then
+			ghost(decor, p + V(0, 3, 0), rng:NextNumber(0.8, 1.2))
+		end
+	end
+	for _ = 1, 6 do
+		bat(decor, V(c.X + rng:NextNumber(-110, 110), GY + rng:NextNumber(24, 40), c.Z + rng:NextNumber(-90, 90)), rng:NextNumber(8, 16), rng:NextNumber(0.5, 1.2))
+	end
+	for i = 0, 5 do
+		fogEmitter(block(decor, V(40, 1, 40), CF(c.X + (i % 3 - 1) * 85, GY + 0.5, c.Z + (i < 3 and -50 or 50)), C.Ground, Enum.Material.Slate, { Transparency = 1, CanCollide = false }), C.Fog, 1.2, 9)
+	end
+	local moon = neon(decor, V(60, 60, 60), CF(c + V(60, 140, -300)), C.Moon, { Shape = Enum.PartType.Ball })
+	H.light(moon, C.Moon, 60, 1)
+
+	-- площадка прибытия
+	local bs = MC.BattleSpawn
+	block(m, V(8, 1, 8), CF(bs.X, GY + 0.5, bs.Z), rgb(60, 26, 20)).Name = "BattlePad"
+	neon(m, V(7, 0.05, 7), CF(bs.X, GY + 1.03, bs.Z), C.Orange, { Transparency = 0.6 }).Name = "BattlePadGlow"
+
+	PathUtil.SetMap("Void")
+	H.calm(m)
+	m.Parent = workspace
+	return m
+end
+
+function HalloweenWorld.Build(helpers)
+	H = helpers
+	buildLobbyPortal()
+	buildIsland()
+	return buildMap()
+end
+
+return HalloweenWorld
 ]======] }
 FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient" }, "LocalScript", [======[
 --!nocheck
@@ -7445,6 +12309,8 @@ local ctx = {
 	EnemyModels = require(Shared:WaitForChild("EnemyModels")),
 	CaseModels = require(Shared:WaitForChild("CaseModels")),
 	FX = require(script:WaitForChild("FX")),
+	HFX = require(script:WaitForChild("HalloweenFX")),
+	HalloweenAnims = require(script:WaitForChild("HalloweenAnims")),
 	Renderer = require(script:WaitForChild("Renderer")),
 	UI = require(script:WaitForChild("UI")),
 	Placement = require(script:WaitForChild("Placement")),
@@ -7478,7 +12344,7 @@ local Lighting = game:GetService("Lighting")
 ctx.Lite = false
 
 local function applyWorldLite(on)
-	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby" }) do
+	for _, name in ipairs({ "VoidTDMap", "VoidTDLobby", "VoidTDHalloween", "VoidTDHalloweenMap" }) do
 		local root = workspace:FindFirstChild(name)
 		if root then
 			for _, d in ipairs(root:GetDescendants()) do
@@ -7548,7 +12414,8 @@ Remotes.Impact.OnClientEvent:Connect(Renderer.OnImpact)
 Remotes.Notify.OnClientEvent:Connect(function(p)
 	UI.OnNotify(p)
 	if p.Type == "CoreHit" then
-		local core = workspace:FindFirstChild("VoidTDMap") and workspace.VoidTDMap:FindFirstChild("VoidCore")
+		local map = Renderer.ActiveMap()
+		local core = map and map:FindFirstChild("VoidCore")
 		local c = core and core:GetAttribute("CoreCenter")
 		if c then
 			FX.Sphere(c, 6, FX.Colors.Pink, 0.4)
@@ -7697,7 +12564,24 @@ task.spawn(function()
 	task.wait(1)
 	collectSpinners(map)
 	collectSpinners(lobby)
+	collectSpinners(workspace:WaitForChild("VoidTDHalloween", 30))
+	collectSpinners(workspace:WaitForChild("VoidTDHalloweenMap", 30))
 end)
+
+------------------------------------------------------------------------
+-- КАРТА МАТЧА: Void или Haunted Hollow (дорога пересчитывается у всех одинаково)
+------------------------------------------------------------------------
+local function applyMap()
+	local key = State:GetAttribute("Map") or "Void"
+	if ctx.PathUtil.MapKey ~= key then
+		Renderer.ClearEnemies()
+		ctx.HFX.ClearAllies()
+		ctx.PathUtil.SetMap(key)
+	end
+	UI.SetMapMode(key)
+end
+State:GetAttributeChangedSignal("Map"):Connect(applyMap)
+applyMap()
 
 local function updateSpinners(t)
 	for _, s in ipairs(spinners) do
@@ -7723,19 +12607,31 @@ end
 ------------------------------------------------------------------------
 -- КРУГИ В ЛОББИ: встал в круг — открылось меню, вышел — закрылось
 ------------------------------------------------------------------------
-local ZONE_MODAL = { Units = "Inventory", Play = "Mode" }
-for key, z in pairs(ctx.Config.Lobby.Zones) do
-	if z.Case then
-		ZONE_MODAL[key] = "Summon"
+local ZONE_MODAL = { Units = "Inventory", Play = "Mode", Bestiary = "Bestiary", HalloweenUnits = "Inventory" }
+-- зоны главного лобби и Хэллоуин-острова
+local ZONE_SETS = {
+	{ Prefix = "", Center = ctx.Config.Lobby.Center, Zones = ctx.Config.Lobby.Zones },
+	{ Prefix = "H_", Center = ctx.Config.HalloweenIsland.Center, Zones = ctx.Config.HalloweenIsland.Zones },
+}
+for _, set in ipairs(ZONE_SETS) do
+	for key, z in pairs(set.Zones) do
+		if z.Case then
+			ZONE_MODAL[set.Prefix .. key] = "Summon"
+		elseif ZONE_MODAL[key] then
+			ZONE_MODAL[set.Prefix .. key] = ZONE_MODAL[key]
+		end
 	end
 end
 local zoneState = {}
+local teleportCooldown = 0
 
 local function updateZones()
 	if player:GetAttribute("InMatch") then
 		if next(zoneState) then
 			for key in pairs(zoneState) do
-				UI.Show(ZONE_MODAL[key], false)
+				if ZONE_MODAL[key] then
+					UI.Show(ZONE_MODAL[key], false)
+				end
 			end
 			zoneState = {}
 		end
@@ -7746,23 +12642,45 @@ local function updateZones()
 	if not root then
 		return
 	end
-	local L = ctx.Config.Lobby
 	local pos = root.Position
-	for key, z in pairs(L.Zones) do
-		local c = L.Center + z.Offset
-		local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
-		local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
-		if inside ~= (zoneState[key] == true) then
-			zoneState[key] = inside or nil
-			if inside and z.Case then
-				UI.SelectCase(z.Case)
-			end
-			UI.Show(ZONE_MODAL[key], inside)
-			if inside then
-				FX.Sound("Click", 1, 1)
+	for _, set in ipairs(ZONE_SETS) do
+		for key, z in pairs(set.Zones) do
+			local id = set.Prefix .. key
+			local c = set.Center + z.Offset
+			local flat = Vector3.new(pos.X - c.X, 0, pos.Z - c.Z).Magnitude
+			local inside = flat <= z.Radius + 0.5 and math.abs(pos.Y - c.Y) < 8
+			if inside ~= (zoneState[id] == true) then
+				zoneState[id] = inside or nil
+				if z.Teleport then
+					-- портал: телепорт на остров / в лобби
+					if inside and os.clock() > teleportCooldown then
+						teleportCooldown = os.clock() + 2
+						FX.Sound("Portal", 1, 1)
+						UI.Fade(z.Teleport == "Halloween" and "HALLOWEEN" or "ЛОББИ")
+						task.delay(0.35, function()
+							ctx.Request("Teleport", { To = z.Teleport })
+						end)
+					end
+				else
+					if inside and z.Case then
+						UI.SelectCase(z.Case)
+					end
+					if inside and z.EventUnits then
+						UI.SetInventoryFilter(z.EventUnits)
+					elseif inside and key == "Units" then
+						UI.SetInventoryFilter(nil)
+					end
+					if ZONE_MODAL[id] then
+						UI.Show(ZONE_MODAL[id], inside)
+					end
+					if inside then
+						FX.Sound("Click", 1, 1)
+					end
+				end
 			end
 		end
 	end
+	UI.UpdateQueue()
 end
 
 ------------------------------------------------------------------------
@@ -8090,8 +13008,11 @@ end
 -- getTarget() -> Vector3 | nil (текущая позиция цели)
 function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 	lv = lv or 1
-	local p
-	if kind == "Arrow" then
+	local p, trailColor
+	local maker = FX.ProjectileMakers and FX.ProjectileMakers[kind]
+	if maker then
+		p, trailColor = maker(lv)
+	elseif kind == "Arrow" then
 		p = FX.Part({ Size = V(0.18, 0.18, 2.2), Color = lv >= 4 and NEON or NEON_SOFT })
 		local tipP = FX.Part({ Size = V(0.35, 0.35, 0.35), Color = NEON, Parent = p })
 		tipP.Name = "Tip"
@@ -8119,7 +13040,7 @@ function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 	local trail = Instance.new("Trail")
 	trail.Attachment0 = a0
 	trail.Attachment1 = a1
-	trail.Color = ColorSequence.new(kind == "Orb" and NEON or NEON_SOFT)
+	trail.Color = ColorSequence.new(trailColor or (kind == "Orb" and NEON or NEON_SOFT))
 	trail.LightEmission = 1
 	trail.Lifetime = 0.18
 	trail.Transparency = NumberSequence.new(0.2, 1)
@@ -8858,6 +13779,1485 @@ end
 
 return FX
 ]======] }
+FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "HalloweenFX" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenFX (клиент)
+-- Эффекты Хэллоуина: атаки и способности 11 юнитов, руны, союзники на дороге (модели, ходьба, HP),
+-- состояния и смерти хэллоуинских врагов, появление боссов. Только визуал — урон считает сервер.
+
+local RunService = game:GetService("RunService")
+
+local HFX = {}
+
+local V = Vector3.new
+local CF = CFrame.new
+local ANG = CFrame.Angles
+local rad = math.rad
+
+local ctx, Config, PathUtil, UnitModels, FX, Renderer
+local rng = Random.new()
+
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+local COL = {
+	Orange = rgb(255, 140, 40),
+	Ember = rgb(255, 90, 20),
+	Fire = rgb(255, 180, 70),
+	Light = rgb(255, 235, 170),
+	Green = rgb(120, 255, 110),
+	Poison = rgb(140, 230, 80),
+	PoisonDark = rgb(60, 110, 40),
+	Blue = rgb(90, 170, 255),
+	Ghost = rgb(170, 220, 255),
+	Purple = rgb(180, 90, 255),
+	Red = rgb(230, 30, 50),
+	Gold = rgb(255, 205, 80),
+	Straw = rgb(220, 190, 110),
+	Dirt = rgb(110, 85, 60),
+	Stone = rgb(120, 112, 104),
+	Leaf = rgb(230, 140, 40),
+	Bell = rgb(190, 160, 255),
+	Bone = rgb(230, 222, 205),
+	Black = rgb(16, 12, 18),
+	Smoke = rgb(90, 90, 96),
+	FogC = rgb(160, 170, 160),
+}
+HFX.Colors = COL
+
+local function part(props)
+	return FX.Part(props)
+end
+
+local function fade(p, life, goal)
+	goal = goal or {}
+	goal.Transparency = 1
+	FX.Tween(p, life, goal)
+	task.delay(life + 0.05, function()
+		p:Destroy()
+	end)
+end
+
+local function ground(pos)
+	return V(pos.X, PathUtil.Map.GroundY + 0.15, pos.Z)
+end
+
+local function plight(p, color, range, brightness, life)
+	local l = Instance.new("PointLight")
+	l.Color = color
+	l.Range = range
+	l.Brightness = brightness
+	l.Shadows = false
+	l.Parent = p
+	if life then
+		FX.Tween(l, life, { Brightness = 0 })
+	end
+	return l
+end
+
+-- обломки: куски с гравитацией (камни, кость, солома, щепки)
+local function debris(pos, color, count, size, speed, life, material)
+	if FX.Lite then
+		count = math.min(3, count)
+	end
+	for _ = 1, count do
+		local s = size * rng:NextNumber(0.6, 1.3)
+		local p = part({ Size = V(s, s * 0.8, s * 1.1), CFrame = CF(pos) * ANG(rng:NextNumber(0, 6), rng:NextNumber(0, 6), 0), Color = color, Material = material or Enum.Material.Slate })
+		local v = V(rng:NextNumber(-1, 1), rng:NextNumber(0.6, 1.4), rng:NextNumber(-1, 1)) * speed
+		local t0 = os.clock()
+		local spin = V(rng:NextNumber(-8, 8), rng:NextNumber(-8, 8), 0)
+		local conn
+		conn = RunService.RenderStepped:Connect(function()
+			local t = os.clock() - t0
+			if t >= life or not p.Parent then
+				conn:Disconnect()
+				if p.Parent then
+					p:Destroy()
+				end
+				return
+			end
+			local q = pos + v * t + V(0, -30 * t * t, 0)
+			q = V(q.X, math.max(q.Y, PathUtil.Map.GroundY + s * 0.4), q.Z)
+			p.CFrame = CF(q) * ANG(spin.X * t, spin.Y * t, 0)
+			if t > life * 0.6 then
+				p.Transparency = (t - life * 0.6) / (life * 0.4)
+			end
+		end)
+	end
+end
+
+-- дымное облако из полупрозрачных шаров
+local function smoke(pos, color, n, size, life, rise)
+	if FX.Lite then
+		n = math.min(n, 2)
+	end
+	for _ = 1, n do
+		local s = size * rng:NextNumber(0.7, 1.2)
+		local p = part({ Shape = Enum.PartType.Ball, Size = V(s, s, s), CFrame = CF(pos + V(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1)) * size * 0.4), Color = color, Material = Enum.Material.SmoothPlastic, Transparency = 0.45 })
+		fade(p, life * rng:NextNumber(0.8, 1.2), { Size = V(s, s, s) * 1.9, CFrame = p.CFrame + V(rng:NextNumber(-1, 1), rise or 2, rng:NextNumber(-1, 1)) })
+	end
+end
+
+-- вспышка света
+local function flash(pos, color, radius, life)
+	FX.Sphere(pos, radius, color, life or 0.3)
+	local a = part({ Size = V(0.2, 0.2, 0.2), CFrame = CF(pos), Transparency = 1 })
+	plight(a, color, radius * 4, 4, life or 0.35)
+	task.delay((life or 0.35) + 0.05, function()
+		a:Destroy()
+	end)
+end
+
+-- кольцо рун на земле
+local function runeRing(pos, r, color, life)
+	local list = {}
+	for i = 0, 7 do
+		local a = i / 8 * math.pi * 2
+		list[#list + 1] = part({ Size = V(0.4, 0.06, 1.2), CFrame = CF(ground(pos) + V(math.cos(a) * r, 0.05, math.sin(a) * r)) * ANG(0, -a, 0), Color = color })
+	end
+	for i = 0, 1 do
+		list[#list + 1] = part({ Size = V(r * 1.5, 0.05, 0.22), CFrame = CF(ground(pos) + V(0, 0.04, 0)) * ANG(0, i * math.pi / 2 + rad(45), 0), Color = color, Transparency = 0.3 })
+	end
+	local ring = part({ Shape = Enum.PartType.Cylinder, Size = V(0.06, r * 2.2, r * 2.2), CFrame = CF(ground(pos)) * ANG(0, 0, rad(90)), Color = color, Transparency = 0.55 })
+	list[#list + 1] = ring
+	for _, p in ipairs(list) do
+		task.delay(life * 0.6, function()
+			fade(p, life * 0.4)
+		end)
+	end
+	return list
+end
+
+-- вертикальный портал-диск
+local function portalDisc(pos, r, color, life, edge)
+	local cam = workspace.CurrentCamera
+	local look = cam and (cam.CFrame.Position - pos) or V(0, 0, 1)
+	local cf = CFrame.lookAt(pos, pos + V(look.X, 0, look.Z))
+	local disc = part({ Shape = Enum.PartType.Cylinder, Size = V(0.2, 0.2, 0.2), CFrame = cf * ANG(0, rad(90), 0), Color = color, Transparency = 0.2 })
+	FX.Tween(disc, 0.25, { Size = V(0.2, r * 2, r * 2) }, Enum.EasingStyle.Back)
+	local rim = part({ Shape = Enum.PartType.Cylinder, Size = V(0.15, 0.3, 0.3), CFrame = cf * ANG(0, rad(90), 0) * CF(-0.05, 0, 0), Color = edge or COL.Light, Transparency = 0.1 })
+	FX.Tween(rim, 0.25, { Size = V(0.15, r * 2.25, r * 2.25) }, Enum.EasingStyle.Back)
+	plight(disc, color, r * 5, 3, life)
+	task.delay(life * 0.7, function()
+		fade(disc, life * 0.3, { Size = V(0.2, 0.2, 0.2) })
+		fade(rim, life * 0.3, { Size = V(0.15, 0.3, 0.3) })
+	end)
+end
+
+-- птица (ворон) — пара крыльев и тело
+local function bird(color)
+	local m = Instance.new("Model")
+	local body = part({ Size = V(0.5, 0.45, 0.9), Color = color or COL.Black, Material = Enum.Material.SmoothPlastic, Parent = m })
+	for _, s in ipairs({ -1, 1 }) do
+		local w = part({ Class = "WedgePart", Size = V(0.1, 0.5, 1.2), Color = color or COL.Black, Material = Enum.Material.SmoothPlastic, Parent = m })
+		w.Name = s == 1 and "WR" or "WL"
+	end
+	m.PrimaryPart = body
+	m.Parent = workspace:FindFirstChild("VoidTD_FX") or workspace
+	return m, body
+end
+
+local function placeBird(m, cf, flap)
+	local body = m.PrimaryPart
+	body.CFrame = cf
+	m.WR.CFrame = cf * CF(0.55, 0.1, 0) * ANG(0, 0, rad(-60 + flap))
+	m.WL.CFrame = cf * CF(-0.55, 0.1, 0) * ANG(0, 0, rad(60 - flap))
+end
+
+-- вороны кружат вокруг точки
+local function crowCircle(pos, r, n, life, color)
+	if FX.Lite then
+		n = 1
+	end
+	local birds = {}
+	for i = 1, n do
+		birds[i] = { bird(color), i / n * math.pi * 2, rng:NextNumber(2, 4.5) }
+	end
+	local t0 = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		for _, b in ipairs(birds) do
+			local a = b[2] + t * 2.4
+			local p = pos + V(math.cos(a) * r, b[3] + math.sin(t * 3 + b[2]) * 0.4, math.sin(a) * r)
+			local fwd = V(-math.sin(a), 0, math.cos(a))
+			placeBird(b[1], CFrame.lookAt(p, p + fwd), math.sin(t * 18 + b[2]) * 40)
+		end
+		if t >= life then
+			conn:Disconnect()
+			for _, b in ipairs(birds) do
+				b[1]:Destroy()
+			end
+		end
+	end)
+end
+
+-- ворон летит от точки к точке (снаряд пугала)
+local function crowFly(from, getTarget, travel, onHit)
+	local m = bird()
+	local t0 = os.clock()
+	local last = getTarget() or from
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local a = math.clamp((os.clock() - t0) / math.max(travel, 0.05), 0, 1)
+		local target = getTarget() or last
+		last = target
+		local p = from:Lerp(target, a) + V(0, math.sin(a * math.pi) * 2, 0)
+		local dir = target - p
+		placeBird(m, (dir.Magnitude > 0.05) and CFrame.lookAt(p, target) or CF(p), math.sin(os.clock() * 25) * 45)
+		if a >= 1 then
+			conn:Disconnect()
+			m:Destroy()
+			if onHit then
+				onHit(target)
+			end
+		end
+	end)
+end
+
+------------------------------------------------------------------------
+-- СНАРЯДЫ (через FX.ProjectileMakers)
+------------------------------------------------------------------------
+local function installProjectiles()
+	FX.ProjectileMakers = FX.ProjectileMakers or {}
+	FX.ProjectileMakers.CurseBullet = function(lv)
+		local p = part({ Size = V(0.22, 0.22, 1.1), Color = COL.Green })
+		plight(p, COL.Green, 6, 2)
+		return p, COL.Green
+	end
+	FX.ProjectileMakers.Flask = function(lv)
+		local p = part({ Size = V(0.5, 0.7, 0.5), Color = COL.Poison, Material = Enum.Material.Glass, Transparency = 0.2 })
+		local cork = part({ Size = V(0.25, 0.25, 0.25), Color = COL.Dirt, Material = Enum.Material.Wood, Parent = p })
+		cork.Name = "Tip"
+		plight(p, COL.Poison, 6, 1.5)
+		return p, COL.Poison
+	end
+	FX.ProjectileMakers.Card = function(lv)
+		local p = part({ Size = V(0.6, 0.06, 0.9), Color = rgb(245, 240, 250), Material = Enum.Material.SmoothPlastic })
+		local mark = part({ Size = V(0.25, 0.08, 0.25), Color = COL.Purple, Parent = p })
+		mark.Name = "Tip"
+		return p, COL.Purple
+	end
+	FX.ProjectileMakers.Pumpkin = function(lv)
+		local s = 1 + lv * 0.08
+		local p = part({ Size = V(1.1 * s, 0.9 * s, 1.1 * s), Color = rgb(230, 110, 30), Material = Enum.Material.SmoothPlastic })
+		local face = part({ Size = V(0.6 * s, 0.25 * s, 0.1), Color = COL.Fire, Parent = p })
+		face.Name = "Tip"
+		plight(p, COL.Orange, 10, 2.5)
+		return p, COL.Ember
+	end
+end
+
+------------------------------------------------------------------------
+-- УДАРЫ И СПОСОБНОСТИ (Impact)
+------------------------------------------------------------------------
+local IMPACT = {}
+
+IMPACT.LightFlash = function(p)
+	local g = ground(p.P)
+	flash(g + V(0, 1.5, 0), COL.Light, p.R * 0.6, 0.3)
+	FX.Ring(g, p.R, COL.Light, 0.35, 0.2, 0.5, 0.3)
+	FX.Sound("Magic", 0.6, 1.6, g)
+end
+
+IMPACT.LanternBeam = function(p)
+	local g = ground(p.P)
+	local beam = part({ Shape = Enum.PartType.Cylinder, Size = V(30, 0.5, 0.5), CFrame = CF(g + V(0, 15, 0)) * ANG(0, 0, rad(90)), Color = COL.Light, Transparency = 0.2 })
+	FX.Tween(beam, 0.15, { Size = V(30, p.R * 1.2, p.R * 1.2) })
+	task.delay(0.2, function()
+		fade(beam, 0.4, { Size = V(30, 0.2, 0.2) })
+	end)
+	FX.Ring(g, p.R, COL.Fire, 0.5, 0.3, 1, 0.1)
+	flash(g + V(0, 2, 0), COL.Light, p.R * 0.7, 0.45)
+	FX.Burst(g + V(0, 1, 0), COL.Fire, 12, 0.35, 9)
+	FX.Sound("Laser", 0.8, 1.4, g)
+end
+
+IMPACT.DirtBurst = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, p.R, COL.Dirt, 0.45, 0.4, 1, 0.1)
+	FX.Cracks(g, p.R, rgb(70, 50, 36), 6, 1.1)
+	debris(g + V(0, 0.5, 0), COL.Stone, 8, 0.6, 9, 0.9)
+	debris(g + V(0, 0.5, 0), COL.Dirt, 6, 0.45, 7, 0.8, Enum.Material.Ground)
+	smoke(g + V(0, 1, 0), rgb(120, 100, 80), 4, 3, 0.9, 2.5)
+	FX.Sound("HeavyHit", 0.8, 0.8, g)
+end
+
+IMPACT.LeafStorm = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, p.R, COL.Leaf, 0.6, 0.25, 1, 0.3)
+	local n = FX.Lite and 6 or 18
+	local leaves = {}
+	for i = 1, n do
+		leaves[i] = { part({ Size = V(0.5, 0.06, 0.35), Color = (i % 3 == 0) and COL.Ember or COL.Leaf, Material = Enum.Material.SmoothPlastic }), rng:NextNumber(0, 6.28), rng:NextNumber(0.5, 1) }
+	end
+	local t0 = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		for _, l in ipairs(leaves) do
+			local a = l[2] + t * 7
+			local r = p.R * l[3] * (0.4 + t * 0.5)
+			l[1].CFrame = CF(g + V(math.cos(a) * r, t * 4 * l[3] + 0.5, math.sin(a) * r)) * ANG(t * 9, a, 0)
+			l[1].Transparency = math.clamp((t - 0.9) / 0.4, 0, 1)
+		end
+		if t >= 1.3 then
+			conn:Disconnect()
+			for _, l in ipairs(leaves) do
+				l[1]:Destroy()
+			end
+		end
+	end)
+	crowCircle(g, p.R * 0.6, 2, 1.3)
+	FX.Sound("Slash", 0.6, 0.6, g)
+end
+
+IMPACT.CurseMark = function(p)
+	local id = p.I
+	local c = Renderer.EnemyCenter(id) or p.P
+	flash(c, COL.Green, 2.5, 0.3)
+	FX.Burst(c, COL.Green, 10, 0.35, 8)
+	-- знак проклятия над врагом: ромб и череп-рамка, держится DUR
+	local mark = part({ Size = V(1, 1, 0.15), Color = COL.Green })
+	local inner = part({ Size = V(0.45, 0.45, 0.2), Color = COL.Black, Material = Enum.Material.SmoothPlastic })
+	local t0 = os.clock()
+	local dur = p.DUR or 3
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		local view = Renderer.EnemyViews[id]
+		if t >= dur or not view then
+			conn:Disconnect()
+			fade(mark, 0.2)
+			fade(inner, 0.2)
+			return
+		end
+		local top = view.Rig.Root.Position + V(0, view.Rig.Height - view.Rig.HipHeight + 1.2, 0)
+		local cf = CF(top) * ANG(0, t * 3, rad(45))
+		mark.CFrame = cf
+		inner.CFrame = cf
+	end)
+	FX.Sound("Magic", 0.8, 0.6, c)
+end
+
+IMPACT.BellWave = function(p)
+	local g = ground(p.P)
+	FX.Ring(g + V(0, 0.2, 0), p.R, COL.Bell, 0.55, 0.5, 1, 0.25)
+	task.delay(0.12, function()
+		FX.Ring(g + V(0, 0.6, 0), p.R * 0.8, rgb(230, 220, 255), 0.45, 0.3, 1, 0.4)
+	end)
+	FX.Sound("Magic", 0.8, 0.45, g)
+end
+
+IMPACT.MidnightToll = function(p)
+	local g = ground(p.P)
+	for i = 0, 2 do
+		task.delay(i * 0.15, function()
+			FX.Ring(g + V(0, 0.3 + i * 0.4, 0), p.R * (1 - i * 0.12), i == 1 and COL.Purple or COL.Bell, 0.7, 0.6, 1, 0.15)
+		end)
+	end
+	flash(g + V(0, 3, 0), COL.Bell, 4, 0.5)
+	if FX.TinyClock then
+		for i = 0, 2 do
+			local a = i / 3 * math.pi * 2
+			FX.TinyClock(g + V(math.cos(a) * p.R * 0.5, 3.5, math.sin(a) * p.R * 0.5), 1.4, 1.4, 4)
+		end
+	end
+	FX.Shake(0.15, 0.3)
+	FX.Sound("Boss", 0.5, 1.6, g)
+end
+
+IMPACT.FlaskSplash = function(p)
+	local g = ground(p.P)
+	FX.Burst(g + V(0, 1, 0), COL.Poison, 10, 0.35, 8)
+	FX.Ring(g, p.R, COL.Poison, 0.4, 0.25, 0.5, 0.3)
+	debris(g + V(0, 1, 0), rgb(200, 255, 200), 4, 0.25, 6, 0.5, Enum.Material.Glass)
+	FX.Sound("Magic", 0.6, 1.2, g)
+end
+
+local function poisonCloud(p, big)
+	local g = ground(p.P)
+	local dur = p.DUR or 3
+	local pool = part({ Shape = Enum.PartType.Cylinder, Size = V(0.1, 0.5, 0.5), CFrame = CF(g + V(0, 0.05, 0)) * ANG(0, 0, rad(90)), Color = COL.PoisonDark, Transparency = 0.35 })
+	FX.Tween(pool, 0.3, { Size = V(0.1, p.R * 2, p.R * 2) })
+	local balls = {}
+	local n = FX.Lite and 2 or (big and 8 or 3)
+	for i = 1, n do
+		local a = i / n * math.pi * 2
+		local s = p.R * (big and 0.9 or 0.7)
+		local b = part({ Shape = Enum.PartType.Ball, Size = V(s, s * 0.6, s), CFrame = CF(g + V(math.cos(a) * p.R * 0.45, s * 0.25, math.sin(a) * p.R * 0.45)), Color = big and rgb(120, 200, 70) or COL.Poison, Material = Enum.Material.SmoothPlastic, Transparency = 0.6 })
+		balls[i] = b
+	end
+	local em
+	if not FX.Lite then
+		em = Instance.new("ParticleEmitter")
+		em.Color = ColorSequence.new(COL.Poison)
+		em.LightEmission = 0.6
+		em.Rate = big and 30 or 12
+		em.Lifetime = NumberRange.new(0.6, 1.2)
+		em.Speed = NumberRange.new(1, 3)
+		em.SpreadAngle = Vector2.new(30, 30)
+		em.EmissionDirection = Enum.NormalId.Right
+		em.Size = NumberSequence.new(0.35, 0)
+		em.Parent = pool
+	end
+	if big then
+		crowCircle(g, p.R * 0.8, 3, dur)
+	end
+	task.delay(dur, function()
+		if em then
+			em.Enabled = false
+		end
+		fade(pool, 0.5)
+		for _, b in ipairs(balls) do
+			fade(b, 0.5, { Size = b.Size * 1.3 })
+		end
+	end)
+end
+
+IMPACT.Poison = function(p)
+	poisonCloud(p, false)
+end
+
+IMPACT.PlagueCloud = function(p)
+	poisonCloud(p, true)
+	FX.Sound("Magic", 0.8, 0.5, p.P)
+end
+
+IMPACT.PlagueCloudBurst = function(p)
+	FX.Sphere(ground(p.P) + V(0, 1, 0), p.R * 0.8, COL.Poison, 0.45, nil, 0.3)
+	FX.Burst(ground(p.P) + V(0, 1, 0), COL.Poison, 14, 0.4, 10)
+end
+
+IMPACT.GhostSlash = function(p)
+	local from, to = p.P + V(0, 1.5, 0), V(p.E.X, p.P.Y + 1.5, p.E.Z)
+	FX.Beam(from, to, 1.1, COL.Blue, 0.35)
+	local mid = (from + to) / 2
+	local cf = CFrame.lookAt(mid, to)
+	local crescent = part({ Size = V(3.5, 0.2, 1.2), CFrame = CFrame.lookAt(from, to), Color = COL.Ghost, Transparency = 0.2 })
+	FX.Tween(crescent, 0.25, { CFrame = CFrame.lookAt(to, to + (to - from)) })
+	task.delay(0.25, function()
+		fade(crescent, 0.2)
+	end)
+	FX.Sound("Slash", 1, 0.9, mid)
+	FX.Sphere(from, 1.6, COL.Blue, 0.25)
+	local _ = cf
+end
+
+IMPACT.GhostSword = function(p)
+	local g = ground(p.P)
+	local h = 14
+	local blade = part({ Size = V(1.4, h, 0.4), CFrame = CF(g + V(0, h / 2 + 18, 0)), Color = COL.Ghost, Transparency = 0.35 })
+	local guard = part({ Size = V(5, 0.6, 0.8), CFrame = CF(g + V(0, h + 18, 0)), Color = COL.Blue, Transparency = 0.3 })
+	local hilt = part({ Size = V(0.6, 3, 0.6), CFrame = CF(g + V(0, h + 19.8, 0)), Color = COL.Blue, Transparency = 0.3 })
+	local list = { blade, guard, hilt }
+	for _, q in ipairs(list) do
+		FX.Tween(q, 0.3, { CFrame = q.CFrame - V(0, 18 + h * 0.3, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	end
+	task.delay(0.3, function()
+		FX.Ring(g, p.R, COL.Blue, 0.6, 0.5, 1, 0.1)
+		FX.Cracks(g, p.R, COL.Blue, 8, 1.2)
+		flash(g + V(0, 2, 0), COL.Ghost, p.R * 0.6, 0.45)
+		FX.Burst(g + V(0, 1, 0), COL.Ghost, 16, 0.4, 12)
+		FX.Shake(0.35, 0.35)
+		FX.Sound("Explosion", 1, 0.8, g)
+		for _, q in ipairs(list) do
+			task.delay(0.35, function()
+				fade(q, 0.4)
+			end)
+		end
+	end)
+end
+
+IMPACT.MirrorShatter = function(p)
+	local g = ground(p.P)
+	portalDisc(g + V(0, 3.5, 0), 2.6, COL.Purple, 0.8, rgb(230, 200, 255))
+	FX.Ring(g, p.R, COL.Purple, 0.5, 0.3, 1, 0.15)
+	debris(g + V(0, 3, 0), rgb(220, 210, 255), 10, 0.5, 11, 0.9, Enum.Material.Glass)
+	FX.Burst(g + V(0, 2, 0), COL.Purple, 10, 0.35, 10)
+	FX.Sound("Explosion", 0.7, 1.3, g)
+end
+
+IMPACT.ThreadSnap = function(p)
+	local g = ground(p.P) + V(0, 2.5, 0)
+	for i = 1, (FX.Lite and 4 or 8) do
+		local a = i / 8 * math.pi * 2
+		local to = g + V(math.cos(a) * p.R, rng:NextNumber(-2, 1), math.sin(a) * p.R)
+		FX.Thread(g + V(0, 6, 0), to, COL.Red)
+	end
+	FX.Ring(ground(p.P), p.R, COL.Red, 0.4, 0.2, 1, 0.2)
+	FX.Burst(g, COL.Red, 14, 0.3, 10)
+	FX.Sound("Slash", 1, 1.4, g)
+end
+
+IMPACT.FireCrack = function(p)
+	local g = ground(p.P)
+	FX.Cracks(g, p.R, COL.Ember, 6, 1.2)
+	FX.Ring(g, p.R, COL.Orange, 0.4, 0.3, 1, 0.2)
+	FX.Burst(g + V(0, 1, 0), COL.Fire, 10, 0.4, 8)
+	smoke(g + V(0, 1, 0), rgb(60, 40, 36), 3, 2.5, 0.8, 3)
+	FX.Sound("HeavyHit", 1, 0.6, g)
+end
+
+IMPACT.Execution = function(p)
+	local g = ground(p.P)
+	FX.Cracks(g, p.R, COL.Ember, 12, 1.6)
+	FX.Ring(g, p.R, COL.Ember, 0.6, 0.6, 1, 0.05)
+	flash(g + V(0, 2, 0), COL.Fire, p.R * 0.5, 0.4)
+	for i = 1, (FX.Lite and 2 or 5) do
+		local a = i / 5 * math.pi * 2
+		local q = g + V(math.cos(a) * p.R * 0.6, 0, math.sin(a) * p.R * 0.6)
+		local pillar = part({ Size = V(1.2, 0.5, 1.2), CFrame = CF(q), Color = COL.Orange, Transparency = 0.2 })
+		FX.Tween(pillar, 0.25, { Size = V(1.2, 7, 1.2), CFrame = CF(q + V(0, 3.5, 0)) })
+		task.delay(0.3, function()
+			fade(pillar, 0.4, { Size = V(0.2, 9, 0.2) })
+		end)
+	end
+	debris(g + V(0, 0.5, 0), COL.Stone, 8, 0.6, 10, 0.9)
+	FX.Shake(0.45, 0.4)
+	FX.Sound("Explosion", 1, 0.55, g)
+end
+
+IMPACT.PumpkinBlast = function(p)
+	local g = ground(p.P) + V(0, 1, 0)
+	FX.Sphere(g, p.R * 0.8, COL.Orange, 0.35)
+	FX.Burst(g, COL.Ember, 10, 0.4, 9)
+	debris(g, rgb(230, 110, 30), 5, 0.5, 8, 0.7, Enum.Material.SmoothPlastic)
+	FX.Sound("Explosion", 0.6, 1.1, g)
+end
+
+IMPACT.GhostPumpkin = function(p)
+	local g = ground(p.P)
+	local s = 6
+	local top = g + V(0, 22, 0)
+	local pk = part({ Size = V(s, s * 0.85, s), CFrame = CF(top), Color = COL.Ghost, Transparency = 0.4 })
+	local face = part({ Size = V(s * 0.6, s * 0.25, 0.2), CFrame = CF(top + V(0, -0.3, -s / 2)), Color = COL.Orange })
+	local eyeL = part({ Size = V(0.9, 0.9, 0.2), CFrame = CF(top + V(-1.2, 1, -s / 2)) * ANG(0, 0, rad(45)), Color = COL.Orange })
+	local eyeR = part({ Size = V(0.9, 0.9, 0.2), CFrame = CF(top + V(1.2, 1, -s / 2)) * ANG(0, 0, rad(45)), Color = COL.Orange })
+	local list = { pk, face, eyeL, eyeR }
+	plight(pk, COL.Orange, 30, 3)
+	for _, q in ipairs(list) do
+		FX.Tween(q, 0.45, { CFrame = q.CFrame - V(0, 19, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	end
+	task.delay(0.45, function()
+		for _, q in ipairs(list) do
+			q:Destroy()
+		end
+		FX.Sphere(g + V(0, 2, 0), p.R, COL.Orange, 0.6, nil, 0.05)
+		FX.Sphere(g + V(0, 2, 0), p.R * 0.7, COL.Ghost, 0.5, nil, 0.3)
+		FX.Ring(g, p.R * 1.2, COL.Ember, 0.7, 0.6, 1, 0.05)
+		FX.Cracks(g, p.R, COL.Ember, 10, 1.6)
+		FX.Burst(g + V(0, 2, 0), COL.Fire, 24, 0.6, 16, 0.8)
+		debris(g + V(0, 1, 0), rgb(230, 110, 30), 8, 0.8, 12, 1.0, Enum.Material.SmoothPlastic)
+		flash(g + V(0, 3, 0), COL.Fire, p.R, 0.6)
+		FX.Shake(0.6, 0.5)
+		FX.Sound("Explosion", 1, 0.45, g)
+	end)
+end
+
+-- РУНЫ
+IMPACT.LanternHeart = function(p)
+	local g = ground(p.P) + V(0, 1.2, 0)
+	FX.Sphere(g, p.R, COL.Orange, 0.35, nil, 0.15)
+	FX.Ring(ground(p.P), p.R, COL.Ember, 0.35, 0.25, 0.5, 0.2)
+	FX.Burst(g, COL.Fire, 8, 0.3, 7)
+	FX.Sound("Explosion", 0.4, 1.4, g)
+end
+
+IMPACT.CursedThreads = function(p)
+	local c = p.P + V(0, 7, 0)
+	for _, id in ipairs(p.A or {}) do
+		local e = Renderer.EnemyCenter(id)
+		if e then
+			FX.Thread(c, e, COL.Red)
+			FX.Ring(ground(e), 1.6, COL.Red, 0.5, 0.2, 0.3, 0.2)
+		end
+	end
+	FX.Sound("Magic", 0.7, 0.5, p.P)
+end
+
+IMPACT.PhantomEcho = function(p)
+	-- сама копия рисуется по событию атаки с флагом EC; здесь — синий отблеск у юнита
+	FX.Burst(p.P + V(0, 2, 0), COL.Ghost, 5, 0.25, 4)
+end
+
+IMPACT.CursedCircle = function(p)
+	local g = ground(p.P)
+	runeRing(g, 4, COL.Red, 2.2)
+	flash(g + V(0, 1.5, 0), COL.Red, 3, 0.5)
+	FX.Burst(g + V(0, 1, 0), COL.Red, 12, 0.35, 6)
+	FX.Sound("Magic", 0.8, 0.4, g)
+end
+
+IMPACT.SummonPortal = function(p)
+	local g = ground(p.P)
+	if p.S == "Illusion" then
+		portalDisc(g + V(0, 4, 0), 3.4, COL.Purple, 1.4, rgb(230, 200, 255))
+		runeRing(g, 3.5, COL.Purple, 1.6)
+		debris(g + V(0, 3, 0), rgb(220, 210, 255), 6, 0.35, 6, 0.8, Enum.Material.Glass)
+	else
+		-- кукловод: красные нити опускают марионеток сверху
+		for i = 1, 5 do
+			local a = i / 5 * math.pi * 2
+			FX.Thread(g + V(math.cos(a) * 1.5, 14, math.sin(a) * 1.5), g + V(math.cos(a) * 1.2, 2, math.sin(a) * 1.2), COL.Red)
+		end
+		runeRing(g, 3, COL.Red, 1.4)
+		if p.G then
+			flash(g + V(0, 3, 0), COL.Gold, 5, 0.7)
+			FX.Burst(g + V(0, 2, 0), COL.Gold, 20, 0.4, 10, 0.8)
+		end
+	end
+	FX.Sound("Portal", 0.8, 1.2, g)
+end
+
+IMPACT.AllyHit = function(p)
+	local pos = p.P + V(0, 2, 0)
+	FX.Burst(pos, p.F and COL.Orange or COL.Light, 6, 0.3, 7)
+	FX.Sphere(pos, 1.4, p.F and COL.Ember or rgb(255, 255, 255), 0.18)
+	FX.Sound("Slash", 0.5, 1.2, pos)
+	local av = HFX.Allies[p.I]
+	if av then
+		av.HitT = os.clock()
+	end
+end
+
+IMPACT.Fog = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, p.R, COL.FogC, 0.9, 0.2, 1, 0.5)
+	smoke(g + V(0, 1, 0), COL.FogC, 5, p.R * 0.6, 1.4, 1)
+	local view = Renderer.EnemyViews[p.I]
+	if view then
+		for _, d in ipairs(view.Rig.Model:GetDescendants()) do
+			if d.Name == "FogFX" and d:IsA("ParticleEmitter") then
+				d:Emit(18)
+			end
+		end
+	end
+end
+
+IMPACT.Straw = function(p)
+	local g = ground(p.P)
+	debris(g + V(0, 1.5, 0), COL.Straw, 10, 0.35, 8, 0.9, Enum.Material.Fabric)
+	FX.Burst(g + V(0, 1.5, 0), COL.Straw, 8, 0.3, 6)
+end
+
+IMPACT.Fire = function(p)
+	local g = ground(p.P)
+	FX.Ring(g, 7, COL.Ember, 0.6, 0.4, 1, 0.1)
+	FX.Burst(g + V(0, 2, 0), COL.Fire, 18, 0.5, 10)
+	flash(g + V(0, 3, 0), COL.Orange, 6, 0.5)
+end
+
+------------------------------------------------------------------------
+-- СОСТОЯНИЯ ВРАГОВ
+------------------------------------------------------------------------
+local function setPhased(view, on)
+	local model = view.Rig.Model
+	if on then
+		view.PhaseSave = view.PhaseSave or {}
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") and d.Transparency < 1 and not view.PhaseSave[d] then
+				view.PhaseSave[d] = { d.Transparency, d.Color, d.Material }
+				if d:GetAttribute("Outline") then
+					d.Color = COL.Ghost
+					d.Material = Enum.Material.Neon
+				else
+					d.Transparency = 0.9
+				end
+			end
+		end
+	elseif view.PhaseSave then
+		for d, s in pairs(view.PhaseSave) do
+			if d.Parent then
+				d.Transparency, d.Color, d.Material = s[1], s[2], s[3]
+			end
+		end
+		view.PhaseSave = nil
+	end
+end
+
+local function setShield(view, on)
+	for _, d in ipairs(view.Rig.Model:GetDescendants()) do
+		if d.Name == "ShieldFX" and d:IsA("BasePart") then
+			FX.Tween(d, 0.25, { Transparency = on and (d:GetAttribute("PT") or 0.6) or 1 })
+		end
+	end
+end
+
+IMPACT.EnemyState = function(p)
+	local view = Renderer.EnemyViews[p.I]
+	if not view then
+		return
+	end
+	local c = Renderer.EnemyCenter(p.I) or p.P
+	local s = p.S
+	if s == "Phase" then
+		setPhased(view, true)
+		FX.Burst(c, COL.Ghost, 6, 0.25, 4)
+		task.delay(p.DUR or 1.5, function()
+			if view.Rig.Model.Parent then
+				setPhased(view, false)
+			end
+		end)
+	elseif s == "Shield" then
+		setShield(view, true)
+		FX.Sphere(c, 3 * (view.Rig.Scale or 1), COL.Purple, 0.35, nil, 0.4)
+		task.delay(p.DUR or 3, function()
+			if view.Rig.Model.Parent then
+				setShield(view, false)
+			end
+		end)
+	elseif s == "Haste" then
+		view.HasteUntil = os.clock() + (p.DUR or 3)
+		FX.Burst(c, COL.Red, 10, 0.3, 10)
+		FX.Ring(ground(c), 4, COL.Red, 0.4, 0.2, 1, 0.2)
+	elseif s == "Enrage" then
+		flash(c, COL.Red, 6, 0.6)
+		FX.Ring(ground(c), 10, COL.Red, 0.7, 0.5, 1, 0.1)
+		FX.Shake(0.5, 0.6)
+		FX.Sound("Boss", 1, 0.9, c)
+	elseif s == "ArmorBreak" then
+		debris(c, COL.Bone, 8, 0.45, 9, 0.9, Enum.Material.SmoothPlastic)
+		debris(c, rgb(90, 88, 100), 5, 0.5, 8, 0.9, Enum.Material.Metal)
+		FX.Sound("HeavyHit", 0.8, 1.3, c)
+	end
+end
+
+-- Смерть врага: дополнительный эффект по rig.DeathFX
+local DEATH = {
+	GreenSmoke = function(pos, s)
+		smoke(pos, rgb(90, 200, 100), 5, 2.4 * s, 1.1, 3)
+		FX.Burst(pos, COL.Green, 6, 0.3, 4)
+	end,
+	PumpkinBurst = function(pos, s)
+		debris(pos, rgb(230, 110, 30), 7, 0.5 * s, 9, 0.9, Enum.Material.SmoothPlastic)
+		FX.Burst(pos, COL.Fire, 10, 0.35, 8)
+		FX.Sphere(pos, 1.6 * s, COL.Orange, 0.3)
+	end,
+	Ghost = function(pos, s)
+		smoke(pos, COL.Ghost, 4, 2 * s, 0.9, 4)
+		FX.Burst(pos, COL.Ghost, 8, 0.3, 5)
+	end,
+	BoneShards = function(pos, s)
+		debris(pos, COL.Bone, 9, 0.4 * s, 9, 1.0, Enum.Material.SmoothPlastic)
+	end,
+	Straw = function(pos, s)
+		debris(pos, COL.Straw, 10, 0.35 * s, 8, 1.0, Enum.Material.Fabric)
+	end,
+	Fog = function(pos, s)
+		smoke(pos, COL.FogC, 6, 2.6 * s, 1.3, 2)
+	end,
+	Reaper = function(pos, s)
+		smoke(pos, rgb(70, 40, 110), 6, 2.6 * s, 1.2, 4)
+		FX.Burst(pos, COL.Purple, 14, 0.4, 9)
+		FX.Ring(ground(pos), 6, COL.Purple, 0.6, 0.3, 1, 0.2)
+	end,
+	GraveBreak = function(pos, s)
+		debris(pos, COL.Stone, 14, 0.9, 11, 1.2)
+		smoke(pos, rgb(110, 105, 100), 6, 3.5, 1.4, 3)
+		FX.Ring(ground(pos), 12, rgb(150, 255, 140), 0.8, 0.5, 1, 0.1)
+		FX.Shake(0.5, 0.6)
+	end,
+	MonarchDeath = function(pos, s)
+		-- корона трескается, оранжевый свет, монарх рассыпается
+		flash(pos + V(0, 4, 0), COL.Fire, 14, 1.2)
+		FX.Ring(ground(pos), 20, COL.Ember, 1.2, 0.8, 1, 0.05)
+		FX.Burst(pos + V(0, 4, 0), COL.Gold, 24, 0.5, 12, 1)
+		debris(pos + V(0, 6, 0), COL.Gold, 10, 0.6, 9, 1.4, Enum.Material.Metal)
+		smoke(pos, rgb(60, 30, 20), 8, 5, 2.2, 6)
+		FX.Shake(0.9, 1.2)
+		FX.Sound("Secret", 0.8, 0.8, pos)
+	end,
+}
+
+function HFX.EnemyDeath(view, reason)
+	local fxName = view.Rig.DeathFX
+	local fn = fxName and DEATH[fxName]
+	if fn and reason ~= "clear" then
+		local s = (Config.Enemies[view.Type] or {}).Scale or 1
+		local pos = view.Rig.Root.Position
+		if fxName == "MonarchDeath" then
+			-- детали короны отрываются и падают
+			for _, d in ipairs(view.Rig.Model:GetDescendants()) do
+				if d:IsA("BasePart") and d:GetAttribute("Crown") and d.Transparency < 1 then
+					local c = d:Clone()
+					c.Anchored = true
+					c.Parent = workspace:FindFirstChild("VoidTD_FX") or workspace
+					d.Transparency = 1
+					fade(c, 1.4, { CFrame = c.CFrame * CF(rng:NextNumber(-3, 3), -4, rng:NextNumber(-3, 3)) * ANG(rng:NextNumber(-2, 2), 0, rng:NextNumber(-2, 2)) })
+				end
+			end
+		end
+		fn(pos, s)
+	end
+end
+
+-- Появление: особые входы боссов
+function HFX.EnemySpawn(view, atStart)
+	local fxName = view.Rig.SpawnFX
+	if not fxName or not atStart then
+		return
+	end
+	local pos = view.Rig.Root.Position
+	local g = ground(pos)
+	if fxName == "GraveBreak" then
+		-- плита могилы поднимается и раскалывается, страж выходит из могилы
+		local slab = part({ Size = V(6, 0.8, 9), CFrame = CF(g + V(0, 0.4, 0)), Color = COL.Stone, Material = Enum.Material.Slate })
+		FX.Tween(slab, 0.5, { CFrame = CF(g + V(0, 2.5, 0)) * ANG(rad(25), 0, rad(-10)) })
+		task.delay(0.55, function()
+			slab:Destroy()
+			debris(g + V(0, 2.5, 0), COL.Stone, 12, 1.1, 12, 1.3)
+			smoke(g + V(0, 1, 0), rgb(110, 105, 100), 6, 4, 1.4, 3)
+			FX.Ring(g, 10, rgb(150, 255, 140), 0.7, 0.4, 1, 0.1)
+			FX.Shake(0.6, 0.6)
+		end)
+	elseif fxName == "FogVortex" then
+		-- вихрь тумана сгущается в жнеца
+		local n = FX.Lite and 4 or 12
+		local balls = {}
+		for i = 1, n do
+			balls[i] = { part({ Shape = Enum.PartType.Ball, Size = V(3, 3, 3), Color = COL.FogC, Material = Enum.Material.SmoothPlastic, Transparency = 0.6 }), i / n * math.pi * 2, rng:NextNumber(0, 6) }
+		end
+		local t0 = os.clock()
+		local conn
+		conn = RunService.RenderStepped:Connect(function()
+			local t = os.clock() - t0
+			for _, b in ipairs(balls) do
+				local a = b[2] + t * 5
+				local r = math.max(0.5, 10 - t * 7)
+				b[1].CFrame = CF(g + V(math.cos(a) * r, 1 + b[3] * 0.6 + t * 2, math.sin(a) * r))
+				b[1].Transparency = 0.6 + math.clamp((t - 1) / 0.4, 0, 0.4)
+			end
+			if t >= 1.4 then
+				conn:Disconnect()
+				for _, b in ipairs(balls) do
+					b[1]:Destroy()
+				end
+				FX.Sphere(g + V(0, 4, 0), 7, COL.Red, 0.4, nil, 0.4)
+			end
+		end)
+	elseif fxName == "MonarchPortal" then
+		-- монарх выходит из огненного портала и втыкает посох в землю
+		portalDisc(g + V(0, 9, 0), 8, rgb(150, 50, 15), 2.0, COL.Fire)
+		task.delay(1.1, function()
+			FX.Cracks(g, 12, COL.Ember, 12, 2)
+			FX.Ring(g, 16, COL.Ember, 0.8, 0.6, 1, 0.05)
+			FX.Burst(g + V(0, 1, 0), COL.Fire, 20, 0.5, 12)
+			FX.Shake(0.7, 0.7)
+			FX.Sound("Explosion", 1, 0.4, g)
+		end)
+	end
+end
+
+-- Ускорение (Fog Reaper) и туман: клиентское предсказание скорости
+function HFX.SpeedMult(view)
+	if view.HasteUntil and os.clock() < view.HasteUntil then
+		return 1.6
+	end
+	return 1
+end
+
+------------------------------------------------------------------------
+-- АТАКИ ЮНИТОВ (визуал вылета; урон и области — по Impact)
+------------------------------------------------------------------------
+function HFX.OnAttack(view, def, p, h, lv)
+	if def.Event ~= "Halloween" or def.AttackType == "Chrono" then
+		return false
+	end
+	local muzzle = Renderer.MuzzlePos(view)
+	local firstId = p.T and p.T[1]
+	local id = view.UnitId
+	local function at(d, fn)
+		task.delay(d, function()
+			if view.Rig and view.Rig.Model.Parent then
+				fn()
+			end
+		end)
+	end
+	if def.AttackType == "Melee" then
+		at(h, function()
+			local target = Renderer.EnemyCenter(firstId)
+			if not target then
+				return
+			end
+			local origin = view.Rig.Root.Position + V(0, 1, 0)
+			local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z))
+			FX.Arc(cf, math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.6, 3), rad(20), rad(150), COL.Dirt, 0.6, 0.3)
+			debris(ground(target) + V(0, 0.5, 0), COL.Dirt, 3, 0.35, 5, 0.6, Enum.Material.Ground)
+			FX.Sound("HeavyHit", 0.8, 1, target)
+		end)
+		return true
+	elseif def.AttackType == "Pulse" then
+		at(h, function()
+			flash(muzzle, COL.Bell, 1.6, 0.25)
+		end)
+		return true
+	elseif def.AttackType == "Flask" then
+		at(h, function()
+			local from = Renderer.MuzzlePos(view)
+			FX.Projectile("Flask", from, function()
+				return Renderer.EnemyCenter(firstId)
+			end, p.TR or 0.4, nil, lv)
+		end)
+		return true
+	elseif def.AttackType == "Pierce" then
+		at(h, function()
+			FX.Sphere(Renderer.MuzzlePos(view), 1.8, COL.Blue, 0.25)
+		end)
+		return true
+	elseif def.AttackType == "Thread" then
+		at(h, function()
+			for _, tid in ipairs(p.T or {}) do
+				local target = Renderer.EnemyCenter(tid)
+				if target then
+					FX.Thread(Renderer.MuzzlePos(view), target, def.ThreadColor or COL.Red)
+				end
+			end
+			FX.Sound("Magic", 0.8, 0.7, view.Pos)
+		end)
+		return true
+	elseif def.AttackType == "AOE" then
+		at(h, function()
+			local m = Renderer.MuzzlePos(view)
+			if id == "NightWatchman" then
+				flash(m, COL.Light, 1.5, 0.2)
+			elseif id == "HeadlessExecutioner" then
+				local target = Renderer.EnemyCenter(firstId)
+				if target then
+					local origin = view.Rig.Root.Position + V(0, 2, 0)
+					local cf = CFrame.lookAt(origin, V(target.X, origin.Y, target.Z))
+					FX.Arc(cf, math.max((V(target.X, origin.Y, target.Z) - origin).Magnitude * 0.7, 4), rad(10), rad(160), COL.Ember, 1.1, 0.35)
+				end
+			end
+		end)
+		return true
+	elseif def.AttackType == "Projectile" and def.Projectile == "Crow" then
+		for si, tid in ipairs(p.T or { firstId }) do
+			local travel = (p.TRS and p.TRS[si]) or p.TR or 0.3
+			at(h + (si - 1) * (p.SG or 0.12), function()
+				crowFly(Renderer.MuzzlePos(view), function()
+					return Renderer.EnemyCenter(tid)
+				end, travel, function(pos)
+					FX.Burst(pos, COL.Black, 5, 0.3, 5)
+				end)
+			end)
+		end
+		return true
+	end
+	return false
+end
+
+-- «Призрачная корона»: синяя копия юнита за его спиной повторяет атаку
+function HFX.EchoGhost(view)
+	if not view.Rig or FX.Lite and math.random() < 0.5 then
+		return
+	end
+	local ok, clone = pcall(function()
+		return view.Rig.Model:Clone()
+	end)
+	if not ok or not clone then
+		return
+	end
+	local root = view.Rig.Root
+	local back = root.CFrame * CF(0, 0.3, 2.4)
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanQuery = false
+			d.CastShadow = false
+			if d.Transparency < 1 then
+				d.Color = COL.Ghost
+				d.Material = Enum.Material.Neon
+				d.Transparency = 0.55
+			end
+		elseif d:IsA("ParticleEmitter") or d:IsA("BillboardGui") or d:IsA("PointLight") or d:IsA("Trail") or d:IsA("Motor6D") then
+			d:Destroy()
+		end
+	end
+	clone:PivotTo(back)
+	clone.Parent = workspace:FindFirstChild("VoidTD_FX") or workspace
+	local fwd = root.CFrame * CF(0, 0.3, -0.6)
+	local t0 = os.clock()
+	local parts = {}
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1 then
+			parts[#parts + 1] = d
+		end
+	end
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		local a = math.clamp(t / 0.25, 0, 1)
+		clone:PivotTo(back:Lerp(fwd, a * 0.7))
+		local tr = 0.55 + math.clamp((t - 0.35) / 0.35, 0, 1) * 0.45
+		for _, d in ipairs(parts) do
+			d.Transparency = tr
+		end
+		if t >= 0.7 then
+			conn:Disconnect()
+			clone:Destroy()
+		end
+	end)
+end
+
+function HFX.OnImpact(p)
+	local fn = IMPACT[p.K]
+	if fn then
+		fn(p)
+		return true
+	end
+	return false
+end
+
+-- Появление Короля фонарей: трон поднимается из огня
+function HFX.ThronePlace(pos)
+	local g = ground(pos)
+	local seat = part({ Size = V(4, 0.6, 3.5), CFrame = CF(g - V(0, 3, 0)), Color = COL.Black, Material = Enum.Material.Slate })
+	local back = part({ Size = V(4, 6, 0.6), CFrame = CF(g + V(0, 0, 1.6) - V(0, 3, 0)), Color = COL.Black, Material = Enum.Material.Slate })
+	local trim = part({ Size = V(4.3, 0.3, 0.7), CFrame = CF(g + V(0, 3, 1.6) - V(0, 3, 0)), Color = COL.Gold })
+	for _, q in ipairs({ seat, back, trim }) do
+		FX.Tween(q, 0.6, { CFrame = q.CFrame + V(0, 3.3, 0) }, Enum.EasingStyle.Back)
+		task.delay(1.6, function()
+			fade(q, 0.6, { CFrame = q.CFrame - V(0, 2, 0) })
+		end)
+	end
+	FX.Ring(g, 6, COL.Ember, 0.8, 0.5, 1, 0.1)
+	FX.Burst(g + V(0, 1, 0), COL.Fire, 20, 0.45, 10, 0.8)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		local q = g + V(math.cos(a) * 4, 0, math.sin(a) * 4)
+		local pk = part({ Size = V(1, 0.8, 1), CFrame = CF(q - V(0, 1, 0)), Color = rgb(230, 110, 30), Material = Enum.Material.SmoothPlastic })
+		FX.Tween(pk, 0.5, { CFrame = CF(q + V(0, 0.4, 0)) }, Enum.EasingStyle.Back)
+		task.delay(1.8, function()
+			fade(pk, 0.5)
+		end)
+	end
+	flash(g + V(0, 3, 0), COL.Orange, 5, 0.8)
+	FX.Sound("Secret", 0.6, 1.2, g)
+end
+
+------------------------------------------------------------------------
+-- СОЮЗНИКИ: модели на дороге, идут от базы к порталу
+------------------------------------------------------------------------
+local allyViews = {}
+HFX.Allies = allyViews
+local allyFolder
+
+local function allyBar(av)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "HPBar"
+	gui.Size = UDim2.fromOffset(60, 8)
+	gui.StudsOffsetWorldSpace = V(0, av.Rig.Height or 5, 0)
+	gui.MaxDistance = 90
+	gui.AlwaysOnTop = true
+	gui.LightInfluence = 0
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.fromScale(1, 1)
+	bg.BackgroundColor3 = rgb(20, 14, 24)
+	bg.BorderSizePixel = 0
+	bg.Parent = gui
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = av.Family == "Cursed" and COL.Red or (av.Family == "Puppet" and COL.Orange or COL.Purple)
+	fill.BorderSizePixel = 0
+	fill.Parent = bg
+	gui.Parent = av.Rig.Root
+	av.Fill = fill
+end
+
+local function addAlly(id, dist, hp, typeIndex, maxHp)
+	local allyId = Config.AllyOrder[typeIndex]
+	if not allyId or not UnitModels.BuildAlly then
+		return
+	end
+	local ok, rig = pcall(UnitModels.BuildAlly, allyId)
+	if not ok or not rig then
+		warn(rig)
+		return
+	end
+	local def = Config.Allies[allyId]
+	local av = {
+		Id = id, AllyId = allyId, Family = def.Family, Rig = rig, Dist = dist, ServerDist = dist,
+		HP = hp, MaxHP = maxHp or hp, LastSync = os.clock(), Phase = rng:NextNumber(0, 6),
+		Lateral = rng:NextNumber(-1.4, 1.4), SpawnT = os.clock(),
+	}
+	rig.Height = rig.Height or (5 * (rig.Scale or 1))
+	for _, d in ipairs(rig.Model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = false
+			d.CanTouch = false
+			d.CanCollide = false
+		end
+	end
+	local pos, dir = PathUtil.OffsetPositionAt(dist, av.Lateral)
+	rig.Root.CFrame = CFrame.lookAt(pos + V(0, rig.HipHeight, 0), pos - dir + V(0, rig.HipHeight, 0))
+	allyBar(av)
+	rig.Model.Parent = allyFolder
+	allyViews[id] = av
+end
+
+local function removeAlly(id, reason)
+	local av = allyViews[id]
+	if not av then
+		return
+	end
+	allyViews[id] = nil
+	local pos = av.Rig.Root.Position
+	local color = av.Family == "Cursed" and COL.Red or (av.Family == "Puppet" and (av.AllyId == "GoldenMarionette" and COL.Gold or COL.Orange) or COL.Purple)
+	if reason == "dead" then
+		FX.Burst(pos, color, 10, 0.35, 8)
+		if av.Family == "Puppet" then
+			debris(pos, rgb(150, 110, 70), 6, 0.4, 7, 0.8, Enum.Material.Wood)
+		elseif av.Family == "Illusion" then
+			debris(pos, rgb(220, 210, 255), 6, 0.35, 7, 0.8, Enum.Material.Glass)
+		else
+			smoke(pos, rgb(120, 20, 30), 3, 2, 0.8, 3)
+		end
+	else
+		FX.Poof(pos, color, 1)
+	end
+	av.Rig.Model:Destroy()
+end
+
+function HFX.SyncAllies(list, removed)
+	local nowc = os.clock()
+	local seen = {}
+	if list then
+		for i = 1, #list, 5 do
+			local id = list[i]
+			seen[id] = true
+			local av = allyViews[id]
+			if av then
+				av.ServerDist = list[i + 1]
+				av.HP = list[i + 2]
+				av.MaxHP = list[i + 4] or av.MaxHP
+				av.LastSync = nowc
+			else
+				addAlly(id, list[i + 1], list[i + 2], list[i + 3], list[i + 4])
+			end
+		end
+		-- союзники, пропавшие из списка без причины (например, после переподключения)
+		for id in pairs(allyViews) do
+			if not seen[id] then
+				removeAlly(id, "clear")
+			end
+		end
+	end
+	for _, r in ipairs(removed or {}) do
+		removeAlly(r[1], r[2])
+	end
+end
+
+function HFX.ClearAllies()
+	for id in pairs(allyViews) do
+		removeAlly(id, "clear")
+	end
+end
+
+function HFX.Update(dt)
+	local t = os.clock()
+	local speed = Config.Settings.AllySpeed or 6
+	for _, av in pairs(allyViews) do
+		local rig = av.Rig
+		local predicted = av.ServerDist - speed * math.min(t - av.LastSync, 0.35)
+		av.Dist = av.Dist - speed * dt
+		av.Dist = av.Dist + (predicted - av.Dist) * math.min(1, dt * 5)
+		local pos, dir = PathUtil.OffsetPositionAt(math.max(av.Dist, 0), av.Lateral)
+		local rise = math.clamp((t - av.SpawnT) / 0.4, 0, 1)
+		local hip = rig.HipHeight
+		local bob = math.abs(math.sin(t * 7 + av.Phase)) * 0.15
+		rig.Root.CFrame = CFrame.lookAt(pos + V(0, hip + bob - (1 - rise) * 2, 0), pos - dir + V(0, hip + bob - (1 - rise) * 2, 0))
+		-- ходьба: руки и ноги машут навстречу
+		local swing = math.sin(t * 7 + av.Phase) * 32
+		local base = rig.Base
+		local m = rig.Motors
+		if m.RH and base.RH then
+			m.RH.C0 = base.RH * ANG(rad(swing), 0, 0)
+			m.LH.C0 = base.LH * ANG(rad(-swing), 0, 0)
+		end
+		if m.RS and base.RS then
+			m.RS.C0 = base.RS * ANG(rad(-swing * 0.7), 0, 0)
+			m.LS.C0 = base.LS * ANG(rad(swing * 0.7), 0, 0)
+		end
+		if av.Fill then
+			av.Fill.Size = UDim2.fromScale(math.clamp(av.HP / math.max(av.MaxHP, 1), 0, 1), 1)
+		end
+	end
+end
+
+function HFX.Init(c, renderer)
+	ctx = c
+	Config, PathUtil, UnitModels, FX = c.Config, c.PathUtil, c.UnitModels, c.FX
+	Renderer = renderer
+	allyFolder = Instance.new("Folder")
+	allyFolder.Name = "VoidTD_Allies"
+	allyFolder.Parent = workspace
+	installProjectiles()
+end
+
+return HFX
+]======] }
+FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "HalloweenAnims" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenAnims (клиент)
+-- Анимации хэллоуинских юнитов в формате Renderer: function(h) -> { { время, { Сустав = { x, y, z, dy } } }, ... }
+-- Подключение: require(HalloweenAnims)(Anims, FIDGETS)
+
+return function(Anims, FIDGETS)
+	------------------------------------------------------------------------
+	-- ОБЫЧНЫЕ АТАКИ (h = HitDelay)
+	------------------------------------------------------------------------
+	-- Ночной сторож: фонарь вперёд и вверх — вспышка
+	Anims.Lantern = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 125, 0, 0 }, LS = { 20, 0, -10 }, Root = { -4, 0, 0 } } },
+			{ h, { RS = { 100, 0, 0 }, Root = { 4, 0, 0 } } },
+			{ h + 0.25, { RS = { 80, 0, 0 } } },
+			{ h + 0.55, {} },
+		}
+	end
+
+	-- Могильщик: удар лопатой сверху вниз
+	Anims.Shovel = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.75, { RS = { 172, 0, 10 }, LS = { 40, 0, -10 }, Root = { -8, -10, 0, 0.1 } } },
+			{ h, { RS = { 40, 0, -5 }, LS = { 25, 0, 0 }, Root = { 14, 10, 0, -0.2 } } },
+			{ h + 0.3, { RS = { 30, 0, 0 }, Root = { 6, 0, 0 } } },
+			{ h + 0.65, {} },
+		}
+	end
+
+	-- Пугало: взмах рукой — вороны срываются с плеч
+	Anims.Crows = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 135, 0, 35 }, LS = { 60, 0, -40 }, Neck = { -10, 0, 0 }, Root = { 0, -15, 0 } } },
+			{ h, { RS = { 95, 0, -25 }, LS = { 50, 0, -20 }, Root = { 4, 15, 0 } } },
+			{ h + 0.3, { RS = { 60, 0, -10 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Звонарь: колокол раскачивается — звон
+	Anims.Bell = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.5, { RS = { 95, 0, 35 }, Root = { 0, -8, 0 } } },
+			{ h, { RS = { 112, 0, -25 }, Root = { 3, 8, 0 } } },
+			{ h + 0.15, { RS = { 92, 0, 25 } } },
+			{ h + 0.3, { RS = { 100, 0, -10 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Чумной доктор: бросок колбы из-за плеча
+	Anims.Flask = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 165, 0, 15 }, LS = { 30, 0, -15 }, Root = { -6, -18, 0 } } },
+			{ h, { RS = { 60, 0, -15 }, Root = { 8, 15, 0 } } },
+			{ h + 0.3, { RS = { 45, 0, 0 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Призрачный рыцарь: широкий горизонтальный разрез
+	Anims.GhostSlash = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.75, { RS = { 125, 0, 45 }, LS = { 30, 0, -15 }, Root = { -4, -30, 0 } } },
+			{ h, { RS = { 80, 0, -65 }, LS = { 20, 0, -5 }, Root = { 6, 30, 0, -0.1 } } },
+			{ h + 0.25, { RS = { 50, 0, -40 }, Root = { 3, 15, 0 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	-- Иллюзионист: щелчок кистью — веер карт
+	Anims.Cards = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.6, { RS = { 65, 0, 45 }, Root = { 0, -12, 0 } } },
+			{ h, { RS = { 98, 0, -35 }, Root = { 0, 12, 0 } } },
+			{ h + 0.12, { RS = { 92, 0, -40 } } },
+			{ h + 0.45, {} },
+		}
+	end
+
+	-- Палач: двуручный удар топором сверху
+	Anims.ExecAxe = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.8, { RS = { 176, 0, 5 }, LS = { 166, 0, -5 }, Root = { -10, 0, 0, 0.2 } } },
+			{ h, { RS = { 35, 0, 0 }, LS = { 35, 0, 0 }, Root = { 20, 0, 0, -0.4 } } },
+			{ h + 0.35, { RS = { 30, 0, 0 }, LS = { 30, 0, 0 }, Root = { 14, 0, 0, -0.3 } } },
+			{ h + 0.8, {} },
+		}
+	end
+
+	-- Король фонарей: посох вверх и вперёд — огненная тыква
+	Anims.LanternStaff = function(h)
+		return {
+			{ 0, {} },
+			{ h * 0.7, { RS = { 145, 0, 5 }, LS = { 30, 0, -20 }, Neck = { -8, 0, 0 } } },
+			{ h, { RS = { 95, 0, 0 }, LS = { 25, 0, -10 }, Root = { 5, 0, 0 } } },
+			{ h + 0.3, { RS = { 80, 0, 0 } } },
+			{ h + 0.6, {} },
+		}
+	end
+
+	------------------------------------------------------------------------
+	-- СПОСОБНОСТИ (удар — в указанное время)
+	------------------------------------------------------------------------
+	-- Луч фонаря: фонарь высоко над головой (вспышка ~0.45 с)
+	Anims.LanternBeam = function()
+		return {
+			{ 0, {} },
+			{ 0.35, { RS = { 172, 0, 0 }, LS = { 30, 0, -20 }, Neck = { -15, 0, 0 }, Root = { -4, 0, 0, 0.15 } } },
+			{ 0.8, { RS = { 168, 0, 0 }, LS = { 30, 0, -20 }, Neck = { -12, 0, 0 }, Root = { -3, 0, 0, 0.1 } } },
+			{ 1.1, {} },
+		}
+	end
+
+	-- Взрыв земли: прыжок и удар лопатой в землю (~0.45 с)
+	Anims.DirtBurst = function()
+		return {
+			{ 0, {} },
+			{ 0.3, { RS = { 176, 0, 8 }, LS = { 150, 0, -8 }, Root = { -10, 0, 0, 0.45 } } },
+			{ 0.45, { RS = { 15, 0, 0 }, LS = { 25, 0, 0 }, Root = { 22, 0, 0, -0.45 } } },
+			{ 0.85, { RS = { 15, 0, 0 }, LS = { 25, 0, 0 }, Root = { 18, 0, 0, -0.35 } } },
+			{ 1.2, {} },
+		}
+	end
+
+	-- Вихрь листьев: руки в стороны, разворот корпусом (~0.5 с)
+	Anims.LeafStorm = function()
+		return {
+			{ 0, {} },
+			{ 0.25, { RS = { 95, 0, 70 }, LS = { 95, 0, -70 }, Root = { 0, -45, 0 } } },
+			{ 0.5, { RS = { 110, 0, 60 }, LS = { 110, 0, -60 }, Neck = { -15, 0, 0 }, Root = { 0, 45, 0, 0.15 } } },
+			{ 0.8, { RS = { 100, 0, 65 }, LS = { 100, 0, -65 }, Root = { 0, 0, 0, 0.1 } } },
+			{ 1.1, {} },
+		}
+	end
+
+	-- Метка проклятия: долгий прицел и выстрел (~0.45 с)
+	Anims.CurseMark = function()
+		return {
+			{ 0, {} },
+			{ 0.3, { RS = { 92, 0, 0 }, LS = { 88, 0, 15 }, Neck = { 5, 0, 0 }, Root = { 0, -10, 0 } } },
+			{ 0.45, { RS = { 125, 0, 0 }, LS = { 95, 0, 15 }, Root = { -6, -10, 0 } } },
+			{ 0.7, { RS = { 95, 0, 0 }, LS = { 70, 0, 10 } } },
+			{ 1.0, {} },
+		}
+	end
+
+	-- Полночный звон: колокол над головой и мощный удар вниз (~0.5 с)
+	Anims.MidnightToll = function()
+		return {
+			{ 0, {} },
+			{ 0.35, { RS = { 176, 0, 0 }, LS = { 120, 0, -20 }, Neck = { -20, 0, 0 }, Root = { -6, 0, 0, 0.2 } } },
+			{ 0.5, { RS = { 55, 0, -20 }, LS = { 40, 0, 0 }, Neck = { 12, 0, 0 }, Root = { 16, 0, 0, -0.3 } } },
+			{ 0.9, { RS = { 70, 0, 20 }, Root = { 8, 0, 0, -0.15 } } },
+			{ 1.25, {} },
+		}
+	end
+
+	-- Чумное облако: обе руки вверх и бросок двух колб (~0.55 с)
+	Anims.PlagueCloud = function()
+		return {
+			{ 0, {} },
+			{ 0.4, { RS = { 170, 0, 15 }, LS = { 170, 0, -15 }, Neck = { -15, 0, 0 }, Root = { -6, 0, 0, 0.1 } } },
+			{ 0.55, { RS = { 75, 0, -10 }, LS = { 75, 0, 10 }, Root = { 10, 0, 0, -0.1 } } },
+			{ 0.9, { RS = { 55, 0, 0 }, LS = { 45, 0, 0 } } },
+			{ 1.2, {} },
+		}
+	end
+
+	-- Призрачный меч: клинок к небу (призыв), затем удар вниз (~0.55 с)
+	Anims.GhostSword = function()
+		return {
+			{ 0, {} },
+			{ 0.4, { RS = { 178, 0, 0 }, LS = { 40, 0, -20 }, Neck = { -20, 0, 0 }, Root = { -6, 0, 0, 0.25 } } },
+			{ 0.55, { RS = { 45, 0, 0 }, LS = { 30, 0, -10 }, Neck = { 10, 0, 0 }, Root = { 14, 0, 0, -0.25 } } },
+			{ 0.95, { RS = { 40, 0, 0 }, Root = { 10, 0, 0, -0.2 } } },
+			{ 1.3, {} },
+		}
+	end
+
+	-- Зеркальный разлом: толчок обеими руками вперёд (~0.45 с)
+	Anims.MirrorShatter = function()
+		return {
+			{ 0, {} },
+			{ 0.3, { RS = { 80, 0, 35 }, LS = { 80, 0, -35 }, Root = { -5, 0, 0 } } },
+			{ 0.45, { RS = { 96, 0, -8 }, LS = { 96, 0, 8 }, Root = { 8, 0, 0, -0.05 } } },
+			{ 0.75, { RS = { 90, 0, -5 }, LS = { 90, 0, 5 } } },
+			{ 1.0, {} },
+		}
+	end
+
+	-- Разрыв нитей: руки широко вверх и резкий рывок вниз (~0.5 с)
+	Anims.ThreadSnap = function()
+		return {
+			{ 0, {} },
+			{ 0.35, { RS = { 155, 0, 45 }, LS = { 155, 0, -45 }, Neck = { -12, 0, 0 }, Root = { -5, 0, 0, 0.15 } } },
+			{ 0.5, { RS = { 40, 0, 15 }, LS = { 40, 0, -15 }, Neck = { 10, 0, 0 }, Root = { 10, 0, 0, -0.15 } } },
+			{ 0.8, { RS = { 55, 0, 20 }, LS = { 55, 0, -20 } } },
+			{ 1.1, {} },
+		}
+	end
+
+	-- Казнь: долгий замах с отклонением назад и страшный удар (~0.65 с)
+	Anims.Execution = function()
+		return {
+			{ 0, {} },
+			{ 0.5, { RS = { 178, 0, 5 }, LS = { 170, 0, -5 }, Neck = { -15, 0, 0 }, Root = { -14, 0, 0, 0.25 } } },
+			{ 0.65, { RS = { 25, 0, 0 }, LS = { 25, 0, 0 }, Neck = { 15, 0, 0 }, Root = { 26, 0, 0, -0.55 } } },
+			{ 1.1, { RS = { 25, 0, 0 }, LS = { 25, 0, 0 }, Root = { 22, 0, 0, -0.5 } } },
+			{ 1.5, {} },
+		}
+	end
+
+	-- Призрачная тыква: посох медленно вверх, затем вперёд (~0.8 с)
+	Anims.GhostPumpkin = function()
+		return {
+			{ 0, {} },
+			{ 0.55, { RS = { 176, 0, 0 }, LS = { 120, 0, -25 }, Neck = { -22, 0, 0 }, Root = { -8, 0, 0, 0.35 } } },
+			{ 0.7, { RS = { 178, 0, 0 }, LS = { 125, 0, -25 }, Neck = { -24, 0, 0 }, Root = { -9, 0, 0, 0.4 } } },
+			{ 0.8, { RS = { 100, 0, 0 }, LS = { 40, 0, -15 }, Neck = { 8, 0, 0 }, Root = { 12, 0, 0, -0.1 } } },
+			{ 1.15, { RS = { 90, 0, 0 }, Root = { 6, 0, 0 } } },
+			{ 1.45, {} },
+		}
+	end
+
+	-- Призыв союзников: руки вверх над порталом (~1.2 с)
+	Anims.Summon = function()
+		return {
+			{ 0, {} },
+			{ 0.4, { RS = { 160, 0, 30 }, LS = { 160, 0, -30 }, Neck = { -18, 0, 0 }, Root = { -4, 0, 0, 0.2 } } },
+			{ 0.9, { RS = { 165, 0, 25 }, LS = { 165, 0, -25 }, Neck = { -20, 0, 0 }, Root = { -4, 0, 0, 0.25 } } },
+			{ 1.05, { RS = { 70, 0, 25 }, LS = { 70, 0, -25 }, Neck = { 8, 0, 0 }, Root = { 6, 0, 0, -0.05 } } },
+			{ 1.3, {} },
+		}
+	end
+
+	------------------------------------------------------------------------
+	-- ДВИЖЕНИЯ В ПРОСТОЕ
+	------------------------------------------------------------------------
+	FIDGETS.Lantern = { "LookAround", "StaffTap" }
+	FIDGETS.Shovel = { "Flex", "LookAround", "Stretch" }
+	FIDGETS.Crows = { "LookAround", "Twirl" }
+	FIDGETS.Bell = { "LookAround", "Stretch" }
+	FIDGETS.Flask = { "LookAround", "Reload" }
+	FIDGETS.GhostSlash = { "Twirl", "LookAround", "Flex" }
+	FIDGETS.Cards = { "Twirl", "LookAround" }
+	FIDGETS.ExecAxe = { "Flex", "LookAround" }
+	FIDGETS.LanternStaff = { "StaffTap", "LookAround", "Stretch" }
+end
+]======] }
 FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "Renderer" }, "ModuleScript", [======[
 --!nocheck
 -- VOID TD :: Renderer (клиент)
@@ -8873,6 +15273,7 @@ local ANG = CFrame.Angles
 local rad = math.rad
 
 local ctx, Config, PathUtil, UnitModels, EnemyModels, FX
+local HFX -- эффекты Хэллоуина (HalloweenFX)
 local enemyFolder, unitFolder
 local enemyViews = {}
 local unitViews = {}
@@ -9521,8 +15922,13 @@ end
 -- ПОЯВЛЕНИЕ
 ------------------------------------------------------------------------
 -- Вступление босса: портал вспыхивает, по земле идёт волна энергии
+local function activeMap()
+	return workspace:FindFirstChild(PathUtil.MapKey == "Halloween" and "VoidTDHalloweenMap" or "VoidTDMap")
+end
+Renderer.ActiveMap = activeMap
+
 local function portalSurge(isFinal)
-	local map = workspace:FindFirstChild("VoidTDMap")
+	local map = activeMap()
 	local portal = map and map:FindFirstChild("VoidPortal")
 	if not portal then
 		return
@@ -9540,7 +15946,7 @@ local function portalSurge(isFinal)
 		disc.Color = Color3.fromRGB(235, 200, 255)
 		FX.Tween(disc, 1.2, { Color = col })
 		local pos = disc.Position
-		local gy = Config.Map.GroundY
+		local gy = PathUtil.Map.GroundY
 		FX.Sphere(pos, isFinal and 16 or 11, FX.Colors.Neon, 0.8, nil, 0.3)
 		FX.Ring(V(pos.X, gy + 0.3, pos.Z), isFinal and 45 or 30, FX.Colors.Neon, 1.1, 0.6, 3, 0.05)
 		task.delay(0.15, function()
@@ -9610,6 +16016,9 @@ function Renderer.SpawnEnemy(data)
 	makeHealthBar(view)
 	rig.Model.Parent = enemyFolder
 	enemyViews[id] = view
+	if rig.SpawnFX then
+		HFX.EnemySpawn(view, dist <= 1)
+	end
 	if dist <= 1 then
 		FX.Burst(pos + V(0, 2, 0), FX.Colors.Neon, 6, 0.3, 5)
 		if rig.SpawnStyle == "Titan" then
@@ -9784,6 +16193,9 @@ function Renderer.RemoveEnemy(id, reason)
 		FX.Poof(view.Rig.Root.Position, FX.Colors.Neon, 0.8)
 		view.Rig.Model:Destroy()
 	else
+		if view.Rig.DeathFX and reason ~= "core" then
+			HFX.EnemyDeath(view, reason)
+		end
 		deathAnim(view, reason)
 	end
 end
@@ -9812,6 +16224,9 @@ function Renderer.OnSync(payload)
 	end
 	for _, r in ipairs(payload.RM or {}) do
 		Renderer.RemoveEnemy(r[1], r[2])
+	end
+	if payload.AL or payload.RA then
+		HFX.SyncAllies(payload.AL, payload.RA)
 	end
 end
 
@@ -9965,7 +16380,7 @@ local function updateEnemies(t, dt)
 	local cam = workspace.CurrentCamera
 	local camPos = cam and cam.CFrame.Position or V()
 	for _, v in pairs(enemyViews) do
-		local speed = v.Speed * (v.Frozen and 0 or (v.Slowed and 0.5 or 1))
+		local speed = v.Speed * (v.Frozen and 0 or (v.Slowed and 0.5 or 1)) * (v.HasteUntil and HFX.SpeedMult(v) or 1)
 		local predicted = v.ServerDist + speed * math.min(nowc - v.LastSync, 0.35)
 		v.Dist = v.Dist + speed * dt
 		v.Dist = v.Dist + (predicted - v.Dist) * math.min(1, dt * 5)
@@ -10120,7 +16535,11 @@ function Renderer.AddUnit(folder, isNew)
 	end
 	view.NextFidget = os.clock() + 4 + math.random() * 8
 	local placeFx = Config.Units[view.UnitId].PlaceFX
-	if isNew and placeFx == "Clock" then
+	if isNew and placeFx == "Throne" then
+		-- Король фонарей: трон поднимается из огня, вокруг вырастают тыквы
+		view.DropT = os.clock()
+		HFX.ThronePlace(view.Pos)
+	elseif isNew and placeFx == "Clock" then
 		-- часовщик поднимается из золотого механического портала, стрелки идут назад
 		view.RiseT = os.clock()
 		FX.ClockPortal(view.Pos, 1.3)
@@ -10176,6 +16595,7 @@ local function muzzlePos(view)
 	end
 	return view.Rig.Root.Position + V(0, 1, 0)
 end
+Renderer.MuzzlePos = muzzlePos
 
 local function playAnim(view, name, h, hits, interval)
 	local builder = Anims[name]
@@ -10242,9 +16662,17 @@ function Renderer.OnAttack(p)
 	end
 
 	local hits = p.T and #p.T or 1
-	playAnim(view, def.Anim, h, hits, p.I)
-	view.GustT = os.clock()
-	view.NextFidget = os.clock() + 6 + math.random() * 6
+	if p.EC then
+		-- повтор «Призрачной короны»: атакует синяя копия за спиной, сам юнит не дёргается
+		HFX.EchoGhost(view)
+	else
+		playAnim(view, def.Anim, h, hits, p.I)
+		view.GustT = os.clock()
+		view.NextFidget = os.clock() + 6 + math.random() * 6
+	end
+	if HFX.OnAttack(view, def, p, h, lv) then
+		return
+	end
 
 	local function at(delay, fn)
 		task.delay(delay, fn)
@@ -10476,6 +16904,8 @@ function Renderer.OnImpact(p)
 		FX.TimeHaste(p.P, p.R, list, p.DUR or 2)
 	elseif k == "TimeStorm" then
 		FX.TimeStorm(p.P, p.DL or 1.3)
+	else
+		HFX.OnImpact(p)
 	end
 end
 
@@ -10571,6 +17001,7 @@ function Renderer.Update(dt)
 	local t = os.clock()
 	updateEnemies(t, dt)
 	updateUnits(t, dt)
+	HFX.Update(dt)
 end
 
 function Renderer.ClearEnemies()
@@ -10590,6 +17021,12 @@ function Renderer.Init(c)
 	unitFolder.Parent = workspace
 	Renderer.UnitFolder = unitFolder
 	Renderer.EnemyFolder = enemyFolder
+	HFX = c.HFX
+	HFX.Init(c, Renderer)
+	-- анимации хэллоуинских юнитов (атаки, способности, разминки)
+	if c.HalloweenAnims then
+		c.HalloweenAnims(Anims, FIDGETS)
+	end
 end
 
 return Renderer
@@ -10632,6 +17069,7 @@ local refs = {}
 local state -- текущее открытие: { Id, Level, Rig, Yaw, Pitch, Dist, ... }
 local conns = {} -- соединения, живущие только пока окно открыто
 local previewFx -- эффекты способностей в предпросмотре (определены ниже)
+local showGallery -- галерея призыва (определена ниже)
 
 ------------------------------------------------------------------------
 -- 3D-сцена
@@ -10759,8 +17197,15 @@ local function refreshInfo()
 	local st = def.Levels[lv]
 	local rc = Config.Rarities[def.Rarity].Color
 	refs.Name.Text = def.Name
-	refs.Rarity.Text = def.Rarity:upper()
+	-- основная редкость + тег события (оба тега видны)
+	local ev = def.Event and Config.Events[def.Event]
+	refs.Rarity.RichText = true
+	refs.Rarity.Text = def.Rarity:upper() .. (ev and string.format('  <font color="#%s">%s</font>', ev.Color:ToHex(), ev.Tag) or "")
 	refs.Rarity.TextColor3 = rc
+	local runeId = ctx.Profile and ctx.Profile.RuneSlots and ctx.Profile.RuneSlots[id]
+	if runeId then
+		refs.Rarity.Text = refs.Rarity.Text .. string.format('  <font color="#%s">• РУНА %s</font>', Config.RuneRarity.Color:ToHex(), Config.Runes[runeId].Name)
+	end
 	refs.RarityBar.BackgroundColor3 = rc
 	refs.Desc.Text = def.Description or ""
 	refs.StatDamage.Text = fmt(st.Damage) .. ((st.Hits and st.Hits > 1) and ("  x" .. st.Hits) or "")
@@ -10868,12 +17313,22 @@ local function applyRarityFx(first)
 	local rarity = Config.Units[state.Id].Rarity
 	local glow = GLOW[rarity] or THEME.Accent
 	setGlow(glow)
-	if rarity == "Mythic" then
-		spawnParticles(glow, 14)
-	elseif rarity == "Secret" then
-		spawnParticles(glow, 10)
-	else
-		spawnParticles(glow, 0)
+	-- Mythic — фиолетовые частицы, Legendary — золотые, Epic — синие, Secret — кинематографичное появление
+	local counts = { Mythic = 14, Secret = 10, Legendary = 9, Epic = 6 }
+	spawnParticles(glow, counts[rarity] or 0)
+	-- Хэллоуин: тыква и оранжевые искры поверх основного свечения (не заменяют его)
+	local ev = Config.Units[state.Id].Event
+	refs.EventPumpkin.Visible = ev == "Halloween"
+	for _, p in ipairs(refs.EventSparks) do
+		p:Destroy()
+	end
+	refs.EventSparks = {}
+	if ev == "Halloween" then
+		for i = 1, 8 do
+			local p = K.new("Frame", { Parent = refs.Scene, Size = UDim2.fromOffset(4, 4), BackgroundColor3 = Color3.fromRGB(255, 150, 50), BackgroundTransparency = 0.3, BorderSizePixel = 0, Rotation = 45, ZIndex = 24 })
+			p:SetAttribute("Seed", (i * 0.37 + 0.11) % 1)
+			refs.EventSparks[#refs.EventSparks + 1] = p
+		end
 	end
 	if first and rarity == "Secret" then
 		secretIntro()
@@ -10946,6 +17401,17 @@ local function build()
 			state.Idle = 0
 		end
 	end)
+	-- галерея призыва / проклятых людей
+	refs.GalleryButton = K.button({ Parent = scene, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -56, 0, 10), Size = UDim2.fromOffset(190, 32), Text = "", BackgroundColor3 = Color3.fromRGB(110, 40, 30), StrokeColor = Color3.fromRGB(255, 130, 40), Visible = false, ZIndex = 25 }, function()
+		if state then
+			showGallery(state.GalleryKind)
+		end
+	end)
+	refs.GalleryInfo = K.label({ Parent = scene, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 10, 1, -30), Size = UDim2.new(1, -20, 0, 120), Text = "", TextScaled = false, TextSize = 13, TextWrapped = true, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Bottom, Visible = false, ZIndex = 25 })
+	-- хэллоуинская тыква в углу сцены
+	refs.EventPumpkin = K.new("Frame", { Parent = scene, Size = UDim2.fromOffset(40, 40), Position = UDim2.new(1, -54, 1, -64), BackgroundTransparency = 1, Visible = false, ZIndex = 25 })
+	UI.Icon("Pumpkin", refs.EventPumpkin, { Size = UDim2.fromScale(1, 1), ZIndex = 25 })
+	refs.EventSparks = {}
 	-- вступление секретного юнита
 	refs.Intro = K.new("Frame", { Parent = scene, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), Visible = false, ZIndex = 30 })
 	refs.IntroRing = K.new("Frame", { Parent = refs.Intro, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.05, 0.05), BackgroundColor3 = GLOW.Secret, BorderSizePixel = 0, ZIndex = 31 })
@@ -11041,7 +17507,7 @@ local function bindInput()
 end
 
 local function step(dt)
-	if not state or not state.Rig then
+	if not state or (not state.Rig and not state.Gallery) then
 		return
 	end
 	local t = os.clock()
@@ -11053,10 +17519,114 @@ local function step(dt)
 	state.Dist = state.Dist + (state.BaseDist * state.Zoom - state.Dist) * math.min(1, dt * 8)
 	updateCamera()
 	-- анимация модели (те же позы, что в бою)
-	Renderer.PreviewStep(state, t)
+	if state.Rig then
+		Renderer.PreviewStep(state, t)
+	end
 	if #refs.Particles > 0 then
 		stepParticles(t)
 	end
+	-- хэллоуинские искры и подпрыгивающая тыква
+	for i, p in ipairs(refs.EventSparks) do
+		local seed = p:GetAttribute("Seed") or 0
+		local a = (t * (0.12 + seed * 0.1) + seed) % 1
+		p.Position = UDim2.new(0.08 + seed * 0.84 + math.sin(t * 2 + i) * 0.03, 0, 1 - a, 0)
+		p.BackgroundTransparency = 0.25 + a * 0.75
+	end
+	if refs.EventPumpkin.Visible then
+		refs.EventPumpkin.Position = UDim2.new(1, -54, 1, -64 - math.abs(math.sin(t * 3)) * 10)
+		refs.EventPumpkin.Rotation = math.sin(t * 3) * 8
+	end
+	-- союзники в галерее призыва идут на месте
+	if state.Gallery then
+		for i, g in ipairs(state.Gallery) do
+			local rig = g.Rig
+			local sw = math.sin(t * 6 + i) * 28
+			local m, b = rig.Motors, rig.Base
+			if m.RH and b.RH then
+				m.RH.C0 = b.RH * ANG(rad(sw), 0, 0)
+				m.LH.C0 = b.LH * ANG(rad(-sw), 0, 0)
+				m.RS.C0 = b.RS * ANG(rad(-sw * 0.7), 0, 0)
+				m.LS.C0 = b.LS * ANG(rad(sw * 0.7), 0, 0)
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------
+-- ГАЛЕРЕЯ ПРИЗЫВА: все союзники юнита (или «проклятые люди» руны) в ряд с HP
+------------------------------------------------------------------------
+local function galleryList(kind)
+	local def = Config.Units[state.Id]
+	local list = {}
+	if kind == "Rune" then
+		for i, lv in ipairs(Config.Runes.CursedThreads.Summon.Levels) do
+			list[#list + 1] = { Ally = lv.Ally, HP = lv.HP, Text = string.format("LVL %d • x%d • %d HP • каждые 60 с", i, lv.Count, lv.HP) }
+		end
+	elseif def.Summon then
+		for i, lv in ipairs(def.Summon.Levels) do
+			list[#list + 1] = { Ally = lv.Ally, HP = lv.HP, Text = string.format("%s • x%d • %d HP • %d с", i == 5 and "MAX" or ("LVL " .. i), lv.Count, lv.HP, lv.Interval) }
+		end
+		if def.Summon.Golden then
+			local g = def.Summon.Golden
+			list[#list + 1] = { Ally = g.Ally, HP = g.HP, Text = string.format("MAX • каждый %d-й призыв • %d HP", g.Every, g.HP) }
+		end
+	end
+	return list
+end
+
+local function clearGallery()
+	if state and state.Gallery then
+		for _, g in ipairs(state.Gallery) do
+			g.Rig.Model:Destroy()
+		end
+		state.Gallery = nil
+	end
+	if refs.GalleryInfo then
+		refs.GalleryInfo.Visible = false
+	end
+end
+
+showGallery = function(kind)
+	if not UnitModels.BuildAlly then
+		return
+	end
+	if state.Gallery then
+		clearGallery()
+		buildModel(true)
+		refs.GalleryButton.Text = state.GalleryLabel
+		return
+	end
+	clearScene()
+	local list = galleryList(kind)
+	state.Gallery = {}
+	local n = #list
+	local lines = {}
+	for i, it in ipairs(list) do
+		local ok, rig = pcall(UnitModels.BuildAlly, it.Ally)
+		if ok and rig then
+			for _, d in ipairs(rig.Model:GetDescendants()) do
+				if d:IsA("ParticleEmitter") or d:IsA("PointLight") or d:IsA("Trail") then
+					d:Destroy()
+				end
+			end
+			local x = (i - (n + 1) / 2) * 3.4
+			rig.Root.CFrame = CF(x, rig.HipHeight, math.abs(x) * 0.25) * ANG(0, math.pi, 0)
+			rig.Model.Parent = refs.World
+			state.Gallery[#state.Gallery + 1] = { Rig = rig }
+		end
+		lines[#lines + 1] = string.format("%d. %s — %s", i, Config.Allies[it.Ally].Name, it.Text)
+	end
+	local glow = GLOW[Config.Units[state.Id].Rarity] or THEME.Accent
+	buildPlatform(0, n * 1.9 + 2, glow)
+	state.Center = V(0, 2.4, 0)
+	state.BaseDist = n * 3.6 + 8
+	state.Zoom = 1
+	state.Dist = state.BaseDist
+	state.Yaw, state.Pitch = math.rad(180), math.rad(10)
+	updateCamera()
+	refs.GalleryInfo.Text = (kind == "Rune" and "ПРОКЛЯТЫЕ НИТИ — проклятые люди:\n" or "ПРИЗЫВ — союзники идут по дороге навстречу врагам, HP = запас урона:\n") .. table.concat(lines, "\n")
+	refs.GalleryInfo.Visible = true
+	refs.GalleryButton.Text = "← К ЮНИТУ"
 end
 
 ------------------------------------------------------------------------
@@ -11097,8 +17667,21 @@ local function previewStorm(on)
 	end
 end
 
+local POWER_FX = {
+	LanternBeam = Color3.fromRGB(255, 230, 150), DirtBurst = Color3.fromRGB(140, 110, 80), LeafStorm = Color3.fromRGB(230, 140, 40),
+	CurseMark = Color3.fromRGB(120, 255, 110), MidnightToll = Color3.fromRGB(190, 160, 255), PlagueCloud = Color3.fromRGB(140, 230, 80),
+	GhostSword = Color3.fromRGB(110, 190, 255), MirrorShatter = Color3.fromRGB(180, 90, 255), ThreadSnap = Color3.fromRGB(230, 30, 50),
+	Execution = Color3.fromRGB(255, 110, 30), GhostPumpkin = Color3.fromRGB(255, 140, 40), Summon = Color3.fromRGB(200, 90, 255),
+}
+
 previewFx = function(kind)
 	local s = state.Rig.Scale or 1
+	if POWER_FX[kind] then
+		local col = POWER_FX[kind]
+		previewRing(0.08, 1, 7 * s, col, 0.8, 0.5)
+		previewRing(0.12, 0.5, 4.5 * s, col:Lerp(Color3.new(1, 1, 1), 0.3), 0.6, 0.6)
+		return
+	end
 	if kind == "TimeBreak" then
 		previewRing(0.05, 1, 6 * s, GOLD, 0.9, 0.5)
 		previewRing(0.1, 0.5, 4 * s, ORANGE, 0.6, 0.55)
@@ -11141,9 +17724,17 @@ function UnitViewer.Open(unitId, level)
 	refs.Dim.Visible = true
 	refs.Scale.Scale = 0.88
 	K.tween(refs.Scale, 0.22, { Scale = 1 }, Enum.EasingStyle.Back)
+	clearGallery()
 	buildModel(false)
 	refreshInfo()
 	applyRarityFx(true)
+	-- «Посмотреть призыв» у Кукловода и Иллюзиониста, «Проклятые люди» у юнитов с руной «Проклятые нити»
+	local def = Config.Units[unitId]
+	local hasThreads = prof.RuneSlots and prof.RuneSlots[unitId] == "CursedThreads"
+	state.GalleryKind = def.Summon and "Summon" or (hasThreads and "Rune" or nil)
+	state.GalleryLabel = def.Summon and "ПОСМОТРЕТЬ ПРИЗЫВ" or "ПРОКЛЯТЫЕ ЛЮДИ"
+	refs.GalleryButton.Visible = state.GalleryKind ~= nil
+	refs.GalleryButton.Text = state.GalleryLabel
 	for _, c in ipairs(refs.AbilityRow:GetChildren()) do
 		if c:IsA("GuiButton") then
 			c:Destroy()
@@ -11171,6 +17762,10 @@ function UnitViewer.SetLevel(lv)
 		return
 	end
 	state.Level = math.clamp(lv, 1, 5)
+	if state.Gallery then
+		clearGallery()
+		refs.GalleryButton.Text = state.GalleryLabel
+	end
 	buildModel(true)
 	refreshInfo()
 	if FX then
@@ -11179,6 +17774,11 @@ function UnitViewer.SetLevel(lv)
 end
 
 function UnitViewer.PlayAnim(kind)
+	if state and state.Gallery then
+		clearGallery()
+		buildModel(true)
+		refs.GalleryButton.Text = state.GalleryLabel
+	end
 	if not state or not state.Rig then
 		return
 	end
@@ -11216,7 +17816,12 @@ function UnitViewer.Close()
 		c:Disconnect()
 	end
 	conns = {}
+	clearGallery()
 	clearScene()
+	for _, p in ipairs(refs.EventSparks) do
+		p:Destroy()
+	end
+	refs.EventSparks = {}
 	spawnParticles(THEME.Accent, 0)
 	refs.Intro.Visible = false
 	state = nil
@@ -11236,6 +17841,496 @@ end
 
 return UnitViewer
 ]======] }
+FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "HalloweenUI" }, "ModuleScript", [======[
+--!nocheck
+-- VOID TD :: HalloweenUI (клиент)
+-- Интерфейс события: открытие проклятого сундука, руны (3D-иконки, выбор, надеть/снять),
+-- панель очереди на 4 квадратах, бестиарий врагов и боссов.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local HalloweenUI = {}
+
+local ctx, UI, Config, UnitModels, EnemyModels, CaseModels, FX
+local K -- конструкторы UI (UI.Kit)
+local player = Players.LocalPlayer
+local refs = {}
+
+local ORANGE = Color3.fromRGB(255, 130, 30)
+local GOLD = Color3.fromRGB(255, 205, 80)
+local DARK = Color3.fromRGB(26, 12, 16)
+
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+------------------------------------------------------------------------
+-- 3D-ИКОНКА РУНЫ
+------------------------------------------------------------------------
+function HalloweenUI.RuneViewport(parent, runeId, props)
+	props = props or {}
+	local vf = K.new("ViewportFrame", {
+		Parent = parent,
+		BackgroundTransparency = 1,
+		Size = props.Size or UDim2.fromScale(1, 1),
+		Position = props.Position or UDim2.new(),
+		AnchorPoint = props.AnchorPoint or Vector2.new(),
+		Ambient = rgb(170, 140, 130),
+		LightColor = rgb(255, 240, 220),
+		LightDirection = Vector3.new(-0.5, -1, -0.7),
+		ZIndex = props.ZIndex or 1,
+	})
+	if not UnitModels.BuildRune then
+		return vf
+	end
+	local ok, r = pcall(UnitModels.BuildRune, runeId)
+	if not ok or not r then
+		return vf
+	end
+	r.Model.Parent = vf
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = 30
+	cam.CFrame = CFrame.lookAt(Vector3.new(2.2, 1.4, -6.5), Vector3.new(0, 0, 0))
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	vf:SetAttribute("Spin", true)
+	refs.RuneSpins = refs.RuneSpins or {}
+	table.insert(refs.RuneSpins, { Model = r.Model, VF = vf })
+	return vf, r
+end
+
+-- карточка руны в итогах открытия
+function HalloweenUI.RuneCard(grid, r, i)
+	local rd = Config.Runes[r.Rune]
+	local col = Config.RuneRarity.Color
+	local card = K.panel({ Parent = grid, BackgroundColor3 = UI.Theme.BG2, StrokeColor = col, LayoutOrder = i, ZIndex = 23 })
+	K.new("UIGradient", { Parent = card, Rotation = 90, Color = ColorSequence.new(col:Lerp(UI.Theme.BG, 0.55), UI.Theme.BG) })
+	HalloweenUI.RuneViewport(card, r.Rune, { Size = UDim2.new(1, 0, 0, 120), Position = UDim2.fromOffset(0, 8), ZIndex = 24 })
+	K.label({ Parent = card, Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 130), Text = rd.Name, ZIndex = 24 })
+	K.label({ Parent = card, Size = UDim2.new(1, -8, 0, 18), Position = UDim2.fromOffset(4, 154), Text = "РУНА • " .. Config.RuneRarity.Name, TextColor3 = col, ZIndex = 24 })
+	local sc = K.new("UIScale", { Parent = card, Scale = 0 })
+	K.tween(sc, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
+end
+
+------------------------------------------------------------------------
+-- ОТКРЫТИЕ ПРОКЛЯТОГО СУНДУКА
+------------------------------------------------------------------------
+-- Камера приближается, сундук трясётся, глаза и огонь разгораются, цепи рвутся, крышка открывается,
+-- из сундука поднимается награда (3D-модель юнита или 3D-руна), затем имя и редкость. SECRET — отдельная сцена.
+function HalloweenUI.PlayOpening(results, showCards)
+	local r0 = results[1]
+	local isRune = r0.Rune ~= nil
+	local def = r0.Id and Config.Units[r0.Id]
+	local rarity = def and def.Rarity or "Rune"
+	local color = isRune and Config.RuneRarity.Color or Config.Rarities[rarity].Color
+	local secret = rarity == "Secret"
+	local gui = UI.Root
+	local overlay = K.new("Frame", { Parent = gui, Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(8, 2, 4), BackgroundTransparency = 0.1, ZIndex = 20 })
+	local vf = K.new("ViewportFrame", { Parent = overlay, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(620, 620), Position = UDim2.fromScale(0.5, 0.52), Ambient = rgb(120, 80, 70), LightColor = rgb(255, 210, 160), LightDirection = Vector3.new(-0.4, -1, -0.8), ZIndex = 21 })
+	local chest = CaseModels.Build("Halloween")
+	chest.Model.Parent = vf
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = 40
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	local title = K.label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(700, 56), Position = UDim2.new(0.5, 0, 0.05, 0), Text = "HALLOWEEN CASE", TextColor3 = ORANGE, ZIndex = 22, StrokeThickness = 3 })
+	local glow = K.new("Frame", { Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.55), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = ORANGE, BackgroundTransparency = 1, ZIndex = 20 })
+	K.corner(300).Parent = glow
+
+	local base = chest.Base
+	local lid = {}
+	for _, p in ipairs(chest.LidParts or { chest.Lid }) do
+		lid[p] = true
+	end
+	local chains = {}
+	for _, p in ipairs(chest.Chains or {}) do
+		chains[p] = Vector3.new(math.random() - 0.5, math.random() * 0.8 + 0.2, math.random() - 0.5).Unit
+	end
+	local hinge = chest.Hinge or CFrame.new(0, 2.7, 1.4)
+	local eyes = chest.Eyes or {}
+	local eyeColor = {}
+	for _, e in ipairs(eyes) do
+		eyeColor[e] = e.Color
+	end
+
+	local SHAKE, BREAK, OPEN, RISE = 1.6, 0.5, 0.7, 0.9
+	local start = os.clock()
+	local nextTick = 0
+	local reward, rewardBase
+	local done = false
+	local conn
+	FX.Sound("CaseShake", 1, 0.6)
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - start
+		-- камера плавно приближается
+		local k = math.clamp(t / (SHAKE + BREAK), 0, 1)
+		local dist = 15 - k * 4.5
+		cam.CFrame = CFrame.lookAt(Vector3.new(0, 4.5 - k * 0.6, -dist), Vector3.new(0, 2.4, 0))
+		if t < SHAKE then
+			local a = t / SHAKE
+			local shake = CFrame.new((math.random() - 0.5) * a * 0.35, 0, (math.random() - 0.5) * a * 0.35) * CFrame.Angles(0, 0, (math.random() - 0.5) * a * 0.12)
+			for p, b in pairs(base) do
+				p.CFrame = shake * b
+			end
+			for _, e in ipairs(eyes) do
+				e.Color = eyeColor[e]:Lerp(rgb(255, 240, 180), a)
+			end
+			glow.Size = UDim2.fromOffset(60 + a * 300, 60 + a * 300)
+			glow.BackgroundTransparency = 1 - a * 0.25
+			if t >= nextTick then
+				nextTick = t + 0.42 - a * 0.28
+				FX.Sound("CaseShake", 1, 0.6 + a * 0.6)
+			end
+		elseif t < SHAKE + BREAK then
+			-- цепи рвутся и разлетаются
+			local a = (t - SHAKE) / BREAK
+			if not chest.Broke then
+				chest.Broke = true
+				FX.Sound("CaseOpen", 1, 0.7)
+				local flash = K.new("Frame", { Parent = overlay, Size = UDim2.fromScale(1, 1), BackgroundColor3 = ORANGE, BackgroundTransparency = 0.3, ZIndex = 30 })
+				K.tween(flash, 0.5, { BackgroundTransparency = 1 })
+				task.delay(0.55, function()
+					flash:Destroy()
+				end)
+			end
+			for p, b in pairs(base) do
+				if chains[p] then
+					local d = chains[p]
+					p.CFrame = CFrame.new(d * a * 9 + Vector3.new(0, -a * a * 3, 0)) * b * CFrame.Angles(a * 5 * d.X, a * 4, a * 5 * d.Z)
+					p.Transparency = math.min(1, a * 1.2)
+				elseif not lid[p] then
+					p.CFrame = b
+				end
+			end
+		elseif t < SHAKE + BREAK + OPEN then
+			-- крышка открывается на петле
+			local a = (t - SHAKE - BREAK) / OPEN
+			local ang = math.rad(110) * (1 - (1 - a) ^ 3)
+			for p in pairs(lid) do
+				if base[p] then
+					p.CFrame = hinge * CFrame.Angles(ang, 0, 0) * hinge:Inverse() * base[p]
+				end
+			end
+			glow.BackgroundColor3 = color
+			glow.Size = UDim2.fromOffset(360 + a * 200, 360 + a * 200)
+		elseif t < SHAKE + BREAK + OPEN + RISE then
+			-- награда поднимается из сундука
+			local a = (t - SHAKE - BREAK - OPEN) / RISE
+			if not reward then
+				FX.Sound("Reveal", 1, isRune and 1.2 or 0.7 + (Config.Rarities[rarity] and Config.Rarities[rarity].Order or 3) * 0.12)
+				if isRune and UnitModels.BuildRune then
+					local ok, rr = pcall(UnitModels.BuildRune, r0.Rune)
+					if ok and rr then
+						reward = rr.Model
+						reward:ScaleTo(1.2)
+					end
+				elseif def then
+					local ok, rig = pcall(UnitModels.Build, r0.Id, 1)
+					if ok and rig then
+						reward = rig.Model
+						for _, d in ipairs(reward:GetDescendants()) do
+							if d:IsA("ParticleEmitter") or d:IsA("Trail") then
+								d:Destroy()
+							end
+						end
+						rewardBase = rig.HipHeight
+					end
+				end
+				if reward then
+					reward.Parent = vf
+				end
+			end
+			if reward then
+				local y = 1.5 + a * (isRune and 3.8 or 2.2) + (rewardBase or 0) * a
+				reward:PivotTo(CFrame.new(0, y, -0.6) * CFrame.Angles(0, math.pi + a * math.pi * 2, 0))
+			end
+		elseif not done then
+			done = true
+			conn:Disconnect()
+			local function finish()
+				title.Text = isRune and ("РУНА «" .. Config.Runes[r0.Rune].Name .. "»") or def.Name
+				title.TextColor3 = color
+				K.label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(600, 34), Position = UDim2.new(0.5, 0, 0.05, 60), Text = isRune and ("РУНА • " .. Config.RuneRarity.Name) or (rarity:upper() .. "  •  " .. Config.Events.Halloween.Tag), TextColor3 = isRune and color or ORANGE, ZIndex = 22 })
+				if r0.New then
+					local tag = K.label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(160, 34), Position = UDim2.new(0.5, 220, 0.05, 0), Text = "NEW!", TextColor3 = GOLD, ZIndex = 23 })
+					tag.Rotation = -12
+				end
+				K.button({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(200, 54), Position = UDim2.new(0.5, 0, 0.95, 0), Text = "OK", BackgroundColor3 = rgb(110, 50, 20), StrokeColor = ORANGE, ZIndex = 25 }, function()
+					overlay:Destroy()
+				end)
+				-- награда продолжает медленно вращаться
+				local t0 = os.clock()
+				local spin
+				spin = RunService.RenderStepped:Connect(function()
+					if not overlay.Parent then
+						spin:Disconnect()
+						return
+					end
+					if reward and reward.Parent then
+						local y = 1.5 + (isRune and 3.8 or 2.2) + (rewardBase or 0) + math.sin((os.clock() - t0) * 2) * 0.15
+						reward:PivotTo(CFrame.new(0, y, -0.6) * CFrame.Angles(0, math.pi + (os.clock() - t0) * 0.8, 0))
+					end
+				end)
+			end
+			if secret then
+				-- SECRET: чёрный экран, оранжево-красные вспышки, тряска, затем награда
+				FX.Sound("Secret", 1, 0.9)
+				FX.Shake(0.8, 1.4)
+				local black = K.new("Frame", { Parent = overlay, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), ZIndex = 40 })
+				local big = K.label({ Parent = black, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(900, 160), Position = UDim2.fromScale(0.5, 0.45), Text = "SECRET!!", TextColor3 = ORANGE, ZIndex = 41, StrokeThickness = 4 })
+				K.label({ Parent = black, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(700, 50), Position = UDim2.fromScale(0.5, 0.6), Text = def.Name, TextColor3 = Color3.fromRGB(255, 60, 60), ZIndex = 41 })
+				for i = 1, 10 do
+					task.delay(i * 0.12, function()
+						black.BackgroundColor3 = (i % 2 == 0) and rgb(140, 40, 0) or Color3.new(0, 0, 0)
+						big.Rotation = (math.random() - 0.5) * 10
+					end)
+				end
+				task.delay(1.6, function()
+					K.tween(black, 0.5, { BackgroundTransparency = 1 })
+					for _, d in ipairs(black:GetDescendants()) do
+						if d:IsA("TextLabel") then
+							K.tween(d, 0.4, { TextTransparency = 1 })
+						end
+					end
+					task.delay(0.55, function()
+						black:Destroy()
+					end)
+					finish()
+				end)
+			else
+				finish()
+			end
+		end
+	end)
+	local _ = showCards
+end
+
+------------------------------------------------------------------------
+-- РУНЫ: выбор для юнита
+------------------------------------------------------------------------
+local pickerUnit
+
+local function buildRunePicker()
+	local m = K.modal("Runes", "РУНЫ", UDim2.fromOffset(720, 420), "Rune")
+	refs.RuneFor = K.label({ Parent = m, Size = UDim2.new(1, -36, 0, 24), Position = UDim2.fromOffset(18, 58), Text = "", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 6 })
+	refs.RuneRow = K.new("Frame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 270), Position = UDim2.fromOffset(18, 88), ZIndex = 6 }, {
+		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 12), HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+	})
+	refs.RuneRemove = K.button({ Parent = m, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(260, 44), Position = UDim2.new(0.5, 0, 1, -12), Text = "СНЯТЬ РУНУ", BackgroundColor3 = rgb(110, 40, 50), ZIndex = 6 }, function()
+		if pickerUnit then
+			ctx.Request("EquipRune", { Unit = pickerUnit })
+		end
+	end)
+end
+
+local function refreshPicker()
+	local prof = ctx.Profile
+	if not pickerUnit or not prof or not refs.RuneRow then
+		return
+	end
+	local def = Config.Units[pickerUnit]
+	local current = prof.RuneSlots and prof.RuneSlots[pickerUnit]
+	refs.RuneFor.Text = "Юнит: " .. def.Name .. "  •  1 руна на юнита. Руна работает, только когда надета."
+	refs.RuneRemove.Visible = current ~= nil
+	for _, c in ipairs(refs.RuneRow:GetChildren()) do
+		if c:IsA("GuiObject") then
+			c:Destroy()
+		end
+	end
+	for i, runeId in ipairs(Config.RuneOrder) do
+		local rd = Config.Runes[runeId]
+		local have = prof.Runes and prof.Runes[runeId] or 0
+		local used = 0
+		for _, r in pairs(prof.RuneSlots or {}) do
+			if r == runeId then
+				used = used + 1
+			end
+		end
+		local on = current == runeId
+		local card = K.panel({ Parent = refs.RuneRow, Size = UDim2.fromOffset(210, 266), BackgroundColor3 = UI.Theme.BG2, StrokeColor = on and GOLD or (have > 0 and rd.Color or rgb(60, 50, 60)), LayoutOrder = i, ZIndex = 7 })
+		HalloweenUI.RuneViewport(card, runeId, { Size = UDim2.new(1, 0, 0, 96), ZIndex = 8 })
+		K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 22), Position = UDim2.fromOffset(6, 96), Text = rd.Name, TextColor3 = rd.Color, ZIndex = 8 })
+		K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 16), Position = UDim2.fromOffset(6, 118), Text = string.format("есть: %d  •  надето: %d", have, used), TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 8 })
+		K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 76), Position = UDim2.fromOffset(6, 136), Text = rd.Description, TextScaled = false, TextSize = 12, TextWrapped = true, Font = Enum.Font.Gotham, TextColor3 = UI.Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 8 })
+		local free = have - used + (on and 1 or 0)
+		K.button({ Parent = card, AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1, -16, 0, 38), Position = UDim2.new(0.5, 0, 1, -8), Text = on and "НАДЕТА" or (have == 0 and "НЕТ РУНЫ" or (free > 0 and "НАДЕТЬ" or "ЗАНЯТА")), BackgroundColor3 = on and rgb(90, 70, 20) or (free > 0 and rgb(60, 110, 60) or rgb(60, 50, 60)), ZIndex = 8 }, function()
+			if on or have == 0 then
+				return
+			end
+			ctx.Request("EquipRune", { Unit = pickerUnit, Rune = runeId })
+		end)
+	end
+end
+
+function HalloweenUI.OpenRunePicker(unitId)
+	pickerUnit = unitId
+	UI.Show("Runes", true)
+	refreshPicker()
+end
+
+function HalloweenUI.OnProfile(prof)
+	if UI.Modals.Runes and UI.Modals.Runes.Visible then
+		refreshPicker()
+	end
+end
+
+------------------------------------------------------------------------
+-- ОЧЕРЕДЬ НА 4 КВАДРАТАХ
+------------------------------------------------------------------------
+local function buildQueue()
+	local p = K.panel({ Parent = UI.Root, AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(330, 330), Position = UDim2.new(1, -110, 0.5, 0), StrokeColor = ORANGE, Visible = false, ZIndex = 4 })
+	refs.Queue = p
+	K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.fromOffset(10, 8), Text = "🎃 HALLOWEEN TD", TextColor3 = ORANGE, ZIndex = 5 })
+	refs.QMembers = K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 92), Position = UDim2.fromOffset(10, 44), Text = "", TextScaled = false, TextSize = 17, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 5 })
+	refs.QHost = K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 18), Position = UDim2.fromOffset(10, 140), Text = "", TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 5 })
+	local row = K.new("Frame", { Parent = p, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 44), Position = UDim2.fromOffset(10, 164), ZIndex = 5 }, {
+		K.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }),
+	})
+	refs.QDiff = {}
+	for i, key in ipairs(Config.Halloween.Difficulties) do
+		local d = Config.Difficulties[key]
+		refs.QDiff[key] = K.button({ Parent = row, Size = UDim2.fromOffset(98, 44), Text = d.Name .. "\n" .. Config.Halloween.Coins[key] .. "🎃", TextColor3 = d.Color, BackgroundColor3 = UI.Theme.BG2, StrokeColor = d.Color, LayoutOrder = i, ZIndex = 6 }, function()
+			ctx.Request("QueueDifficulty", { Difficulty = key })
+		end)
+	end
+	refs.QTimer = K.label({ Parent = p, Size = UDim2.new(1, -20, 0, 30), Position = UDim2.fromOffset(10, 214), Text = "", TextColor3 = GOLD, ZIndex = 5 })
+	refs.QStart = K.button({ Parent = p, Size = UDim2.new(0.5, -14, 0, 44), Position = UDim2.new(0, 10, 1, -54), Text = "СТАРТ", BackgroundColor3 = rgb(140, 70, 20), StrokeColor = ORANGE, ZIndex = 6 }, function()
+		ctx.Request("QueueStart")
+	end)
+	K.button({ Parent = p, Size = UDim2.new(0.5, -14, 0, 44), Position = UDim2.new(0.5, 4, 1, -54), Text = "ВЫЙТИ", BackgroundColor3 = rgb(110, 30, 40), StrokeColor = UI.Theme.Bad, ZIndex = 6 }, function()
+		ctx.Request("QueueLeave")
+	end)
+end
+
+function HalloweenUI.UpdateQueue()
+	local st = ctx.State
+	local names = st:GetAttribute("HQ_Members") or ""
+	local inQueue = false
+	local list = {}
+	for n in string.gmatch(names, "[^\n]+") do
+		list[#list + 1] = n
+		if n == player.DisplayName then
+			inQueue = true
+		end
+	end
+	local p = refs.Queue
+	if not p then
+		return
+	end
+	p.Visible = inQueue and not player:GetAttribute("InMatch")
+	if not p.Visible then
+		return
+	end
+	local isHost = (st:GetAttribute("HQ_Host") or 0) == player.UserId
+	local lines = {}
+	for i = 1, Config.HalloweenIsland.Queue.MaxPlayers do
+		lines[i] = (i == 1 and "👑 " or "• ") .. (list[i] or "свободно")
+	end
+	refs.QMembers.Text = table.concat(lines, "\n")
+	refs.QHost.Text = isHost and "Ты хост: выбери сложность" or "Сложность выбирает хост"
+	local diff = st:GetAttribute("HQ_Diff") or "Easy"
+	for key, b in pairs(refs.QDiff) do
+		b.BackgroundColor3 = key == diff and Config.Difficulties[key].Color:Lerp(Color3.new(0, 0, 0), 0.4) or UI.Theme.BG2
+		b.Active = isHost
+		b.AutoButtonColor = false
+	end
+	refs.QStart.Visible = isHost
+	local at = st:GetAttribute("HQ_At") or 0
+	if st:GetAttribute("HQ_Busy") then
+		refs.QTimer.Text = "Арена занята — ждём конца матча"
+	elseif at > 0 then
+		refs.QTimer.Text = "Телепорт через " .. math.max(0, math.ceil(at - workspace:GetServerTimeNow())) .. " c"
+	else
+		refs.QTimer.Text = ""
+	end
+end
+
+------------------------------------------------------------------------
+-- БЕСТИАРИЙ
+------------------------------------------------------------------------
+local function enemyViewport(parent, id, props)
+	local vf = K.new("ViewportFrame", { Parent = parent, BackgroundTransparency = 1, Size = props.Size, Position = props.Position or UDim2.new(), Ambient = rgb(150, 130, 160), LightColor = rgb(255, 240, 230), LightDirection = Vector3.new(-0.5, -1, -0.8), ZIndex = props.ZIndex or 1 })
+	local ok, rig = pcall(EnemyModels.Build, id)
+	if not ok then
+		return vf
+	end
+	for _, d in ipairs(rig.Model:GetDescendants()) do
+		if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("PointLight") then
+			d:Destroy()
+		end
+	end
+	rig.Model.Parent = vf
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = 34
+	local h = rig.Height or 5
+	local c = Vector3.new(0, h * 0.5 - rig.HipHeight, 0)
+	cam.CFrame = CFrame.lookAt(c + Vector3.new(h * 0.45, h * 0.25, -h * 1.7), c)
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	return vf
+end
+
+local function buildBestiary()
+	local m = K.modal("Bestiary", "БЕСТИАРИЙ • HAUNTED HOLLOW", UDim2.fromOffset(940, 580), "Pumpkin")
+	local grid = K.new("ScrollingFrame", { Parent = m, BackgroundTransparency = 1, Size = UDim2.new(1, -36, 1, -80), Position = UDim2.fromOffset(18, 66), CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 6, BorderSizePixel = 0, ZIndex = 6 }, {
+		K.new("UIGridLayout", { CellSize = UDim2.fromOffset(212, 236), CellPadding = UDim2.fromOffset(10, 10), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	refs.BestiaryGrid = grid
+	refs.BestiaryBuilt = false
+end
+
+local BOSS_OF = { GraveWarden = "Easy", FogReaper = "Medium", CursedMonarch = "Hard" }
+local function fillBestiary()
+	if refs.BestiaryBuilt then
+		return
+	end
+	refs.BestiaryBuilt = true
+	for order, id in ipairs(Config.EnemyOrder) do
+		local e = Config.Enemies[id]
+		if e.Event == "Halloween" then
+			local diff = BOSS_OF[id] and Config.Difficulties[BOSS_OF[id]]
+			local col = diff and diff.Color or (e.MiniBoss and rgb(200, 90, 255) or ORANGE)
+			local card = K.panel({ Parent = refs.BestiaryGrid, BackgroundColor3 = UI.Theme.BG2, StrokeColor = col, LayoutOrder = order, ZIndex = 7 })
+			enemyViewport(card, id, { Size = UDim2.new(1, 0, 0, 110), ZIndex = 8 })
+			K.label({ Parent = card, Size = UDim2.new(1, -10, 0, 22), Position = UDim2.fromOffset(5, 110), Text = e.Name, TextColor3 = col, ZIndex = 8 })
+			local tag = diff and ("ФИНАЛЬНЫЙ БОСС • " .. diff.Name) or (e.MiniBoss and "МИНИ-БОСС" or "ВРАГ")
+			K.label({ Parent = card, Size = UDim2.new(1, -10, 0, 14), Position = UDim2.fromOffset(5, 132), Text = string.format("%s  •  HP %d  •  скор. %g", tag, e.Health, e.Speed), TextColor3 = UI.Theme.Dim, Font = Enum.Font.GothamBold, ZIndex = 8 })
+			K.label({ Parent = card, Size = UDim2.new(1, -12, 0, 80), Position = UDim2.fromOffset(6, 150), Text = e.Description or "", TextScaled = false, TextSize = 12, TextWrapped = true, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 8 })
+		end
+	end
+end
+
+HalloweenUI.FillBestiary = fillBestiary
+
+------------------------------------------------------------------------
+function HalloweenUI.Init(c, ui)
+	ctx, UI = c, ui
+	Config, UnitModels, EnemyModels, CaseModels, FX = c.Config, c.UnitModels, c.EnemyModels, c.CaseModels, c.FX
+	K = UI.Kit
+	buildRunePicker()
+	buildQueue()
+	buildBestiary()
+	-- 3D-руны медленно вращаются
+	RunService.RenderStepped:Connect(function()
+		local list = refs.RuneSpins
+		if not list then
+			return
+		end
+		local t = os.clock()
+		for i = #list, 1, -1 do
+			local it = list[i]
+			if not it.VF.Parent then
+				table.remove(list, i)
+			elseif it.VF.Visible then
+				it.Model:PivotTo(CFrame.new(0, math.sin(t * 1.6) * 0.08, 0) * CFrame.Angles(0, t * 0.9, 0))
+			end
+		end
+	end)
+end
+
+return HalloweenUI
+]======] }
 FILES[#FILES + 1] = { "StarterPlayerScripts", { "VoidTDClient", "UI" }, "ModuleScript", [======[
 --!nocheck
 -- VOID TD :: UI (клиент)
@@ -11250,6 +18345,7 @@ local UI = {}
 local ctx, Config, UnitModels, Renderer, FX
 local player = Players.LocalPlayer
 local UnitViewer = require(script.Parent:WaitForChild("UnitViewer"))
+local HalloweenUI = require(script.Parent:WaitForChild("HalloweenUI"))
 
 local THEME = {
 	BG = Color3.fromRGB(16, 10, 26),
@@ -11447,6 +18543,30 @@ function ICONS.Back(c, z)
 	shape(c, 0.34, 0.63, 0.32, 0.12, col, 42, 0.5, z)
 end
 
+-- тыква: дольки, хвостик, вырезанное лицо
+function ICONS.Pumpkin(c, z)
+	for i, x in ipairs({ 0.3, 0.7, 0.5 }) do
+		local o = shape(c, x, 0.58, i == 3 and 0.42 or 0.38, 0.6, Color3.new(1, 1, 1), 0, 0.45, z + (i == 3 and 1 or 0))
+		shade(o, Color3.fromRGB(255, 165, 60), Color3.fromRGB(190, 80, 20))
+		new("UIStroke", { Parent = o, Color = Color3.fromRGB(70, 25, 5), Thickness = 1.5 })
+	end
+	shape(c, 0.52, 0.22, 0.1, 0.18, Color3.fromRGB(80, 110, 40), 14, 0.3, z + 2)
+	for _, x in ipairs({ 0.38, 0.62 }) do
+		shape(c, x, 0.52, 0.12, 0.12, Color3.fromRGB(255, 230, 120), 45, 0.1, z + 3)
+	end
+	shape(c, 0.5, 0.7, 0.34, 0.08, Color3.fromRGB(255, 230, 120), 0, 0.4, z + 3)
+end
+
+-- руна: камень-ромб с символом
+function ICONS.Rune(c, z)
+	local o = shape(c, 0.5, 0.5, 0.62, 0.62, Color3.new(1, 1, 1), 45, 0.15, z)
+	shade(o, Color3.fromRGB(255, 160, 60), Color3.fromRGB(120, 30, 40), 45)
+	new("UIStroke", { Parent = o, Color = Color3.fromRGB(40, 10, 10), Thickness = 2 })
+	shape(c, 0.5, 0.5, 0.08, 0.42, Color3.fromRGB(255, 240, 200), 0, 0.5, z + 1)
+	shape(c, 0.5, 0.4, 0.3, 0.07, Color3.fromRGB(255, 240, 200), 30, 0.5, z + 1)
+	shape(c, 0.5, 0.6, 0.3, 0.07, Color3.fromRGB(255, 240, 200), -30, 0.5, z + 1)
+end
+
 -- контейнер с иконкой (квадратный)
 local function icon(kind, parent, props)
 	local c = new("Frame", { Parent = parent, Name = "Icon" .. kind, BackgroundTransparency = 1, Size = props.Size, Position = props.Position or UDim2.new(), AnchorPoint = props.AnchorPoint or Vector2.new(), ZIndex = props.ZIndex or 1 })
@@ -11499,6 +18619,30 @@ end
 local function rarityColor(id)
 	return Config.Rarities[Config.Units[id].Rarity].Color
 end
+
+-- лёгкие оранжевые искры на карточках хэллоуинских юнитов (двигаются в UI.Update)
+local sparks = {}
+local function eventSparks(parent, z, n)
+	for i = 1, n or 4 do
+		local f = new("Frame", { Parent = parent, BackgroundColor3 = Color3.fromRGB(255, 160, 60), BorderSizePixel = 0, Size = UDim2.fromOffset(3, 3), Rotation = 45, ZIndex = z, BackgroundTransparency = 0.2 })
+		sparks[#sparks + 1] = { F = f, X = math.random(), P = math.random() * 3, S = 0.25 + math.random() * 0.25 }
+	end
+end
+
+-- Тег события: значок-тыква в углу, «🎃 HALLOWEEN» и искры. Рамка остаётся цветом редкости.
+local function eventTag(parent, unitId, z, textPos, textSize)
+	local def = Config.Units[unitId]
+	local ev = def and def.Event and Config.Events[def.Event]
+	if not ev then
+		return
+	end
+	icon("Pumpkin", parent, { Size = UDim2.fromOffset(22, 22), Position = UDim2.fromOffset(4, 4), ZIndex = z + 2 })
+	if textPos then
+		label({ Parent = parent, Size = textSize or UDim2.new(1, -8, 0, 13), Position = textPos, Text = ev.Tag, TextColor3 = ev.Color, Font = Enum.Font.GothamBold, ZIndex = z + 1 })
+	end
+	eventSparks(parent, z + 1, 4)
+end
+UI.EventTag = eventTag
 
 -- 3D превью юнита
 local function viewport(parent, unitId, level, props)
@@ -11598,6 +18742,8 @@ local function buildHUD()
 	refs.MoneyIcon = icon("Coin", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 7) })
 	refs.Gems = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 32), Position = UDim2.fromOffset(52, 50), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(150, 200, 255) })
 	refs.GemsIcon = icon("Gem", cur, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(10, 49) })
+	refs.Coins = label({ Parent = cur, Size = UDim2.new(1, -60, 0, 30), Position = UDim2.fromOffset(52, 92), Text = "0", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(255, 160, 60) })
+	refs.CoinsIcon = icon("Pumpkin", cur, { Size = UDim2.fromOffset(32, 32), Position = UDim2.fromOffset(11, 91) })
 
 	-- волна и ядро
 	local top = panel({ Parent = gui, AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 104), Position = UDim2.new(0.5, 0, 0, 12) })
@@ -11942,6 +19088,8 @@ function UI.Toggle(name)
 					UI.RefreshInventory()
 				elseif name == "Mode" then
 					UI.RefreshMode()
+				elseif name == "Bestiary" then
+					HalloweenUI.FillBestiary()
 				end
 			end
 		else
@@ -12043,6 +19191,21 @@ end
 
 local function rateText(case)
 	local lines = {}
+	if case.Rewards then
+		-- полный список наград с шансами (юниты и руны)
+		for _, r in ipairs(case.Rewards) do
+			local name, color
+			if r.Rune then
+				local rd = Config.Runes[r.Rune]
+				name, color = "Руна «" .. rd.Name .. "»", Config.RuneRarity.Color
+			else
+				local def = Config.Units[r.Unit]
+				name, color = def.Name .. " (" .. def.Rarity .. ")", Config.Rarities[def.Rarity].Color
+			end
+			lines[#lines + 1] = string.format('<font color="#%s">%s</font>  %s%%', color:ToHex(), name, tostring(r.Rate))
+		end
+		return table.concat(lines, "\n")
+	end
 	for _, rarity in ipairs(Config.RarityOrder) do
 		local rate = case.Rates[rarity]
 		if rate and rate > 0 then
@@ -12062,8 +19225,11 @@ function UI.SelectCase(caseId)
 	refs.CaseName.TextColor3 = case.Color
 	refs.CaseDesc.Text = case.Description
 	refs.CaseRates.Text = rateText(case)
-	refs.CaseBuy1.Text = "x1  💎" .. case.Cost1
-	refs.CaseBuy10.Text = "x10  💎" .. case.Cost10
+	refs.CaseRates.TextSize = case.Rewards and 13 or 18
+	local cur = case.Currency == "HalloweenCoins" and "🎃" or "💎"
+	refs.CaseBuy1.Text = (case.Single and "ОТКРЫТЬ  " or "x1  ") .. cur .. case.Cost1
+	refs.CaseBuy10.Visible = not case.Single and case.Cost10 ~= nil
+	refs.CaseBuy10.Text = "x10  " .. cur .. tostring(case.Cost10 or "")
 	refs.CaseBig:ClearAllChildren()
 	caseViews.Big = caseViewport(refs.CaseBig, caseId)
 	for id, b in pairs(refs.CaseTabs) do
@@ -12081,6 +19247,17 @@ function UI.SelectCase(caseId)
 		viewport(cell, id, 1, { Size = UDim2.new(1, 0, 0, 74), ZIndex = 8 })
 		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 16), Position = UDim2.fromOffset(3, 74), Text = def.Name, Font = Enum.Font.GothamBold, ZIndex = 8 })
 		label({ Parent = cell, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.fromOffset(3, 90), Text = def.Rarity, TextColor3 = rc, ZIndex = 8 })
+		eventTag(cell, id, 8)
+	end
+	-- руны в кейсе
+	for i, r in ipairs(case.Rewards or {}) do
+		if r.Rune then
+			local rd = Config.Runes[r.Rune]
+			local cell = panel({ Parent = refs.CaseUnits, Size = UDim2.fromOffset(100, 108), BackgroundColor3 = THEME.BG2, StrokeColor = Config.RuneRarity.Color, LayoutOrder = 1000 + i, ZIndex = 7 })
+			HalloweenUI.RuneViewport(cell, r.Rune, { Size = UDim2.new(1, 0, 0, 74), ZIndex = 8 })
+			label({ Parent = cell, Size = UDim2.new(1, -6, 0, 16), Position = UDim2.fromOffset(3, 74), Text = rd.Name, Font = Enum.Font.GothamBold, ZIndex = 8 })
+			label({ Parent = cell, Size = UDim2.new(1, -6, 0, 14), Position = UDim2.fromOffset(3, 90), Text = "РУНА • HALLOWEEN", TextColor3 = Config.RuneRarity.Color, ZIndex = 8 })
+		end
 	end
 end
 
@@ -12090,6 +19267,10 @@ local function showCards(overlay, results)
 	})
 	for i, r in ipairs(results) do
 		task.delay(0.15 * i, function()
+			if r.Rune then
+				HalloweenUI.RuneCard(grid, r, i)
+				return
+			end
 			local def = Config.Units[r.Id]
 			local rc = rarityColor(r.Id)
 			local card = panel({ Parent = grid, BackgroundColor3 = THEME.BG2, StrokeColor = rc, LayoutOrder = i, ZIndex = 23 })
@@ -12098,6 +19279,7 @@ local function showCards(overlay, results)
 			viewport(card, r.Id, 1, { Size = UDim2.new(1, 0, 0, 120), Position = UDim2.fromOffset(0, 8), ZIndex = 24 })
 			label({ Parent = card, Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 130), Text = def.Name, ZIndex = 24 })
 			label({ Parent = card, Size = UDim2.new(1, -8, 0, 18), Position = UDim2.fromOffset(4, 154), Text = def.Rarity:upper(), TextColor3 = rc, ZIndex = 24 })
+			eventTag(card, r.Id, 24, UDim2.fromOffset(4, 172), UDim2.new(1, -8, 0, 14))
 			if r.New then
 				local tag = label({ Parent = card, Size = UDim2.fromOffset(56, 22), Position = UDim2.fromOffset(6, 6), Text = "NEW!", TextColor3 = THEME.Gold, ZIndex = 25 })
 				tag.Rotation = -12
@@ -12118,7 +19300,9 @@ local function playCaseOpening(caseId, results)
 	local case = Config.Cases[caseId]
 	local best = 1
 	for _, r in ipairs(results) do
-		best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+		if r.Id then
+			best = math.max(best, Config.Rarities[Config.Units[r.Id].Rarity].Order)
+		end
 	end
 	local bestName = Config.RarityOrder[best]
 	local bestColor = Config.Rarities[bestName].Color
@@ -12252,7 +19436,12 @@ local function buildCases()
 		local ok, res = ctx.Request("Summon", { Case = selectedCase, Count = count })
 		busy = false
 		if ok then
-			playCaseOpening(selectedCase, res)
+			if selectedCase == "Halloween" then
+				-- проклятый сундук: своя кинематографичная анимация
+				HalloweenUI.PlayOpening(res, showCards)
+			else
+				playCaseOpening(selectedCase, res)
+			end
 		end
 	end
 	refs.CaseBuy1 = button({ Parent = m, AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(200, 50), Position = UDim2.new(1, -238, 1, -12), Text = "x1", BackgroundColor3 = THEME.AccentDark, ZIndex = 6 }, function()
@@ -12346,6 +19535,12 @@ local function buildInventory()
 	refs.InvRarity = label({ Parent = d, Size = UDim2.new(1, -20, 0, 18), Position = UDim2.fromOffset(10, 38), Text = "", TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7 })
 	refs.InvDesc = label({ Parent = d, Size = UDim2.new(1, -20, 0, 48), Position = UDim2.fromOffset(10, 60), Text = "", TextScaled = false, TextSize = 14, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Gotham, TextColor3 = THEME.Dim, ZIndex = 7 })
 	refs.InvStats = label({ Parent = d, Size = UDim2.new(1, -20, 0, 120), Position = UDim2.fromOffset(10, 110), Text = "", TextScaled = false, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.Code, ZIndex = 7 })
+	-- руна юнита: показать, надеть, снять
+	refs.InvRune = button({ Parent = d, AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -20, 0, 34), Position = UDim2.new(0, 10, 1, -60), Text = "РУНА: нет", TextColor3 = Color3.fromRGB(255, 170, 70), BackgroundColor3 = Color3.fromRGB(50, 26, 20), StrokeColor = Color3.fromRGB(255, 130, 30), ZIndex = 7 }, function()
+		if invSelected then
+			HalloweenUI.OpenRunePicker(invSelected)
+		end
+	end)
 	refs.InvEquip = button({ Parent = d, AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -20, 0, 44), Position = UDim2.new(0, 10, 1, -10), Text = "EQUIP", BackgroundColor3 = Color3.fromRGB(60, 130, 80), ZIndex = 7 }, function()
 		if invSelected then
 			UI.ToggleEquip(invSelected)
@@ -12404,8 +19599,22 @@ local function selectInventory(id)
 		end
 	end
 	refs.InvEquip.Visible = owned
+	refs.InvRune.Visible = owned
+	local runeId = prof.RuneSlots and prof.RuneSlots[id]
+	refs.InvRune.Text = runeId and ("РУНА: " .. Config.Runes[runeId].Name .. "  (сменить)") or "РУНА: нет  (надеть)"
+	if def.Event and Config.Events[def.Event] then
+		refs.InvRarity.Text = def.Rarity:upper() .. "  •  " .. Config.Events[def.Event].Tag .. (def.Ability and ("  •  " .. def.Ability) or "")
+	end
 	refs.InvEquip.Text = equipped and "UNEQUIP" or "EQUIP"
 	refs.InvEquip.BackgroundColor3 = equipped and Color3.fromRGB(130, 50, 60) or Color3.fromRGB(60, 130, 80)
+end
+
+-- фильтр коллекции: nil — все юниты, "Halloween" — только юниты события (круг на острове)
+function UI.SetInventoryFilter(eventKey)
+	UI.InvFilter = eventKey
+	if modals.Inventory and modals.Inventory.Visible then
+		UI.RefreshInventory()
+	end
 end
 
 function UI.RefreshInventory()
@@ -12440,6 +19649,9 @@ function UI.RefreshInventory()
 		local def = Config.Units[id]
 		local count = prof.Inventory[id] or 0
 		local rc = rarityColor(id)
+		if UI.InvFilter and def.Event ~= UI.InvFilter then
+			continue
+		end
 		local b = button({ Parent = refs.InvGrid, Text = "", BackgroundColor3 = THEME.BG2, StrokeColor = count > 0 and rc or Color3.fromRGB(60, 50, 70), LayoutOrder = order, ZIndex = 7 }, function()
 			selectInventory(id)
 			if (ctx.Profile.Inventory[id] or 0) > 0 then
@@ -12454,7 +19666,11 @@ function UI.RefreshInventory()
 		label({ Parent = b, Size = UDim2.new(1, -8, 0, 16), Position = UDim2.fromOffset(4, 118), Text = def.Rarity, TextColor3 = rc, ZIndex = 8 })
 		if count > 0 then
 			label({ Parent = b, Size = UDim2.fromOffset(40, 20), Position = UDim2.new(1, -44, 0, 4), Text = "x" .. count, TextColor3 = THEME.Gold, ZIndex = 9 })
+			if prof.RuneSlots and prof.RuneSlots[id] then
+				icon("Rune", b, { Size = UDim2.fromOffset(20, 20), Position = UDim2.new(1, -24, 0, 26), ZIndex = 10 })
+			end
 		end
+		eventTag(b, id, 8, UDim2.fromOffset(4, 82), UDim2.new(1, -8, 0, 13))
 	end
 	if invSelected then
 		selectInventory(invSelected)
@@ -12531,7 +19747,7 @@ local function showEnd(victory, payload)
 	local title = label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(800, 120), Position = UDim2.fromScale(0.5, 0.38), Text = victory and "VICTORY" or "DEFEAT", TextColor3 = victory and THEME.Gold or THEME.Bad, ZIndex = 31, StrokeThickness = 4 })
 	local sc = new("UIScale", { Parent = title, Scale = 0.2 })
 	tween(sc, 0.5, { Scale = 1 }, Enum.EasingStyle.Back)
-	local sub = victory and ("Пустота отступила! Награда: 💎" .. tostring(payload.Gems)) or ("Ядро Пустоты разрушено на волне " .. tostring(payload.Wave))
+	local sub = victory and ("Пустота отступила! Награда: 💎" .. tostring(payload.Gems) .. (payload.Coins and ("  +🎃" .. payload.Coins .. " Halloween Coins") or "")) or ("Ядро разрушено на волне " .. tostring(payload.Wave) .. (payload.Mode == "Halloween" and "  •  Halloween Coins не выдаются" or ""))
 	label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(800, 40), Position = UDim2.fromScale(0.5, 0.5), Text = sub, ZIndex = 31 })
 	local timer = label({ Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(600, 30), Position = UDim2.fromScale(0.5, 0.57), Text = "", TextColor3 = THEME.Dim, ZIndex = 31 })
 	local reset = payload.Reset or 15
@@ -12573,7 +19789,7 @@ function UI.OnNotify(p)
 		end
 		local f = refs.CoreFill
 		f.BackgroundColor3 = THEME.Bad
-		tween(f, 0.4, { BackgroundColor3 = THEME.Accent })
+		tween(f, 0.4, { BackgroundColor3 = UI.MapMode == "Halloween" and Color3.fromRGB(255, 130, 30) or THEME.Accent })
 	elseif t == "Victory" then
 		FX.Sound("Victory", 1, 1)
 		showEnd(true, p)
@@ -12591,8 +19807,28 @@ function UI.OnNotify(p)
 			refs.EndOverlay = nil
 		end
 		UI.CloseUnit()
-		UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
+		if player:GetAttribute("Island") then
+			UI.Toast("Бой окончен. Ты на Хэллоуин-острове", "good")
+		else
+			UI.Toast("Бой окончен. Ты в лобби — встань в круг ИГРАТЬ", "good")
+		end
 	end
+end
+
+-- карта матча: Void или Haunted Hollow
+function UI.SetMapMode(key)
+	UI.MapMode = key
+	if refs.CoreFill then
+		refs.CoreFill.BackgroundColor3 = key == "Halloween" and Color3.fromRGB(255, 130, 30) or THEME.Accent
+	end
+end
+
+function UI.Fade(text)
+	task.spawn(UI.FadeTransition, text)
+end
+
+function UI.UpdateQueue()
+	HalloweenUI.UpdateQueue()
 end
 
 function UI.SetLiteText(on)
@@ -12607,6 +19843,7 @@ function UI.SetProfile(prof)
 	if modals.Inventory and modals.Inventory.Visible then
 		UI.RefreshInventory()
 	end
+	HalloweenUI.OnProfile(prof)
 end
 
 local lastRefresh = 0
@@ -12616,7 +19853,7 @@ function UI.Update(dt)
 	refs.Money.Text = Config.FormatNumber(money)
 	local gems = player:GetAttribute("Gems") or (ctx.Profile and ctx.Profile.Gems) or 0
 	refs.Gems.Text = Config.FormatNumber(gems)
-	if refs.SummonGems then
+	if refs.SummonGems and selectedCase ~= "Halloween" then
 		refs.SummonGems.Text = "💎 " .. Config.FormatNumber(gems)
 	end
 
@@ -12628,9 +19865,32 @@ function UI.Update(dt)
 	refs.Hotbar.Visible = inMatch
 	refs.Leave.Visible = inMatch
 	refs.Money.Visible = inMatch
-	refs.Currency.Size = UDim2.fromOffset(230, inMatch and 92 or 50)
-	refs.Gems.Position = UDim2.fromOffset(52, inMatch and 50 or 8)
-	refs.GemsIcon.Position = UDim2.fromOffset(10, inMatch and 49 or 7)
+	local coins = player:GetAttribute("HalloweenCoins") or (ctx.Profile and ctx.Profile.HalloweenCoins) or 0
+	refs.Coins.Text = Config.FormatNumber(coins)
+	local gy = inMatch and 50 or 8
+	refs.Currency.Size = UDim2.fromOffset(230, gy + 84)
+	refs.Gems.Position = UDim2.fromOffset(52, gy)
+	refs.GemsIcon.Position = UDim2.fromOffset(10, gy - 1)
+	refs.Coins.Position = UDim2.fromOffset(52, gy + 44)
+	refs.CoinsIcon.Position = UDim2.fromOffset(11, gy + 43)
+	if refs.SummonGems and selectedCase == "Halloween" then
+		refs.SummonGems.Text = "🎃 " .. Config.FormatNumber(coins)
+		refs.SummonGems.TextColor3 = Color3.fromRGB(255, 160, 60)
+	elseif refs.SummonGems then
+		refs.SummonGems.TextColor3 = Color3.fromRGB(120, 200, 255)
+	end
+	-- искры на карточках хэллоуинских юнитов
+	local tt = os.clock()
+	for i = #sparks, 1, -1 do
+		local sp = sparks[i]
+		if not sp.F.Parent then
+			table.remove(sparks, i)
+		else
+			local a = ((tt * sp.S + sp.P) % 1)
+			sp.F.Position = UDim2.fromScale(sp.X + math.sin(tt * 2 + sp.P) * 0.04, 1 - a)
+			sp.F.BackgroundTransparency = 0.2 + a * 0.8
+		end
+	end
 	refs.MoneyIcon.Visible = inMatch
 	if not inMatch and UI.SelectedUid then
 		UI.CloseUnit()
@@ -12666,7 +19926,7 @@ function UI.Update(dt)
 	local hp = State:GetAttribute("CoreHP") or 100
 	local maxHp = State:GetAttribute("CoreMaxHP") or 100
 	refs.CoreFill.Size = UDim2.fromScale(math.clamp(hp / maxHp, 0, 1), 1)
-	refs.CoreText.Text = "VOID CORE  " .. hp .. " / " .. maxHp
+	refs.CoreText.Text = (UI.MapMode == "Halloween" and "СВЯТИЛИЩЕ  " or "VOID CORE  ") .. hp .. " / " .. maxHp
 
 	-- босс
 	local bossId = State:GetAttribute("BossId") or 0
@@ -12739,9 +19999,13 @@ function UI.Init(c)
 	UI.Gui = screen
 	-- окно 3D-просмотра юнита
 	UI.Root = gui
-	UI.Kit = { new = new, corner = corner, stroke = stroke, label = label, button = button, panel = panel, tween = tween }
+	UI.Kit = { new = new, corner = corner, stroke = stroke, label = label, button = button, panel = panel, tween = tween,
+		modal = modal, viewport = viewport, icon = icon, rarityColor = rarityColor, eventTag = eventTag, eventSparks = eventSparks, pad = pad }
 	UI.SpecialText = specialText
+	UI.Modals = modals
+	UI.Refs = refs
 	UnitViewer.Init(c, UI)
+	HalloweenUI.Init(c, UI)
 end
 
 return UI
@@ -12833,7 +20097,7 @@ local function update()
 		local screen = UserInputService:GetMouseLocation()
 		ray = cam:ViewportPointToRay(screen.X, screen.Y)
 	end
-	local map = workspace:FindFirstChild("VoidTDMap")
+	local map = ctx.Renderer.ActiveMap()
 	if not map then
 		return
 	end

@@ -12,6 +12,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local MapBuilder = require(script:WaitForChild("MapBuilder"))
 local DataService = require(script:WaitForChild("DataService"))
 local GameService = require(script:WaitForChild("GameService"))
+local HalloweenService = require(script:WaitForChild("HalloweenService"))
 
 -- Remotes / State
 local function folder(parent, name)
@@ -42,7 +43,14 @@ local state = folder(Shared, "State")
 local unitsFolder = folder(Shared, "Units")
 
 local map = MapBuilder.Build()
-GameService.Init(remotes, state, unitsFolder, map)
+-- Хэллоуин: остров с порталом и карта Haunted Hollow
+local okH, halloweenMap = pcall(MapBuilder.BuildHalloween)
+if not okH then
+	warn("[VOID TD] Хэллоуин-мир не построен: " .. tostring(halloweenMap))
+	halloweenMap = nil
+end
+GameService.Init(remotes, state, unitsFolder, map, { Void = map, Halloween = halloweenMap })
+HalloweenService.Init(GameService, state)
 
 local function pushProfile(player)
 	local snap = DataService.Snapshot(player)
@@ -50,6 +58,7 @@ local function pushProfile(player)
 		remotes.Profile:FireClient(player, snap)
 	end
 end
+GameService.OnProfileChanged = pushProfile
 
 local function onPlayerAdded(player)
 	DataService.Load(player)
@@ -187,6 +196,34 @@ handlers.Summon = function(player, data)
 	return ok, result
 end
 
+handlers.EquipRune = function(player, data)
+	if type(data) ~= "table" or type(data.Unit) ~= "string" then
+		return false, "Неверный запрос"
+	end
+	local runeId = type(data.Rune) == "string" and data.Rune or nil
+	local ok, err = DataService.EquipRune(player, data.Unit, runeId)
+	if ok then
+		pushProfile(player)
+	end
+	return ok, err
+end
+
+handlers.Teleport = function(player, data)
+	return HalloweenService.Teleport(player, type(data) == "table" and data.To or nil)
+end
+
+handlers.QueueDifficulty = function(player, data)
+	return HalloweenService.SetDifficulty(player, type(data) == "table" and data.Difficulty or nil)
+end
+
+handlers.QueueStart = function(player)
+	return HalloweenService.StartNow(player)
+end
+
+handlers.QueueLeave = function(player)
+	return HalloweenService.Leave(player)
+end
+
 handlers.Equip = function(player, data)
 	if type(data) ~= "table" then
 		return false, "Неверный запрос"
@@ -240,8 +277,9 @@ task.spawn(function()
 		task.wait(5)
 		for _, p in ipairs(Players:GetPlayers()) do
 			local prof = DataService.Get(p)
-			if prof and p:GetAttribute("LastGems") ~= prof.Gems then
+			if prof and (p:GetAttribute("LastGems") ~= prof.Gems or p:GetAttribute("LastCoins") ~= prof.HalloweenCoins) then
 				p:SetAttribute("LastGems", prof.Gems)
+				p:SetAttribute("LastCoins", prof.HalloweenCoins)
 				pushProfile(p)
 				DataService.Save(p)
 			end

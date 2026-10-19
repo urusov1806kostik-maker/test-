@@ -7,17 +7,33 @@ local Config = require(script.Parent.Config)
 local PathUtil = {}
 
 local points = {}
-for i, p in ipairs(Config.Map.Path) do
-	points[i] = Vector3.new(p[1], Config.Map.GroundY, p[2])
-end
-
 local cumulative = { 0 }
-for i = 2, #points do
-	cumulative[i] = cumulative[i - 1] + (points[i] - points[i - 1]).Magnitude
-end
+local mapCfg = Config.Map
 
-PathUtil.Points = points
-PathUtil.Length = cumulative[#cumulative]
+-- Перестроить дорогу для карты (Void / Halloween). Сервер и клиент вызывают при смене карты.
+function PathUtil.SetMap(key)
+	mapCfg = (Config.Maps and Config.Maps[key]) or Config.Map
+	local c = mapCfg.Center or Vector3.new()
+	local rel = mapCfg ~= Config.Map
+	points = {}
+	for i, p in ipairs(mapCfg.Path) do
+		points[i] = rel and Vector3.new(c.X + p[1], mapCfg.GroundY, c.Z + p[2]) or Vector3.new(p[1], mapCfg.GroundY, p[2])
+	end
+	cumulative = { 0 }
+	for i = 2, #points do
+		cumulative[i] = cumulative[i - 1] + (points[i] - points[i - 1]).Magnitude
+	end
+	PathUtil.Points = points
+	PathUtil.Length = cumulative[#cumulative]
+	PathUtil.MapKey = mapCfg.Key or "Void"
+	PathUtil.Map = mapCfg
+end
+PathUtil.SetMap("Void")
+
+-- Доля пройденного пути (0..1)
+function PathUtil.Fraction(d)
+	return d / PathUtil.Length
+end
 
 -- Позиция и направление на расстоянии d от начала дороги
 function PathUtil.PositionAt(d)
@@ -79,12 +95,13 @@ end
 -- Проверка позиции для установки (используется и клиентом для превью, и сервером)
 function PathUtil.IsPlacementClear(pos)
 	local s = Config.Settings
-	local half = Config.Map.PathWidth / 2
+	local half = mapCfg.PathWidth / 2
 	if PathUtil.DistanceToPath(pos) < half + s.PathClearance then
 		return false, "Нельзя ставить на дорогу"
 	end
-	local size = Config.Map.IslandSize
-	if math.abs(pos.X) > size.X / 2 - 3 or math.abs(pos.Z) > size.Y / 2 - 3 then
+	local size = mapCfg.IslandSize
+	local c = mapCfg.Center or Vector3.new()
+	if math.abs(pos.X - c.X) > size.X / 2 - 3 or math.abs(pos.Z - c.Z) > size.Y / 2 - 3 then
 		return false, "Слишком близко к краю"
 	end
 	if PathUtil.FlatDistance(pos, points[1]) < 14 then

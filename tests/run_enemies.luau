@@ -33,7 +33,10 @@ end
 local Renderer = env.require(clientScript.Renderer)
 local EnemyModels = env.require(RS.VoidTD.EnemyModels)
 local UnitModels = env.require(RS.VoidTD.UnitModels)
-local ids = { "LostSoul", "VoidCrawler", "ShadowBeast", "ArmoredHorror", "RiftPhantom", "AbyssBrute", "CorruptedTitan", "VoidDevourer", "TheEntity" }
+-- все враги из Config.EnemyOrder (первые 9 — Void, дальше — Хэллоуин)
+local ids = Config.EnemyOrder
+local idx = {}
+for i, id in ipairs(ids) do idx[id] = i end
 
 local function countParts(model)
 	local n = 0
@@ -84,6 +87,12 @@ tick(1.0)
 assert(ent.VisualPhase == 3, "Entity phase 3 at 25%")
 assert(Renderer.EnemyViews[1008].VisualPhase == 3, "Devourer phase 3")
 assert(Renderer.EnemyViews[1007].VisualPhase == 2, "Titan damaged phase")
+-- хэллоуинские фазы: броня Костяного стража, трещины Стража могил, ярость Туманного жнеца и Монарха
+for id, ph in pairs({ BoneGuard = 2, GraveWarden = 3, FogReaper = 2, CursedMonarch = 2 }) do
+	if idx[id] then
+		assert(Renderer.EnemyViews[1000 + idx[id]].VisualPhase == ph, id .. " phase " .. ph)
+	end
+end
 local fxFolder = M.workspace:FindFirstChild("VoidTD_FX")
 local broken = 0
 for _, d in ipairs(fxFolder:GetChildren()) do

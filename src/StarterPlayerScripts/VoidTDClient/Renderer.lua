@@ -12,6 +12,7 @@ local ANG = CFrame.Angles
 local rad = math.rad
 
 local ctx, Config, PathUtil, UnitModels, EnemyModels, FX
+local HFX -- эффекты Хэллоуина (HalloweenFX)
 local enemyFolder, unitFolder
 local enemyViews = {}
 local unitViews = {}
@@ -660,8 +661,13 @@ end
 -- ПОЯВЛЕНИЕ
 ------------------------------------------------------------------------
 -- Вступление босса: портал вспыхивает, по земле идёт волна энергии
+local function activeMap()
+	return workspace:FindFirstChild(PathUtil.MapKey == "Halloween" and "VoidTDHalloweenMap" or "VoidTDMap")
+end
+Renderer.ActiveMap = activeMap
+
 local function portalSurge(isFinal)
-	local map = workspace:FindFirstChild("VoidTDMap")
+	local map = activeMap()
 	local portal = map and map:FindFirstChild("VoidPortal")
 	if not portal then
 		return
@@ -679,7 +685,7 @@ local function portalSurge(isFinal)
 		disc.Color = Color3.fromRGB(235, 200, 255)
 		FX.Tween(disc, 1.2, { Color = col })
 		local pos = disc.Position
-		local gy = Config.Map.GroundY
+		local gy = PathUtil.Map.GroundY
 		FX.Sphere(pos, isFinal and 16 or 11, FX.Colors.Neon, 0.8, nil, 0.3)
 		FX.Ring(V(pos.X, gy + 0.3, pos.Z), isFinal and 45 or 30, FX.Colors.Neon, 1.1, 0.6, 3, 0.05)
 		task.delay(0.15, function()
@@ -749,6 +755,9 @@ function Renderer.SpawnEnemy(data)
 	makeHealthBar(view)
 	rig.Model.Parent = enemyFolder
 	enemyViews[id] = view
+	if rig.SpawnFX then
+		HFX.EnemySpawn(view, dist <= 1)
+	end
 	if dist <= 1 then
 		FX.Burst(pos + V(0, 2, 0), FX.Colors.Neon, 6, 0.3, 5)
 		if rig.SpawnStyle == "Titan" then
@@ -923,6 +932,9 @@ function Renderer.RemoveEnemy(id, reason)
 		FX.Poof(view.Rig.Root.Position, FX.Colors.Neon, 0.8)
 		view.Rig.Model:Destroy()
 	else
+		if view.Rig.DeathFX and reason ~= "core" then
+			HFX.EnemyDeath(view, reason)
+		end
 		deathAnim(view, reason)
 	end
 end
@@ -951,6 +963,9 @@ function Renderer.OnSync(payload)
 	end
 	for _, r in ipairs(payload.RM or {}) do
 		Renderer.RemoveEnemy(r[1], r[2])
+	end
+	if payload.AL or payload.RA then
+		HFX.SyncAllies(payload.AL, payload.RA)
 	end
 end
 
@@ -1104,7 +1119,7 @@ local function updateEnemies(t, dt)
 	local cam = workspace.CurrentCamera
 	local camPos = cam and cam.CFrame.Position or V()
 	for _, v in pairs(enemyViews) do
-		local speed = v.Speed * (v.Frozen and 0 or (v.Slowed and 0.5 or 1))
+		local speed = v.Speed * (v.Frozen and 0 or (v.Slowed and 0.5 or 1)) * (v.HasteUntil and HFX.SpeedMult(v) or 1)
 		local predicted = v.ServerDist + speed * math.min(nowc - v.LastSync, 0.35)
 		v.Dist = v.Dist + speed * dt
 		v.Dist = v.Dist + (predicted - v.Dist) * math.min(1, dt * 5)
@@ -1259,7 +1274,11 @@ function Renderer.AddUnit(folder, isNew)
 	end
 	view.NextFidget = os.clock() + 4 + math.random() * 8
 	local placeFx = Config.Units[view.UnitId].PlaceFX
-	if isNew and placeFx == "Clock" then
+	if isNew and placeFx == "Throne" then
+		-- Король фонарей: трон поднимается из огня, вокруг вырастают тыквы
+		view.DropT = os.clock()
+		HFX.ThronePlace(view.Pos)
+	elseif isNew and placeFx == "Clock" then
 		-- часовщик поднимается из золотого механического портала, стрелки идут назад
 		view.RiseT = os.clock()
 		FX.ClockPortal(view.Pos, 1.3)
@@ -1315,6 +1334,7 @@ local function muzzlePos(view)
 	end
 	return view.Rig.Root.Position + V(0, 1, 0)
 end
+Renderer.MuzzlePos = muzzlePos
 
 local function playAnim(view, name, h, hits, interval)
 	local builder = Anims[name]
@@ -1381,9 +1401,17 @@ function Renderer.OnAttack(p)
 	end
 
 	local hits = p.T and #p.T or 1
-	playAnim(view, def.Anim, h, hits, p.I)
-	view.GustT = os.clock()
-	view.NextFidget = os.clock() + 6 + math.random() * 6
+	if p.EC then
+		-- повтор «Призрачной короны»: атакует синяя копия за спиной, сам юнит не дёргается
+		HFX.EchoGhost(view)
+	else
+		playAnim(view, def.Anim, h, hits, p.I)
+		view.GustT = os.clock()
+		view.NextFidget = os.clock() + 6 + math.random() * 6
+	end
+	if HFX.OnAttack(view, def, p, h, lv) then
+		return
+	end
 
 	local function at(delay, fn)
 		task.delay(delay, fn)
@@ -1615,6 +1643,8 @@ function Renderer.OnImpact(p)
 		FX.TimeHaste(p.P, p.R, list, p.DUR or 2)
 	elseif k == "TimeStorm" then
 		FX.TimeStorm(p.P, p.DL or 1.3)
+	else
+		HFX.OnImpact(p)
 	end
 end
 
@@ -1710,6 +1740,7 @@ function Renderer.Update(dt)
 	local t = os.clock()
 	updateEnemies(t, dt)
 	updateUnits(t, dt)
+	HFX.Update(dt)
 end
 
 function Renderer.ClearEnemies()
@@ -1729,6 +1760,12 @@ function Renderer.Init(c)
 	unitFolder.Parent = workspace
 	Renderer.UnitFolder = unitFolder
 	Renderer.EnemyFolder = enemyFolder
+	HFX = c.HFX
+	HFX.Init(c, Renderer)
+	-- анимации хэллоуинских юнитов (атаки, способности, разминки)
+	if c.HalloweenAnims then
+		c.HalloweenAnims(Anims, FIDGETS)
+	end
 end
 
 return Renderer

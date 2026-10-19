@@ -293,8 +293,11 @@ end
 -- getTarget() -> Vector3 | nil (текущая позиция цели)
 function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 	lv = lv or 1
-	local p
-	if kind == "Arrow" then
+	local p, trailColor
+	local maker = FX.ProjectileMakers and FX.ProjectileMakers[kind]
+	if maker then
+		p, trailColor = maker(lv)
+	elseif kind == "Arrow" then
 		p = FX.Part({ Size = V(0.18, 0.18, 2.2), Color = lv >= 4 and NEON or NEON_SOFT })
 		local tipP = FX.Part({ Size = V(0.35, 0.35, 0.35), Color = NEON, Parent = p })
 		tipP.Name = "Tip"
@@ -322,7 +325,7 @@ function FX.Projectile(kind, from, getTarget, travel, onHit, lv)
 	local trail = Instance.new("Trail")
 	trail.Attachment0 = a0
 	trail.Attachment1 = a1
-	trail.Color = ColorSequence.new(kind == "Orb" and NEON or NEON_SOFT)
+	trail.Color = ColorSequence.new(trailColor or (kind == "Orb" and NEON or NEON_SOFT))
 	trail.LightEmission = 1
 	trail.Lifetime = 0.18
 	trail.Transparency = NumberSequence.new(0.2, 1)

@@ -973,6 +973,21 @@ local Builders = {
 	TheEntity = TheEntity,
 }
 
+-- Хелперы для модулей-расширений (HalloweenEnemies)
+EnemyModels.H = {
+	newCreature = newCreature, newBiped = newBiped, setup = setup, hub = hub, emitter = emitter,
+	emitPoint = emitPoint, darkTrail = darkTrail, finishCreature = finishCreature, finishBiped = finishBiped,
+	C = C, M = M, rgb = rgb, lite = lite, SMOKE_TEXTURE = SMOKE_TEXTURE,
+}
+
+function EnemyModels.Register(enemyId, builder)
+	Builders[enemyId] = builder
+end
+
+function EnemyModels.Has(enemyId)
+	return Builders[enemyId] ~= nil
+end
+
 function EnemyModels.Build(enemyId)
 	local def = Config.Enemies[enemyId]
 	local builder = Builders[enemyId]
@@ -997,5 +1012,7 @@ function EnemyModels.Build(enemyId)
 	end
 	return rig
 end
+
+require(script.Parent:WaitForChild("HalloweenEnemies"))(EnemyModels)
 
 return EnemyModels
