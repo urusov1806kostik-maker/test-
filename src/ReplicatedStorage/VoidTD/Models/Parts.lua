@@ -56,6 +56,9 @@
 --   gear(r, limb, name?, pivot, a, depth, color, hubColor=CLK.Black, rate=1, mat) -> host, hub
 --   clockFace(r, limb, cf, a, frame, prefix, handColor, glowHands?) -> hands   стрелки на моторах <prefix>Hour/<prefix>Minute
 --   miniClock(r, limb, cf, a)
+--   r.SpinRates[motor] = rate — любой мотор крутится вокруг своей оси Z (Anims.Apply), напр. MoonBack, SpinEclipse
+--   stormFX(parts) -> parts   детали «бури»: атрибут StormFX = видимая прозрачность, Transparency = 1
+--                             (пример: local m = r:Mark() ... строим ... Parts.stormFX(r:Since(m)))
 -- ХЭЛЛОУИН
 --   tri(r, limb, cf, w, h, color, mat=Neon, depth=0.05) -> {2 parts}   треугольник в плоскости XY cf, вершина вверх
 --   hideHead(r)                     спрятать куб головы фигуры (r.HeadBox)
@@ -67,6 +70,9 @@
 --   crow(r, limb, cf, s, eye=HW.Orange)   star(r, limb, cf, s, color)   flask(r, limb, cf, s, liquid) -> liquid
 --   bell(r, limb, cf, s, color, rim, glow) -> clapper   card(r, limb, cf, s, suit, back?)
 --   thread(r, limb, a, b, color, d=0.035) -> part   embers(r, part, color, rate=8, size=0.25) -> emitter | nil
+-- РУНЫ (3D-иконки без rig: заякоренные детали прямо в Model m, координаты — от центра иконки)
+--   rpart(m, size, cf, color, mat=Plastic, props) -> Part      rwedge(m, size, cf, color, mat=Plastic, props) -> WedgePart
+--   rlight(part, color, range=8) -> PointLight | nil (Lite)    (Brightness 1.4, без теней)
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("VoidTD")
 local Kit = require(Shared.Models.Kit)
@@ -342,7 +348,7 @@ function Parts.blade(r, A, o)
 	bevel(r, A, V(0.28, o.GuardW or (w + 0.7), 0.28), CF(0, y, -0.42), o.Guard or AC.Armor, o.Edge)
 	r:Box(A, V(0.12, w, len), CF(0, y, z0 - len / 2), bladeC, M.Metal)
 	if o.Glow then
-		for _, s in ipairs(SIDES) do
+		for _, s in ipairs({ 1, -1 }) do -- верхняя и нижняя кромки
 			r:Neon(A, V(0.14, 0.07, len * 0.96), CF(0, y + s * (w / 2 - 0.03), z0 - len / 2), o.Glow)
 		end
 	end
@@ -578,6 +584,17 @@ function Parts.clockFace(r, limb, cf, a, frame, prefix, handColor, glowHands)
 	return hands
 end
 
+-- Детали, видимые только во время «бури» (Renderer / Viewer показывают их по атрибуту StormFX)
+function Parts.stormFX(parts)
+	for _, p in ipairs(parts or {}) do
+		if p:IsA("BasePart") then
+			p:SetAttribute("StormFX", p.Transparency)
+			p.Transparency = 1
+		end
+	end
+	return parts or {}
+end
+
 function Parts.miniClock(r, limb, cf, a)
 	octa(r, limb, a, 0.12, cf, CLK.Gold)
 	octa(r, limb, a * 0.8, 0.14, cf, CLK.Dial, M.Plastic)
@@ -757,6 +774,52 @@ end
 
 function Parts.embers(r, part, color, rate, size)
 	return r:Sparkles(part, color, { Rate = rate or 8, Up = 3, Size = size or 0.25, LifeMin = 0.5, LifeMax = 1.1 })
+end
+
+------------------------------------------------------------------------
+-- РУНЫ: заякоренные детали без сварки (иконка вращается целиком через PivotTo)
+------------------------------------------------------------------------
+local function anchored(m, className, size, cf, color, mat, props)
+	local p = Instance.new(className)
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.CastShadow = false
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color
+	p.Material = mat or M.Plastic
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if props then
+		for k, v in pairs(props) do
+			p[k] = v
+		end
+	end
+	p.Parent = m
+	return p
+end
+
+function Parts.rpart(m, size, cf, color, mat, props)
+	return anchored(m, "Part", size, cf, color, mat, props)
+end
+
+function Parts.rwedge(m, size, cf, color, mat, props)
+	return anchored(m, "WedgePart", size, cf, color, mat, props)
+end
+
+function Parts.rlight(part, color, range)
+	if Kit.IsLite() then
+		return nil
+	end
+	local l = Instance.new("PointLight")
+	l.Color = color
+	l.Range = range or 8
+	l.Brightness = 1.4
+	l.Shadows = false
+	l.Parent = part
+	return l
 end
 
 return Parts

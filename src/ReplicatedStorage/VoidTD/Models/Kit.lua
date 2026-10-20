@@ -9,10 +9,11 @@
 --                                   шлейфов, лиц. UnitModels.Lite и EnemyModels.Lite читают/пишут Kit.Lite.
 --   Kit.Cheap (bool)                дешёвая фаска (2 детали) и плоские шипы — для толп врагов и союзников;
 --                                   выставляется только на время сборки (Enemies.Build / Units.BuildAlly).
+--   Kit.WithCheap(on, fn, ...) -> ...   вызов fn с Kit.Cheap = on; прежнее значение восстанавливается и при ошибке
 -- ПАЛИТРЫ
 --   Kit.Colors (= AC) Armor ArmorMid Edge Cloth ClothDark;  Kit.C  Neon Steel;  Kit.P — палитра юнитов
 --   (Black Coal Dark Steel Gray Pale Violet DeepViolet Purple Neon NeonSoft NeonPink Maroon Crimson White
---   Gold DarkGold Skin);  Kit.M  материалы Plastic(SmoothPlastic) Metal Neon Fabric Slate Glass Wood Grass;  Kit.rgb(r,g,b)
+--   Gold DarkGold Skin);  Kit.M Plastic(=SmoothPlastic) Metal Neon Fabric Slate Glass Wood Grass Foil CorrodedMetal;  Kit.rgb
 --
 -- RIG  (r = Kit.Rig.new(o); все offset/pivot — в локальных координатах детали-основы limb, до масштаба)
 --   Kit.Rig.new{Name, HeadSize=V(1.3)^3, Torso, TorsoMat, Head, Arm, Leg, RoundHead} -> R6: HumanoidRootPart (якорь),
@@ -26,8 +27,7 @@
 --   r:Cyl(limb, len, d, offset, color, mat, axis="X"|"Y"|"Z", props)   цилиндр длиной len вдоль оси
 --   r:Ball(limb, d, offset, color, mat, props)                     шар
 --   r:Sphere(limb, size, offset, color, mat, props)                эллипсоид (SpecialMesh добавляется в Finish)
---   r:Seg(limb, a, b, thick, color, mat, props) -> part            брусок от точки a до b; thick число или V2(x,y);
---                                                                  props.Round = true -> цилиндр
+--   r:Seg(limb, a, b, thick, color, mat, props) -> part   брусок a..b; thick число или V2(x,y); props.Round -> цилиндр
 --   r:Rod(limb, a, b, d, color, mat, props)                        круглый стержень a..b
 --   r:Chain(limb, points, thick, color, mat, taper?, round?) -> {parts}
 --   r:Joint(name, limb, size, pivot, fromPivot, color, mat) -> part   подвижная деталь на своём Motor6D name
@@ -43,13 +43,12 @@
 --   r:Pauldron(limb, side, size, color, rim, lift, rimMat)  r:Sword(limb, {Length, Width, Y, ...}) -> blade (ставит Muzzle)
 --   r:Mark() -> n ; r:Since(n) -> {parts}   все детали, созданные после метки (явная пометка, напр. StormFX)
 --   r:BakePose(pose)                 повернуть конечности в позу {Motor = {x,y,z}} (градусы) прямо в CFrame деталей
---   r:Finish(scale=1, idle?) -> r    ScaleTo, меши эллипсоидов, шлейфы, Base = C0 (до позы), BakePose(idle),
---                                    HipHeight = 3*scale (+ атрибут модели), Idle, Muzzle. Частицы/свет масштабируются
---                                    вручную (одинаково в Studio и в моке).
+--   r:Finish(scale=1, idle?) -> r    ScaleTo (частицы/свет — явно, одинаково в Studio и моке), меши эллипсоидов, шлейфы,
+--                                    Base = C0 (до позы), BakePose(idle), HipHeight = 3*scale (+ атрибут), Height, Idle, Muzzle
 -- ДЕТАЛИ (r — rig, limb — деталь-основа; возвращают список созданных деталей, если не сказано иное)
 --   Kit.bevel(r, limb, size, cf, color, edge?, mat=Metal, e?) -> parts, edgePart
---        блок с фаской: 3 тёмных бруска + светлый внутри (кант по 12 рёбрам). Cheap: брусок + кант сверху.
---        Lite или edge == false: один брусок (edgePart = nil). Последний элемент списка (вне Lite) — кант.
+--        3 тёмных бруска + светлый внутри (кант по 12 рёбрам); Cheap: брусок + кант сверху (кант — последний в списке);
+--        Lite или edge == false: один брусок, edgePart = nil
 --   Kit.spike(r, limb, base, tip, w, color, mat=Plastic, flat?, thick=w*0.34)   шип из клиньев (крестовой, если не flat и не Cheap)
 --   Kit.bar(r, limb, a, b, t, color, mat=Plastic) -> part           брусок a..b с запасом на стыках
 --   Kit.hornA(r, limb, pts, t0, color, mat)                         рог: сужающиеся бруски + шип
@@ -63,7 +62,8 @@
 --   Kit.ring(r, limb, cf, radius, count, thick, depth, color, mat=Metal, skip?)   кольцо в плоскости XY cf (skip(i) — разрыв)
 --   Kit.hide(parts, target?) -> parts   спрятать (Transparency 1, атрибут "PT" = целевая прозрачность для Reveal)
 --   Kit.join(...) -> parts              склеить списки (nil пропускаются)
---   Kit.Calm(root, amount=0.3)          приглушить неон/свет/частицы (один раз на модель — повтор ничего не делает)
+--   Kit.Calm(root, amount=0.3)          приглушить неон/свет/частицы; один раз на модель (атрибут "Calmed"),
+--                                       вложенные уже приглушённые модели пропускаются
 
 local Kit = {}
 
@@ -78,15 +78,10 @@ local function rgb(r, g, b)
 end
 Kit.rgb = rgb
 
+local MAT = Enum.Material
 local M = {
-	Plastic = Enum.Material.SmoothPlastic,
-	Metal = Enum.Material.Metal,
-	Neon = Enum.Material.Neon,
-	Fabric = Enum.Material.Fabric,
-	Slate = Enum.Material.Slate,
-	Glass = Enum.Material.Glass,
-	Wood = Enum.Material.Wood,
-	Grass = Enum.Material.Grass,
+	Plastic = MAT.SmoothPlastic, Metal = MAT.Metal, Neon = MAT.Neon, Fabric = MAT.Fabric, Slate = MAT.Slate,
+	Glass = MAT.Glass, Wood = MAT.Wood, Grass = MAT.Grass, Foil = MAT.Foil, CorrodedMetal = MAT.CorrodedMetal,
 }
 Kit.M = M
 
@@ -95,11 +90,8 @@ Kit.C = C
 
 -- палитра брони (AC)
 local AC = {
-	Armor = rgb(34, 32, 42),
-	ArmorMid = rgb(52, 50, 64),
-	Edge = rgb(122, 118, 138),
-	Cloth = rgb(62, 30, 104),
-	ClothDark = rgb(36, 17, 62),
+	Armor = rgb(34, 32, 42), ArmorMid = rgb(52, 50, 64), Edge = rgb(122, 118, 138),
+	Cloth = rgb(62, 30, 104), ClothDark = rgb(36, 17, 62),
 }
 Kit.Colors = AC
 
@@ -117,6 +109,18 @@ Kit.Lite = false
 Kit.Cheap = false
 function Kit.IsLite()
 	return Kit.Lite == true
+end
+
+-- Вызвать fn(...) с заданным Kit.Cheap; прежнее значение восстанавливается и при ошибке (трассировка сохраняется)
+function Kit.WithCheap(on, fn, ...)
+	local prev = Kit.Cheap
+	Kit.Cheap = on == true
+	local res = table.pack(xpcall(fn, debug.traceback, ...))
+	Kit.Cheap = prev
+	if not res[1] then
+		error(res[2], 0)
+	end
+	return table.unpack(res, 2, res.n)
 end
 local function lite()
 	return Kit.Lite == true
@@ -564,8 +568,8 @@ function Rig:BakePose(pose)
 	end
 end
 
--- ScaleTo в Roblox масштабирует и частицы/свет, а мок — нет. Чтобы результат был одинаковым, на время
--- ScaleTo эффекты снимаются с модели и масштабируются вручную.
+-- ScaleTo в Roblox масштабирует и частицы/свет, а мок — нет. Чтобы результат был одинаковым, значения
+-- эффектов запоминаются до ScaleTo и после него выставляются явно (исходное * scale); порядок детей не меняется.
 local FX_CLASSES = { ParticleEmitter = true, PointLight = true, SpotLight = true, SurfaceLight = true, Beam = true }
 
 local function scaleSeq(seq, f)
@@ -576,16 +580,25 @@ local function scaleSeq(seq, f)
 	return NumberSequence.new(kps)
 end
 
-local function scaleFx(d, f)
+local function fxSnapshot(d)
 	if d:IsA("ParticleEmitter") then
-		d.Size = scaleSeq(d.Size, f)
-		d.Speed = NumberRange.new(d.Speed.Min * f, d.Speed.Max * f)
-		d.Acceleration = d.Acceleration * f
+		return { d.Size, d.Speed, d.Acceleration }
 	elseif d:IsA("Beam") then
-		d.Width0 = d.Width0 * f
-		d.Width1 = d.Width1 * f
+		return { d.Width0, d.Width1 }
+	end
+	return { d.Range }
+end
+
+local function fxRestore(d, s, f)
+	if d:IsA("ParticleEmitter") then
+		d.Size = scaleSeq(s[1], f)
+		d.Speed = NumberRange.new(s[2].Min * f, s[2].Max * f)
+		d.Acceleration = s[3] * f
+	elseif d:IsA("Beam") then
+		d.Width0 = s[1] * f
+		d.Width1 = s[2] * f
 	else
-		d.Range = math.min(d.Range * f, 60)
+		d.Range = math.min(s[1] * f, 60)
 	end
 end
 
@@ -597,16 +610,12 @@ function Rig:Finish(scale, idle)
 		local fx = {}
 		for _, d in ipairs(model:GetDescendants()) do
 			if FX_CLASSES[d.ClassName] then
-				fx[#fx + 1] = { d, d.Parent }
+				fx[#fx + 1] = { d, fxSnapshot(d) }
 			end
-		end
-		for _, e in ipairs(fx) do
-			e[1].Parent = nil
 		end
 		model:ScaleTo(scale)
 		for _, e in ipairs(fx) do
-			scaleFx(e[1], scale)
-			e[1].Parent = e[2]
+			fxRestore(e[1], e[2], scale)
 		end
 	end
 	for _, p in ipairs(self.Pending) do
@@ -735,8 +744,9 @@ local function bevel(r, limb, size, cf, color, edge, mat, e)
 	local x, y, z = size.X, size.Y, size.Z
 	e = e or math.min(0.09, math.min(x, y, z) * 0.2)
 	if Kit.Cheap then
+		local main = r:Box(limb, size, cf, color, mat)
 		local strip = r:Box(limb, V(x + 0.03, e, z + 0.03), cf * CF(0, y / 2 - e * 0.62, 0), edge or AC.Edge, mat)
-		return { r:Box(limb, size, cf, color, mat), strip }, strip
+		return { main, strip }, strip
 	end
 	local parts = {
 		r:Box(limb, V(x, y - 2 * e, z - 2 * e), cf, color, mat),
@@ -854,13 +864,9 @@ local CALM_DARK = rgb(14, 10, 22)
 Kit.CALM_LIGHT = 0.65 -- множитель яркости PointLight
 Kit.CALM_EMISSION = 0.6 -- множитель LightEmission частиц
 
-function Kit.Calm(root, amount)
-	if not root or root:GetAttribute("Calmed") then
-		return
-	end
-	amount = amount or 0.3
-	root:SetAttribute("Calmed", amount)
-	for _, d in ipairs(root:GetDescendants()) do
+-- Повторный вызов ничего не делает; вложенные уже приглушённые модели (статуи юнитов в лобби и т.п.) пропускаются
+local function calmWalk(obj, amount)
+	for _, d in ipairs(obj:GetChildren()) do
 		if d:IsA("BasePart") then
 			if d.Material == M.Neon then
 				d.Color = d.Color:Lerp(CALM_DARK, amount)
@@ -870,7 +876,19 @@ function Kit.Calm(root, amount)
 		elseif d:IsA("ParticleEmitter") then
 			d.LightEmission = d.LightEmission * Kit.CALM_EMISSION
 		end
+		if not (d:IsA("Model") and d:GetAttribute("Calmed")) then
+			calmWalk(d, amount)
+		end
 	end
+end
+
+function Kit.Calm(root, amount)
+	if not root or root:GetAttribute("Calmed") then
+		return
+	end
+	amount = amount or 0.3
+	root:SetAttribute("Calmed", amount)
+	calmWalk(root, amount)
 end
 
 return Kit

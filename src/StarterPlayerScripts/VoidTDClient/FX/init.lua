@@ -108,6 +108,17 @@ FX.Env = setmetatable({ Config = Config }, {
 			rawset(env, "Path", p)
 			return p
 		end
+		-- Init без ctx: Renderer — соседний модуль Render (к моменту эффектов уже загружен)
+		if k == "Renderer" then
+			local mod = script.Parent and script.Parent:FindFirstChild("Render")
+			if mod and mod:IsA("ModuleScript") then
+				local ok, r = pcall(require, mod)
+				if ok and type(r) == "table" then
+					rawset(env, "Renderer", r)
+					return r
+				end
+			end
+		end
 		return nil
 	end,
 })
@@ -122,28 +133,15 @@ function FX.Ground(pos)
 	return V(pos.X, groundY() + 0.15, pos.Z)
 end
 
-function FX.EnemyCenter(id)
+-- позиции врагов/юнитов через Renderer (nil, если его ещё нет или объекта нет)
+local function rend(key)
 	local r = FX.Env.Renderer
-	return r and r.EnemyCenter and r.EnemyCenter(id) or nil
+	return r and r[key]
 end
-
-function FX.EnemyPosition(id)
-	local r = FX.Env.Renderer
-	return r and r.EnemyPosition and r.EnemyPosition(id) or nil
-end
-
-function FX.UnitView(uid)
-	local r = FX.Env.Renderer
-	return r and r.UnitViews and r.UnitViews[uid] or nil
-end
-
-function FX.MuzzlePos(view)
-	local r = FX.Env.Renderer
-	if r and r.MuzzlePos and view and view.Rig then
-		return r.MuzzlePos(view)
-	end
-	return nil
-end
+function FX.EnemyCenter(id) local f = rend("EnemyCenter"); return f and f(id) or nil end
+function FX.EnemyPosition(id) local f = rend("EnemyPosition"); return f and f(id) or nil end
+function FX.UnitView(uid) local t = rend("UnitViews"); return t and t[uid] or nil end
+function FX.MuzzlePos(view) local f = rend("MuzzlePos"); return (f and view and view.Rig) and f(view) or nil end
 
 function FX.CamFacing(pos)
 	local cam = workspace.CurrentCamera
@@ -340,20 +338,10 @@ function FX.Shake(mag, dur)
 			table.remove(shakes, i)
 		end
 	end
-	local entry = { Until = t + dur, Dur = dur, Mag = mag }
-	if #shakes < MAX_SHAKES then
-		shakes[#shakes + 1] = entry
-	else
-		-- заменяем самую слабую
-		local weakest, wv = 1, math.huge
-		for i, s in ipairs(shakes) do
-			local v = (s.Until - t) / s.Dur * s.Mag
-			if v < wv then
-				weakest, wv = i, v
-			end
-		end
-		shakes[weakest] = entry
+	if #shakes >= MAX_SHAKES then
+		table.remove(shakes, 1) -- самая старая
 	end
+	shakes[#shakes + 1] = { Until = t + dur, Dur = dur, Mag = mag }
 end
 
 local function shakeAmount(t)
@@ -729,6 +717,11 @@ end
 -- ЦИФРЫ УРОНА
 ------------------------------------------------------------------------
 local numberCount = 0
+local NUMBER_STYLE = {
+	[0] = { Suffix = "", Color = Color3.fromRGB(240, 220, 255), Size = UDim2.fromOffset(90, 30) },
+	[1] = { Suffix = "!", Color = Color3.fromRGB(255, 210, 70), Size = UDim2.fromOffset(150, 50) },
+	[2] = { Suffix = "", Color = Color3.fromRGB(170, 170, 200), Size = UDim2.fromOffset(80, 26) },
+}
 
 function FX.DamageNumber(pos, amount, flag)
 	if numberCount > (FX.Lite and 20 or 70) then
@@ -749,19 +742,11 @@ function FX.DamageNumber(pos, amount, flag)
 	label.TextScaled = true
 	label.TextStrokeTransparency = 0
 	label.TextStrokeColor3 = Color3.fromRGB(20, 0, 30)
-	if flag == 2 then
-		label.Text = "PHASE"
-		label.TextColor3 = Color3.fromRGB(170, 170, 200)
-		gui.Size = UDim2.fromOffset(80, 26)
-	elseif flag == 1 then
-		label.Text = tostring(amount) .. "!"
-		label.TextColor3 = Color3.fromRGB(255, 210, 70)
-		gui.Size = UDim2.fromOffset(150, 50)
-	else
-		label.Text = tostring(amount)
-		label.TextColor3 = Color3.fromRGB(240, 220, 255)
-		gui.Size = UDim2.fromOffset(90, 30)
-	end
+	-- 2 = уклонение фазой, 1 = крит, иначе обычный урон
+	local st = NUMBER_STYLE[flag] or NUMBER_STYLE[0]
+	label.Text = flag == 2 and "PHASE" or (tostring(amount) .. st.Suffix)
+	label.TextColor3 = st.Color
+	gui.Size = st.Size
 	label.Parent = gui
 	gui.Parent = anchor
 	tween(gui, 0.8, { StudsOffsetWorldSpace = gui.StudsOffsetWorldSpace + V(0, 2.5, 0) })
@@ -938,14 +923,10 @@ function FX.Init(ctx)
 	local env = FX.Env
 	if ctx then
 		rawset(env, "Ctx", ctx)
-		if ctx.Config then
-			rawset(env, "Config", ctx.Config)
-		end
-		if ctx.Path then
-			rawset(env, "Path", ctx.Path)
-		end
-		if ctx.Renderer then
-			rawset(env, "Renderer", ctx.Renderer)
+		for _, k in ipairs({ "Config", "Path", "Renderer" }) do
+			if ctx[k] then
+				rawset(env, k, ctx[k])
+			end
 		end
 		if ctx.Lite ~= nil then
 			FX.SetLite(ctx.Lite)

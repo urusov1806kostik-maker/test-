@@ -1591,6 +1591,498 @@ return {
 				<Properties>
 					<string name="Name">Models</string>
 				</Properties>
+				<Item class="ModuleScript" referent="RBXF243A8E137F5DE7C61383D863F492E3E">
+					<Properties>
+						<string name="Name">Enemies</string>
+						<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Enemies (EnemyModels)
+-- Процедурные модели врагов в угловатом стиле. Модели — только визуал: урон и попадания считаются на сервере
+-- по дистанции пути. Хелперы — дочерний модуль Base; строители — дочерние модули Void и Halloween
+-- (каждый: `return function(EnemyModels, Kit, Base) ... end`, вызывает EnemyModels.Register).
+-- Отсутствующий модуль пропускается; ошибка загрузки — warn + EnemyModels.LoadErrors[name].
+--
+-- API
+--   EnemyModels.Lite (bool)                 = Kit.Lite (запись меняет Kit.Lite)
+--   EnemyModels.Build(enemyId) -> rig        поля rig — см. заголовок Base (Style Gait Sec Phases DeathStyle SpawnStyle
+--                                            DeathFX SpawnFX HipHeight Height Scale ...), + rig.EnemyId, rig.IsBoss;
+--                                            атрибуты модели EnemyId, HipHeight
+--   EnemyModels.Has(enemyId) -> bool
+--   EnemyModels.Register(enemyId, builder)  builder(scale, enemyId, def) -> rig (через Base.finishCreature / finishBiped)
+--   EnemyModels.Kit, .Base (= .H), .LoadErrors
+--
+-- Build: Config.Enemies[id] обязателен; не-боссы (IsBoss ~= true, в т.ч. мини-босс NightReaper) строятся с
+-- Kit.Cheap = true (фаска из 2 деталей, плоские шипы, без борозд тыкв); Model.Name = id; Kit.Calm (0.3);
+-- все детали CanQuery = false, CanTouch = false, CastShadow = только у боссов.
+-- Phases уплотняются (nil из Lite выкидываются), сортируются по убыванию At; яркость Lights умножается на
+-- Kit.CALM_LIGHT, чтобы скачок яркости фазы совпадал с задуманным относительно приглушённого света.
+
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("VoidTD")
+local Config = require(Shared.Config)
+local Kit = require(Shared.Models.Kit)
+local Base = require(script:WaitForChild("Base"))
+
+local EnemyModels = {}
+EnemyModels.Kit = Kit
+EnemyModels.Base = Base
+EnemyModels.H = Base
+EnemyModels.LoadErrors = {}
+
+setmetatable(EnemyModels, {
+	__index = function(_, key)
+		if key == "Lite" then
+			return Kit.Lite == true
+		end
+		return nil
+	end,
+	__newindex = function(t, key, value)
+		if key == "Lite" then
+			Kit.Lite = value == true
+		else
+			rawset(t, key, value)
+		end
+	end,
+})
+
+local Builders = {}
+
+function EnemyModels.Register(enemyId, builder)
+	assert(type(enemyId) == "string" and type(builder) == "function", "EnemyModels.Register(enemyId, builder)")
+	Builders[enemyId] = builder
+end
+
+function EnemyModels.Has(enemyId)
+	return Builders[enemyId] ~= nil
+end
+
+-- Фазы босса: без nil (emitter/Glow возвращают nil в Lite), по убыванию порога
+local function normalizePhases(rig)
+	local phases = Base.compact(rig.Phases)
+	for _, ph in ipairs(phases) do
+		ph.At = tonumber(ph.At) or 0
+		ph.Reveal = Base.compact(ph.Reveal)
+		ph.Break = Base.compact(ph.Break)
+		ph.Emit = Base.compact(ph.Emit)
+		local lights = {}
+		for _, entry in ipairs(Base.compact(ph.Lights)) do
+			if type(entry) == "table" and entry[1] ~= nil then
+				lights[#lights + 1] = { entry[1], (tonumber(entry[2]) or entry[1].Brightness) * Kit.CALM_LIGHT }
+			end
+		end
+		ph.Lights = lights
+	end
+	table.sort(phases, function(a, b)
+		return a.At > b.At
+	end)
+	rig.Phases = phases
+end
+
+function EnemyModels.Build(enemyId)
+	local def = Config.Enemies and Config.Enemies[enemyId]
+	local builder = Builders[enemyId]
+	if not def or not builder then
+		error("Unknown enemy " .. tostring(enemyId), 2)
+	end
+	local boss = def.IsBoss == true
+	-- обычные враги идут толпами: для них фаска дешевле (2 детали вместо 4), шипы плоские
+	local rig = Kit.WithCheap(not boss, builder, def.Scale or 1, enemyId, def)
+	assert(type(rig) == "table" and rig.Model, "enemy builder " .. enemyId .. " returned no rig")
+	local model = rig.Model
+	model.Name = enemyId
+	Kit.Calm(model)
+	normalizePhases(rig)
+	rig.Style = rig.Style or "Biped"
+	rig.Gait = rig.Gait or {}
+	rig.Sec = rig.Sec or {}
+	rig.DeathStyle = rig.DeathStyle or "Topple"
+	rig.SpawnStyle = rig.SpawnStyle or "Rise"
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = false
+			d.CanTouch = false
+			d.CastShadow = boss
+		end
+	end
+	model:SetAttribute("EnemyId", enemyId)
+	rig.EnemyId = enemyId
+	rig.IsBoss = boss
+	return rig
+end
+
+local CHILDREN = { "Void", "Halloween" }
+for _, name in ipairs(CHILDREN) do
+	local mod = script:FindFirstChild(name)
+	if mod and mod:IsA("ModuleScript") then
+		local ok, err = xpcall(function()
+			local install = require(mod)
+			assert(type(install) == "function", "module must return function(EnemyModels, Kit, Base)")
+			install(EnemyModels, Kit, Base)
+		end, debug.traceback)
+		if not ok then
+			EnemyModels.LoadErrors[name] = tostring(err)
+			warn("[EnemyModels] " .. name .. ": " .. tostring(err))
+		end
+	end
+end
+
+return EnemyModels
+]]></ProtectedString>
+					</Properties>
+					<Item class="ModuleScript" referent="RBX66849B70DB70E92957670413BD9C7A9A">
+						<Properties>
+							<string name="Name">Base</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Enemies/Base
+-- Базовые хелперы врагов: существа (Root -> невидимый Torso + узлы-моторы) и R6-бипеды с невидимыми
+-- конечностями, поверх которых строится форма из деталей Kit (bevel, spike, gem, crack, ring, tatter...).
+-- Модули семейств Enemies/Void и Enemies/Halloween строят ТОЛЬКО на этом API + Kit.
+--
+-- ПАЛИТРЫ / КОНСТАНТЫ
+--   Base.C  (Пустота) Obsidian Night Deep Mid Lilac Ghost GhostMid Bone BoneDark Gun GunLight Gold GoldDark Flesh
+--           FleshLight FleshDark Stone StoneLight Neon NeonSoft Magenta White Steel
+--   Base.HC (Хэллоуин) Pumpkin PumpkinHi PumpkinDark Burnt Stem Fire FireSoft Green GreenSoft Rot RotDark RotHi Rag RagHi
+--           Purple PurpleHi PurpleGlow Burgundy BurgundyHi Gold GoldDark Straw StrawDark Sack SackDark Ghost GhostMid
+--           GhostDeep Iron IronHi Rust Stone StoneHi StoneDark Moss Fog FogDark Red Crow
+--   Base.AC (= Kit.Colors: Armor ArmorMid Edge Cloth ClothDark)   Base.M (= Kit.M: Plastic Metal Neon Fabric Slate Glass Wood Grass Foil CorrodedMetal)
+--   Base.rgb(r,g,b)   Base.lite() -> bool   Base.SMOKE_TEXTURE (встроенная текстура дыма клиента)
+--
+-- RIG ВРАГА (поля, которые читает Renderer; заполняются setup/finish*)
+--   Style "Biped"|"Heavy"|"Crawl"|"Gallop"|"Float"; Gait {Speed, Stride, Bob, Sway, Lean, Shake}; Sec {motor -> {Amp, Speed}}
+--   (по префиксу имени мотора: Sway* Cape* Orbit* Spin* Bob* Twitch*); Phases {{At, Reveal, Break, Emit, Lights, Aggro}};
+--   DeathStyle "Dissipate"|"Scatter"|"Collapse"|"Topple"|"Implode"; SpawnStyle "Rise"|"Fade"|"Titan"; DeathFX; SpawnFX;
+--   HipHeight Height Scale Idle Base Motors Root Model (+ бипед: Torso Head RArm LArm RLeg LLeg HeadSize Muzzle)
+--   Моторы походки: Crawl/Gallop — FR FL BR BL; Float — ArmR ArmL (ArmR2 ArmL2); бипед — Root Neck RS LS RH LH.
+--   Phases: списки могут содержать nil (emitter/Glow в Lite) — EnemyModels.Build их уплотняет и сортирует по At.
+--
+-- ХЕЛПЕРЫ
+--   newCreature(name, bodySize) -> r        Root "HumanoidRootPart" (1³, якорь) -> мотор "Root" -> невидимый "Torso" bodySize
+--   newBiped(name, headSize=V(1.3)^3) -> r  Kit.Rig.new, все 6 конечностей невидимы (форма строится поверх)
+--   setup(r, {Style, Gait, Death="Topple", Spawn="Rise", DeathFX?, SpawnFX?})   поля rig + пустые Sec / Phases
+--   hub(r, name, limb, pivot, sec?) -> part  невидимый узел на моторе name (sec = {Amp, Speed} -> r.Sec[name])
+--   emitter(part, color, {Smoke, Rate=8, LifeMin=0.6, LifeMax=1.2, SpeedMin=0.3, SpeedMax=1.2, Size=0.4, SizeEnd=0,
+--           T0=0.2, Accel, Off, Name}) -> ParticleEmitter "EnemyFX" | nil (Lite)
+--   emitPoint(r, limb, offset, size=V(0.6)^3) -> part   невидимый носитель частиц "Emit"
+--   darkTrail(r, limb, a, b, color)         шлейф (после finish: "EnemyTrail", включён); не в Lite
+--   finishCreature(r, scale, hip, height) -> r   Finish(scale); HipHeight = hip*scale (+атрибут), Height = height*scale
+--   finishBiped(r, scale, idle, height?) -> r    Finish(scale, idle); Height = (height or 3+1+HeadSize.Y+0.6)*scale
+--   mark(parts, attr) -> parts               атрибут attr = true (Outline, Crown ...)
+--   list(...) -> {}                           список без nil (для Phases.Emit / Lights / Reveal)
+--   outline(parts, edgePart?) -> parts       пометить контур Outline: кант bevel (2-й результат bevel), а в Lite /
+--                                            без канта — сами детали
+--   pumpkin(r, limb, cf, s, {Color, Dark, Glow, Edge, Stem}) -> all, eyes, mouth   гранёная тыква с горящим лицом (-Z)
+--   deepHood(r, limb, w, h, color, edge, y=0) -> faceZ   глубокий капюшон с тёмным провалом
+--   claws(r, A, color, n=3, len=0.5)         когти-шипы на кисти
+
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("VoidTD")
+local Kit = require(Shared.Models.Kit)
+
+local Base = {}
+
+local V = Vector3.new
+local CF = CFrame.new
+local ANG = CFrame.Angles
+local rad = math.rad
+
+local rgb = Kit.rgb
+local M = Kit.M
+local bevel, bar, spike = Kit.bevel, Kit.bar, Kit.spike
+
+local C = {
+	Obsidian = rgb(22, 16, 30), Night = rgb(32, 23, 46), Deep = rgb(46, 31, 70), Mid = rgb(74, 50, 112),
+	Lilac = rgb(122, 92, 170), Ghost = rgb(206, 192, 245), GhostMid = rgb(160, 132, 222), Bone = rgb(214, 204, 186),
+	BoneDark = rgb(150, 138, 122), Gun = rgb(52, 50, 66), GunLight = rgb(92, 90, 112), Gold = rgb(196, 150, 64),
+	GoldDark = rgb(130, 94, 40), Flesh = rgb(86, 26, 48), FleshLight = rgb(128, 44, 70), FleshDark = rgb(52, 16, 32),
+	Stone = rgb(64, 60, 78), StoneLight = rgb(98, 92, 116), Neon = rgb(180, 80, 255), NeonSoft = rgb(222, 170, 255),
+	Magenta = rgb(255, 60, 170), White = rgb(250, 244, 255), Steel = rgb(110, 110, 128),
+}
+
+local HC = {
+	Pumpkin = rgb(214, 102, 26), PumpkinHi = rgb(250, 150, 60), PumpkinDark = rgb(150, 62, 18), Burnt = rgb(70, 34, 20),
+	Stem = rgb(58, 70, 32), Fire = rgb(255, 140, 30), FireSoft = rgb(255, 196, 90), Green = rgb(130, 255, 90),
+	GreenSoft = rgb(190, 255, 150), Rot = rgb(84, 104, 72), RotDark = rgb(50, 62, 44), RotHi = rgb(130, 146, 104),
+	Rag = rgb(54, 48, 44), RagHi = rgb(96, 86, 74), Purple = rgb(44, 24, 62), PurpleHi = rgb(96, 62, 128),
+	PurpleGlow = rgb(170, 90, 255), Burgundy = rgb(92, 20, 34), BurgundyHi = rgb(150, 50, 66), Gold = rgb(214, 166, 64),
+	GoldDark = rgb(140, 100, 36), Straw = rgb(214, 178, 92), StrawDark = rgb(160, 122, 54), Sack = rgb(176, 148, 104),
+	SackDark = rgb(120, 96, 64), Ghost = rgb(150, 226, 218), GhostMid = rgb(96, 170, 172), GhostDeep = rgb(34, 60, 70),
+	Iron = rgb(58, 58, 66), IronHi = rgb(116, 116, 128), Rust = rgb(110, 62, 38), Stone = rgb(80, 80, 86),
+	StoneHi = rgb(130, 130, 136), StoneDark = rgb(52, 52, 58), Moss = rgb(66, 92, 50), Fog = rgb(150, 160, 150),
+	FogDark = rgb(70, 78, 74), Red = rgb(255, 40, 40), Crow = rgb(22, 20, 26),
+}
+
+-- встроенная текстура дыма клиента Roblox (content/textures/particles), не ассет из каталога
+local SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
+
+Base.C, Base.HC, Base.AC, Base.M, Base.rgb, Base.SMOKE_TEXTURE = C, HC, Kit.Colors, M, rgb, SMOKE_TEXTURE
+Base.Kit = Kit
+
+local function lite()
+	return Kit.IsLite()
+end
+Base.lite = lite
+
+------------------------------------------------------------------------
+-- RIG
+------------------------------------------------------------------------
+-- Существо без человеческого скелета: Root -> Torso (мотор "Root"); форма — детали на Torso и узлах
+function Base.newCreature(name, bodySize)
+	local r = Kit.Rig.bare(name)
+	local model = r.Model
+	local root = Instance.new("Part")
+	root.Name = "HumanoidRootPart"
+	root.Size = V(1, 1, 1)
+	root.Transparency = 1
+	root.Anchored = true
+	root.CanCollide = false
+	root.CanTouch = false
+	root.CanQuery = false
+	root.CFrame = CF()
+	root.Parent = model
+	r.Root = root
+
+	local body = Instance.new("Part")
+	body.Name = "Torso"
+	body.Size = bodySize or V(1, 1, 1)
+	body.Color = C.Night
+	body.Transparency = 1 -- форма тела строится деталями
+	body.Anchored = false
+	body.CanCollide = false
+	body.CanTouch = false
+	body.Massless = true
+	body.TopSurface = Enum.SurfaceType.Smooth
+	body.BottomSurface = Enum.SurfaceType.Smooth
+	body.CFrame = CF()
+	body.Parent = model
+	r.Torso = body
+	r.Parts[#r.Parts + 1] = body
+	r:Motor("Root", root, body, CF(), CF())
+	return r
+end
+
+-- Скелет R6 с невидимыми базовыми конечностями: форма строится поверх
+function Base.newBiped(name, headSize)
+	local r = Kit.Rig.new({ Name = name, HeadSize = headSize or V(1.3, 1.3, 1.3), Torso = C.Night, Arm = C.Night, Leg = C.Night, Head = C.Night })
+	for _, L in ipairs({ r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+		L.Transparency = 1
+	end
+	return r
+end
+
+function Base.setup(r, o)
+	o = o or {}
+	r.Style = o.Style or "Biped"
+	r.Gait = o.Gait or {}
+	r.Sec = r.Sec or {}
+	r.Phases = r.Phases or {}
+	r.DeathStyle = o.Death or "Topple"
+	r.SpawnStyle = o.Spawn or "Rise"
+	if o.DeathFX then
+		r.DeathFX = o.DeathFX
+	end
+	if o.SpawnFX then
+		r.SpawnFX = o.SpawnFX
+	end
+	return r
+end
+
+-- Невидимый узел на моторе name
+function Base.hub(r, name, limb, pivot, sec)
+	local h = r:Joint(name, limb, V(0.2, 0.2, 0.2), pivot, CF(), C.Obsidian)
+	h.Transparency = 1
+	if sec then
+		r.Sec = r.Sec or {}
+		r.Sec[name] = sec
+	end
+	return h
+end
+
+------------------------------------------------------------------------
+-- ЧАСТИЦЫ И ШЛЕЙФЫ
+------------------------------------------------------------------------
+function Base.emitter(part, color, o)
+	if lite() or not part then
+		return nil
+	end
+	o = o or {}
+	local e = Instance.new("ParticleEmitter")
+	e.Name = o.Name or "EnemyFX"
+	if o.Smoke then
+		e.Texture = SMOKE_TEXTURE
+	end
+	e.Color = typeof(color) == "ColorSequence" and color or ColorSequence.new(color or C.Neon)
+	e.LightEmission = o.Smoke and 0.3 or 1
+	e.LightInfluence = o.Smoke and 0.4 or 0
+	e.Rate = o.Rate or 8
+	e.Lifetime = NumberRange.new(o.LifeMin or 0.6, o.LifeMax or 1.2)
+	e.Speed = NumberRange.new(o.SpeedMin or 0.3, o.SpeedMax or 1.2)
+	e.SpreadAngle = Vector2.new(180, 180)
+	e.Rotation = NumberRange.new(0, 360)
+	e.RotSpeed = NumberRange.new(-40, 40)
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, o.Size or 0.4), NumberSequenceKeypoint.new(1, o.SizeEnd or 0) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, o.T0 or 0.2), NumberSequenceKeypoint.new(1, 1) })
+	if o.Accel then
+		e.Acceleration = o.Accel
+	end
+	if o.Off then
+		e.Enabled = false
+	end
+	e.Parent = part
+	return e
+end
+
+function Base.emitPoint(r, limb, offset, size)
+	return r:Box(limb, size or V(0.6, 0.6, 0.6), offset or CF(), C.Obsidian, M.Plastic, { Transparency = 1, Name = "Emit" })
+end
+
+function Base.darkTrail(r, limb, a, b, color)
+	if lite() then
+		return
+	end
+	r.PendingTrails[#r.PendingTrails + 1] = { limb, a, b, color or C.Neon }
+end
+
+-- Шлейфы врагов всегда включены и короче, чем у оружия юнитов
+local function afterFinish(r)
+	for _, d in ipairs(r.Model:GetDescendants()) do
+		if d:IsA("Trail") then
+			d.Name = "EnemyTrail"
+			d.Enabled = true
+			d.Lifetime = 0.4
+			d.LightEmission = 0.2
+			d.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 1) })
+		end
+	end
+end
+
+function Base.finishCreature(r, scale, hip, height)
+	scale = scale or 1
+	r:Finish(scale)
+	r.HipHeight = (hip or 3) * scale
+	r.Height = (height or 4) * scale
+	r.Model:SetAttribute("HipHeight", r.HipHeight)
+	afterFinish(r)
+	return r
+end
+
+function Base.finishBiped(r, scale, idle, height)
+	scale = scale or 1
+	r:Finish(scale, idle)
+	r.Height = (height or (3 + 1 + r.HeadSize.Y + 0.6)) * scale
+	afterFinish(r)
+	return r
+end
+
+------------------------------------------------------------------------
+-- СПИСКИ И АТРИБУТЫ
+------------------------------------------------------------------------
+-- Список без nil (числовые ключи по порядку): {nil, aura} -> {aura}
+local function compact(t)
+	if type(t) ~= "table" then
+		return {}
+	end
+	local keys = {}
+	for k, v in pairs(t) do
+		if type(k) == "number" and v ~= nil then
+			keys[#keys + 1] = k
+		end
+	end
+	table.sort(keys)
+	local out = {}
+	for i, k in ipairs(keys) do
+		out[i] = t[k]
+	end
+	return out
+end
+Base.compact = compact
+
+function Base.list(...)
+	return compact(table.pack(...))
+end
+
+function Base.mark(parts, attr)
+	for _, p in ipairs(parts or {}) do
+		p:SetAttribute(attr, true)
+	end
+	return parts or {}
+end
+
+-- Контур, который остаётся видимым в фазе невидимости: кант bevel; в Lite канта нет — помечаются сами детали
+function Base.outline(parts, edgePart)
+	if edgePart then
+		edgePart:SetAttribute("Outline", true)
+		return { edgePart }
+	end
+	return Base.mark(parts, "Outline")
+end
+
+------------------------------------------------------------------------
+-- ХЭЛЛОУИНСКИЕ ДЕТАЛИ
+------------------------------------------------------------------------
+-- Угловатая тыква: крест из двух брусков с фаской, борозды, хвостик, вырезанное светящееся лицо (в -Z cf)
+function Base.pumpkin(r, limb, cf, s, o)
+	o = o or {}
+	local col, dark, glow = o.Color or HC.Pumpkin, o.Dark or HC.PumpkinDark, o.Glow or HC.Fire
+	local all, eyes, mouth = {}, {}, {}
+	local function add(list)
+		for _, p in ipairs(list) do
+			all[#all + 1] = p
+		end
+	end
+	add(bevel(r, limb, V(1.75, 1.2, 1.2) * s, cf, col, o.Edge or HC.PumpkinHi, M.Plastic))
+	add(bevel(r, limb, V(1.2, 1.28, 1.6) * s, cf, col, o.Edge or HC.PumpkinHi, M.Plastic))
+	if not Kit.Cheap then -- тёмные борозды между дольками
+		for _, x in ipairs({ -0.66, 0.66 }) do
+			all[#all + 1] = r:Box(limb, V(0.1, 1.15, 0.05) * s, cf * CF(x * s, 0, -0.6 * s), dark, M.Plastic)
+			all[#all + 1] = r:Box(limb, V(0.05, 1.15, 0.1) * s, cf * CF(x * 1.33 * s, 0, 0), dark, M.Plastic)
+		end
+	end
+	all[#all + 1] = r:Box(limb, V(1.1, 0.2, 1.05) * s, cf * CF(0, 0.66 * s, 0), dark, M.Plastic)
+	all[#all + 1] = bar(r, limb, (cf * CF(0, 0.7 * s, 0)).Position, (cf * CF(0.12 * s, 1.1 * s, 0.1 * s)).Position, 0.18 * s, o.Stem or HC.Stem)
+	local z = -0.81 * s
+	for _, side in ipairs({ -1, 1 }) do
+		local e = r:Neon(limb, V(0.36, 0.3, 0.06) * s, cf * CF(0.36 * side * s, 0.18 * s, z) * ANG(0, 0, rad(30 * side)), glow)
+		eyes[#eyes + 1] = e
+		all[#all + 1] = e
+	end
+	all[#all + 1] = r:Neon(limb, V(0.16, 0.16, 0.06) * s, cf * CF(0, -0.02 * s, z) * ANG(0, 0, rad(45)), glow)
+	local m1 = r:Neon(limb, V(1.0, 0.22, 0.06) * s, cf * CF(0, -0.32 * s, z), glow)
+	mouth[1] = m1
+	all[#all + 1] = m1
+	for _, x in ipairs({ -0.25, 0.22 }) do -- зубы
+		all[#all + 1] = r:Box(limb, V(0.13, 0.14, 0.07) * s, cf * CF(x * s, -0.25 * s, z - 0.01 * s), dark, M.Plastic)
+	end
+	return all, eyes, mouth
+end
+
+-- Глубокий капюшон: верх, бока, спинка, козырёк; лицо утоплено внутрь (возвращает z лица)
+function Base.deepHood(r, limb, w, h, color, edge, y)
+	y = y or 0
+	bevel(r, limb, V(w, 0.3, w), CF(0, y + h / 2 - 0.15, 0.05), color, edge, M.Fabric)
+	for _, s in ipairs({ -1, 1 }) do
+		bevel(r, limb, V(0.26, h, w), CF((w / 2 - 0.13) * s, y, 0.05), color, edge, M.Fabric)
+	end
+	bevel(r, limb, V(w, h, 0.26), CF(0, y, w / 2 - 0.08), color, edge, M.Fabric)
+	r:Wedge(limb, V(w, 0.35, 0.45), CF(0, y + h / 2 - 0.45, -w / 2 + 0.15), color, M.Fabric)
+	r:Box(limb, V(w - 0.4, h - 0.3, 0.1), CF(0, y - 0.05, 0.1), rgb(8, 6, 12), M.Plastic)
+	return -w / 2 + 0.3
+end
+
+-- Когти-шипы на кисти руки A
+function Base.claws(r, A, color, n, len)
+	n = n or 3
+	local parts = {}
+	for k = 1, n do
+		local x = (k - n / 2 - 0.5) * 0.28
+		for _, p in ipairs(spike(r, A, V(x, -1.0, -0.2), V(x * 1.2, -1.15, -0.2 - (len or 0.5)), 0.16, color, M.Plastic, true, 0.06)) do
+			parts[#parts + 1] = p
+		end
+	end
+	return parts
+end
+
+return Base
+]]></ProtectedString>
+						</Properties>
+					</Item>
+				</Item>
 				<Item class="ModuleScript" referent="RBX0CD06E50DD764790E1981795A95E8399">
 					<Properties>
 						<string name="Name">Kit</string>
@@ -1605,10 +2097,11 @@ return {
 --                                   шлейфов, лиц. UnitModels.Lite и EnemyModels.Lite читают/пишут Kit.Lite.
 --   Kit.Cheap (bool)                дешёвая фаска (2 детали) и плоские шипы — для толп врагов и союзников;
 --                                   выставляется только на время сборки (Enemies.Build / Units.BuildAlly).
+--   Kit.WithCheap(on, fn, ...) -> ...   вызов fn с Kit.Cheap = on; прежнее значение восстанавливается и при ошибке
 -- ПАЛИТРЫ
 --   Kit.Colors (= AC) Armor ArmorMid Edge Cloth ClothDark;  Kit.C  Neon Steel;  Kit.P — палитра юнитов
 --   (Black Coal Dark Steel Gray Pale Violet DeepViolet Purple Neon NeonSoft NeonPink Maroon Crimson White
---   Gold DarkGold Skin);  Kit.M  материалы Plastic(SmoothPlastic) Metal Neon Fabric Slate Glass Wood Grass;  Kit.rgb(r,g,b)
+--   Gold DarkGold Skin);  Kit.M Plastic(=SmoothPlastic) Metal Neon Fabric Slate Glass Wood Grass Foil CorrodedMetal;  Kit.rgb
 --
 -- RIG  (r = Kit.Rig.new(o); все offset/pivot — в локальных координатах детали-основы limb, до масштаба)
 --   Kit.Rig.new{Name, HeadSize=V(1.3)^3, Torso, TorsoMat, Head, Arm, Leg, RoundHead} -> R6: HumanoidRootPart (якорь),
@@ -1622,8 +2115,7 @@ return {
 --   r:Cyl(limb, len, d, offset, color, mat, axis="X"|"Y"|"Z", props)   цилиндр длиной len вдоль оси
 --   r:Ball(limb, d, offset, color, mat, props)                     шар
 --   r:Sphere(limb, size, offset, color, mat, props)                эллипсоид (SpecialMesh добавляется в Finish)
---   r:Seg(limb, a, b, thick, color, mat, props) -> part            брусок от точки a до b; thick число или V2(x,y);
---                                                                  props.Round = true -> цилиндр
+--   r:Seg(limb, a, b, thick, color, mat, props) -> part   брусок a..b; thick число или V2(x,y); props.Round -> цилиндр
 --   r:Rod(limb, a, b, d, color, mat, props)                        круглый стержень a..b
 --   r:Chain(limb, points, thick, color, mat, taper?, round?) -> {parts}
 --   r:Joint(name, limb, size, pivot, fromPivot, color, mat) -> part   подвижная деталь на своём Motor6D name
@@ -1639,13 +2131,12 @@ return {
 --   r:Pauldron(limb, side, size, color, rim, lift, rimMat)  r:Sword(limb, {Length, Width, Y, ...}) -> blade (ставит Muzzle)
 --   r:Mark() -> n ; r:Since(n) -> {parts}   все детали, созданные после метки (явная пометка, напр. StormFX)
 --   r:BakePose(pose)                 повернуть конечности в позу {Motor = {x,y,z}} (градусы) прямо в CFrame деталей
---   r:Finish(scale=1, idle?) -> r    ScaleTo, меши эллипсоидов, шлейфы, Base = C0 (до позы), BakePose(idle),
---                                    HipHeight = 3*scale (+ атрибут модели), Idle, Muzzle. Частицы/свет масштабируются
---                                    вручную (одинаково в Studio и в моке).
+--   r:Finish(scale=1, idle?) -> r    ScaleTo (частицы/свет — явно, одинаково в Studio и моке), меши эллипсоидов, шлейфы,
+--                                    Base = C0 (до позы), BakePose(idle), HipHeight = 3*scale (+ атрибут), Height, Idle, Muzzle
 -- ДЕТАЛИ (r — rig, limb — деталь-основа; возвращают список созданных деталей, если не сказано иное)
 --   Kit.bevel(r, limb, size, cf, color, edge?, mat=Metal, e?) -> parts, edgePart
---        блок с фаской: 3 тёмных бруска + светлый внутри (кант по 12 рёбрам). Cheap: брусок + кант сверху.
---        Lite или edge == false: один брусок (edgePart = nil). Последний элемент списка (вне Lite) — кант.
+--        3 тёмных бруска + светлый внутри (кант по 12 рёбрам); Cheap: брусок + кант сверху (кант — последний в списке);
+--        Lite или edge == false: один брусок, edgePart = nil
 --   Kit.spike(r, limb, base, tip, w, color, mat=Plastic, flat?, thick=w*0.34)   шип из клиньев (крестовой, если не flat и не Cheap)
 --   Kit.bar(r, limb, a, b, t, color, mat=Plastic) -> part           брусок a..b с запасом на стыках
 --   Kit.hornA(r, limb, pts, t0, color, mat)                         рог: сужающиеся бруски + шип
@@ -1659,7 +2150,8 @@ return {
 --   Kit.ring(r, limb, cf, radius, count, thick, depth, color, mat=Metal, skip?)   кольцо в плоскости XY cf (skip(i) — разрыв)
 --   Kit.hide(parts, target?) -> parts   спрятать (Transparency 1, атрибут "PT" = целевая прозрачность для Reveal)
 --   Kit.join(...) -> parts              склеить списки (nil пропускаются)
---   Kit.Calm(root, amount=0.3)          приглушить неон/свет/частицы (один раз на модель — повтор ничего не делает)
+--   Kit.Calm(root, amount=0.3)          приглушить неон/свет/частицы; один раз на модель (атрибут "Calmed"),
+--                                       вложенные уже приглушённые модели пропускаются
 
 local Kit = {}
 
@@ -1674,15 +2166,10 @@ local function rgb(r, g, b)
 end
 Kit.rgb = rgb
 
+local MAT = Enum.Material
 local M = {
-	Plastic = Enum.Material.SmoothPlastic,
-	Metal = Enum.Material.Metal,
-	Neon = Enum.Material.Neon,
-	Fabric = Enum.Material.Fabric,
-	Slate = Enum.Material.Slate,
-	Glass = Enum.Material.Glass,
-	Wood = Enum.Material.Wood,
-	Grass = Enum.Material.Grass,
+	Plastic = MAT.SmoothPlastic, Metal = MAT.Metal, Neon = MAT.Neon, Fabric = MAT.Fabric, Slate = MAT.Slate,
+	Glass = MAT.Glass, Wood = MAT.Wood, Grass = MAT.Grass, Foil = MAT.Foil, CorrodedMetal = MAT.CorrodedMetal,
 }
 Kit.M = M
 
@@ -1691,11 +2178,8 @@ Kit.C = C
 
 -- палитра брони (AC)
 local AC = {
-	Armor = rgb(34, 32, 42),
-	ArmorMid = rgb(52, 50, 64),
-	Edge = rgb(122, 118, 138),
-	Cloth = rgb(62, 30, 104),
-	ClothDark = rgb(36, 17, 62),
+	Armor = rgb(34, 32, 42), ArmorMid = rgb(52, 50, 64), Edge = rgb(122, 118, 138),
+	Cloth = rgb(62, 30, 104), ClothDark = rgb(36, 17, 62),
 }
 Kit.Colors = AC
 
@@ -1713,6 +2197,18 @@ Kit.Lite = false
 Kit.Cheap = false
 function Kit.IsLite()
 	return Kit.Lite == true
+end
+
+-- Вызвать fn(...) с заданным Kit.Cheap; прежнее значение восстанавливается и при ошибке (трассировка сохраняется)
+function Kit.WithCheap(on, fn, ...)
+	local prev = Kit.Cheap
+	Kit.Cheap = on == true
+	local res = table.pack(xpcall(fn, debug.traceback, ...))
+	Kit.Cheap = prev
+	if not res[1] then
+		error(res[2], 0)
+	end
+	return table.unpack(res, 2, res.n)
 end
 local function lite()
 	return Kit.Lite == true
@@ -2160,8 +2656,8 @@ function Rig:BakePose(pose)
 	end
 end
 
--- ScaleTo в Roblox масштабирует и частицы/свет, а мок — нет. Чтобы результат был одинаковым, на время
--- ScaleTo эффекты снимаются с модели и масштабируются вручную.
+-- ScaleTo в Roblox масштабирует и частицы/свет, а мок — нет. Чтобы результат был одинаковым, значения
+-- эффектов запоминаются до ScaleTo и после него выставляются явно (исходное * scale); порядок детей не меняется.
 local FX_CLASSES = { ParticleEmitter = true, PointLight = true, SpotLight = true, SurfaceLight = true, Beam = true }
 
 local function scaleSeq(seq, f)
@@ -2172,16 +2668,25 @@ local function scaleSeq(seq, f)
 	return NumberSequence.new(kps)
 end
 
-local function scaleFx(d, f)
+local function fxSnapshot(d)
 	if d:IsA("ParticleEmitter") then
-		d.Size = scaleSeq(d.Size, f)
-		d.Speed = NumberRange.new(d.Speed.Min * f, d.Speed.Max * f)
-		d.Acceleration = d.Acceleration * f
+		return { d.Size, d.Speed, d.Acceleration }
 	elseif d:IsA("Beam") then
-		d.Width0 = d.Width0 * f
-		d.Width1 = d.Width1 * f
+		return { d.Width0, d.Width1 }
+	end
+	return { d.Range }
+end
+
+local function fxRestore(d, s, f)
+	if d:IsA("ParticleEmitter") then
+		d.Size = scaleSeq(s[1], f)
+		d.Speed = NumberRange.new(s[2].Min * f, s[2].Max * f)
+		d.Acceleration = s[3] * f
+	elseif d:IsA("Beam") then
+		d.Width0 = s[1] * f
+		d.Width1 = s[2] * f
 	else
-		d.Range = math.min(d.Range * f, 60)
+		d.Range = math.min(s[1] * f, 60)
 	end
 end
 
@@ -2193,16 +2698,12 @@ function Rig:Finish(scale, idle)
 		local fx = {}
 		for _, d in ipairs(model:GetDescendants()) do
 			if FX_CLASSES[d.ClassName] then
-				fx[#fx + 1] = { d, d.Parent }
+				fx[#fx + 1] = { d, fxSnapshot(d) }
 			end
-		end
-		for _, e in ipairs(fx) do
-			e[1].Parent = nil
 		end
 		model:ScaleTo(scale)
 		for _, e in ipairs(fx) do
-			scaleFx(e[1], scale)
-			e[1].Parent = e[2]
+			fxRestore(e[1], e[2], scale)
 		end
 	end
 	for _, p in ipairs(self.Pending) do
@@ -2331,8 +2832,9 @@ local function bevel(r, limb, size, cf, color, edge, mat, e)
 	local x, y, z = size.X, size.Y, size.Z
 	e = e or math.min(0.09, math.min(x, y, z) * 0.2)
 	if Kit.Cheap then
+		local main = r:Box(limb, size, cf, color, mat)
 		local strip = r:Box(limb, V(x + 0.03, e, z + 0.03), cf * CF(0, y / 2 - e * 0.62, 0), edge or AC.Edge, mat)
-		return { r:Box(limb, size, cf, color, mat), strip }, strip
+		return { main, strip }, strip
 	end
 	local parts = {
 		r:Box(limb, V(x, y - 2 * e, z - 2 * e), cf, color, mat),
@@ -2450,13 +2952,9 @@ local CALM_DARK = rgb(14, 10, 22)
 Kit.CALM_LIGHT = 0.65 -- множитель яркости PointLight
 Kit.CALM_EMISSION = 0.6 -- множитель LightEmission частиц
 
-function Kit.Calm(root, amount)
-	if not root or root:GetAttribute("Calmed") then
-		return
-	end
-	amount = amount or 0.3
-	root:SetAttribute("Calmed", amount)
-	for _, d in ipairs(root:GetDescendants()) do
+-- Повторный вызов ничего не делает; вложенные уже приглушённые модели (статуи юнитов в лобби и т.п.) пропускаются
+local function calmWalk(obj, amount)
+	for _, d in ipairs(obj:GetChildren()) do
 		if d:IsA("BasePart") then
 			if d.Material == M.Neon then
 				d.Color = d.Color:Lerp(CALM_DARK, amount)
@@ -2466,7 +2964,19 @@ function Kit.Calm(root, amount)
 		elseif d:IsA("ParticleEmitter") then
 			d.LightEmission = d.LightEmission * Kit.CALM_EMISSION
 		end
+		if not (d:IsA("Model") and d:GetAttribute("Calmed")) then
+			calmWalk(d, amount)
+		end
 	end
+end
+
+function Kit.Calm(root, amount)
+	if not root or root:GetAttribute("Calmed") then
+		return
+	end
+	amount = amount or 0.3
+	root:SetAttribute("Calmed", amount)
+	calmWalk(root, amount)
 end
 
 return Kit
@@ -2534,6 +3044,9 @@ return Kit
 --   gear(r, limb, name?, pivot, a, depth, color, hubColor=CLK.Black, rate=1, mat) -> host, hub
 --   clockFace(r, limb, cf, a, frame, prefix, handColor, glowHands?) -> hands   стрелки на моторах <prefix>Hour/<prefix>Minute
 --   miniClock(r, limb, cf, a)
+--   r.SpinRates[motor] = rate — любой мотор крутится вокруг своей оси Z (Anims.Apply), напр. MoonBack, SpinEclipse
+--   stormFX(parts) -> parts   детали «бури»: атрибут StormFX = видимая прозрачность, Transparency = 1
+--                             (пример: local m = r:Mark() ... строим ... Parts.stormFX(r:Since(m)))
 -- ХЭЛЛОУИН
 --   tri(r, limb, cf, w, h, color, mat=Neon, depth=0.05) -> {2 parts}   треугольник в плоскости XY cf, вершина вверх
 --   hideHead(r)                     спрятать куб головы фигуры (r.HeadBox)
@@ -2545,6 +3058,9 @@ return Kit
 --   crow(r, limb, cf, s, eye=HW.Orange)   star(r, limb, cf, s, color)   flask(r, limb, cf, s, liquid) -> liquid
 --   bell(r, limb, cf, s, color, rim, glow) -> clapper   card(r, limb, cf, s, suit, back?)
 --   thread(r, limb, a, b, color, d=0.035) -> part   embers(r, part, color, rate=8, size=0.25) -> emitter | nil
+-- РУНЫ (3D-иконки без rig: заякоренные детали прямо в Model m, координаты — от центра иконки)
+--   rpart(m, size, cf, color, mat=Plastic, props) -> Part      rwedge(m, size, cf, color, mat=Plastic, props) -> WedgePart
+--   rlight(part, color, range=8) -> PointLight | nil (Lite)    (Brightness 1.4, без теней)
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("VoidTD")
 local Kit = require(Shared.Models.Kit)
@@ -2820,7 +3336,7 @@ function Parts.blade(r, A, o)
 	bevel(r, A, V(0.28, o.GuardW or (w + 0.7), 0.28), CF(0, y, -0.42), o.Guard or AC.Armor, o.Edge)
 	r:Box(A, V(0.12, w, len), CF(0, y, z0 - len / 2), bladeC, M.Metal)
 	if o.Glow then
-		for _, s in ipairs(SIDES) do
+		for _, s in ipairs({ 1, -1 }) do -- верхняя и нижняя кромки
 			r:Neon(A, V(0.14, 0.07, len * 0.96), CF(0, y + s * (w / 2 - 0.03), z0 - len / 2), o.Glow)
 		end
 	end
@@ -3056,6 +3572,17 @@ function Parts.clockFace(r, limb, cf, a, frame, prefix, handColor, glowHands)
 	return hands
 end
 
+-- Детали, видимые только во время «бури» (Renderer / Viewer показывают их по атрибуту StormFX)
+function Parts.stormFX(parts)
+	for _, p in ipairs(parts or {}) do
+		if p:IsA("BasePart") then
+			p:SetAttribute("StormFX", p.Transparency)
+			p.Transparency = 1
+		end
+	end
+	return parts or {}
+end
+
 function Parts.miniClock(r, limb, cf, a)
 	octa(r, limb, a, 0.12, cf, CLK.Gold)
 	octa(r, limb, a * 0.8, 0.14, cf, CLK.Dial, M.Plastic)
@@ -3237,9 +3764,2772 @@ function Parts.embers(r, part, color, rate, size)
 	return r:Sparkles(part, color, { Rate = rate or 8, Up = 3, Size = size or 0.25, LifeMin = 0.5, LifeMax = 1.1 })
 end
 
+------------------------------------------------------------------------
+-- РУНЫ: заякоренные детали без сварки (иконка вращается целиком через PivotTo)
+------------------------------------------------------------------------
+local function anchored(m, className, size, cf, color, mat, props)
+	local p = Instance.new(className)
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.CastShadow = false
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color
+	p.Material = mat or M.Plastic
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if props then
+		for k, v in pairs(props) do
+			p[k] = v
+		end
+	end
+	p.Parent = m
+	return p
+end
+
+function Parts.rpart(m, size, cf, color, mat, props)
+	return anchored(m, "Part", size, cf, color, mat, props)
+end
+
+function Parts.rwedge(m, size, cf, color, mat, props)
+	return anchored(m, "WedgePart", size, cf, color, mat, props)
+end
+
+function Parts.rlight(part, color, range)
+	if Kit.IsLite() then
+		return nil
+	end
+	local l = Instance.new("PointLight")
+	l.Color = color
+	l.Range = range or 8
+	l.Brightness = 1.4
+	l.Shadows = false
+	l.Parent = part
+	return l
+end
+
 return Parts
 ]]></ProtectedString>
 					</Properties>
+				</Item>
+				<Item class="ModuleScript" referent="RBXF1F27456E37C9949BA73C87528D4EBC3">
+					<Properties>
+						<string name="Name">Units</string>
+						<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units (UnitModels)
+-- Процедурные модели юнитов (R6 в угловатом стиле), союзников-призывов и 3D-иконок рун. Без внешних ассетов.
+-- Реестр заполняют дочерние модули Void, Shattered, Blood, Clockmaker, Halloween, Allies, Runes
+-- (каждый: `return function(UnitModels, Kit, Parts) ... end`); отсутствующий модуль пропускается,
+-- ошибка загрузки модуля — warn + запись в UnitModels.LoadErrors (остальные семейства работают).
+--
+-- API
+--   UnitModels.Lite (bool)                      облегчённый режим (= Kit.Lite; запись меняет Kit.Lite)
+--   UnitModels.Build(unitId, level) -> rig       level 1..5 (зажимается); применяет скин уровня, Kit.Calm, ауру редкости
+--                                                (не в Lite), атрибуты модели UnitId, Level; Model.Name = unitId
+--   UnitModels.BuildAlly(allyId) -> rig          R6 с моторами RS LS RH LH Neck Root (ходьба), атрибут модели AllyId, rig.AllyId
+--   UnitModels.BuildRune(runeId) -> { Model, Core }   заякоренные детали, центр (pivot) в начале координат, ~2.5 студа
+--   UnitModels.Has(unitId)  HasAlly(allyId)  HasRune(runeId) -> bool
+--   UnitModels.Rarity(unitId) -> "Common".."Secret" | nil   (Config.Units[id].Rarity; rarity из Register — запасной)
+--   UnitModels.Scale(unitId) -> number           Config.Units[id].Scale or 1 — масштаб для r:Finish в строителях
+--   UnitModels.Kit, .Parts (= .H), .Palette (= Kit.P), .Rig (= Kit.Rig), .LoadErrors {name -> текст}
+--
+-- РЕГИСТРАЦИЯ (из дочерних модулей)
+--   UnitModels.Register(unitId, builder, rarity?)
+--       builder(lv, unitId) -> rig   ГОТОВЫЙ rig: строитель сам вызывает Parts.levelAura(r, lv, color) и
+--                                    r:Finish(UnitModels.Scale(unitId), idlePose); r.Muzzle — на острие оружия.
+--   UnitModels.RegisterAlly(allyIdOrFamily, builder)
+--       ключ — id союзника (приоритет) или семейство Config.Allies[id].Family ("Illusion" | "Puppet" | "Cursed").
+--       builder(allyId, tier, def) -> r, glowColor?   rig БЕЗ Finish (BuildAlly сам вызывает r:Finish(scale, {}));
+--       строится с Kit.Cheap = true. Масштаб: Tier > 5 или GoldenMarionette — 1.3, иначе 0.82 + 0.06 * min(Tier, 5).
+--       После Finish: удаляются Trail/ParticleEmitter/PointLight, вне Lite — один PointLight цвета glow на Torso
+--       (Range 6, Brightness 0.8), Kit.Calm, все детали CanQuery/CanTouch/CastShadow = false.
+--   UnitModels.RegisterRune(runeId, builder)
+--       builder(m) -> corePart   детали — Parts.rpart / Parts.rwedge прямо в Model m (имя "Rune_<id>"), свет — Parts.rlight;
+--       BuildRune ставит PrimaryPart = core, pivot в начало координат и Kit.Calm(m, 0.2).
+--
+-- СКИН УРОВНЯ (все видимые детали + скрытые с атрибутами StormFX / PT, чтобы при показе они совпадали с остальными)
+--   Metal: lv1 -> CorrodedMetal; lv>=4 -> Foil (+ lv5 оттенок редкости 0.1); SmoothPlastic lv1 -> Plastic;
+--   Fabric lv5 -> оттенок редкости 0.06. Оттенок только для Epic / Legendary / Mythic / Secret.
+-- АУРА РЕДКОСТИ: Attachment "AuraPoint" на Root у ног + ParticleEmitter "RarityAura" (создаётся после Calm).
+
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("VoidTD")
+local Config = require(Shared.Config)
+local Kit = require(Shared.Models.Kit)
+local Parts = require(Shared.Models.Parts)
+
+local V = Vector3.new
+local CF = CFrame.new
+local rgb = Kit.rgb
+
+local UnitModels = {}
+UnitModels.Kit = Kit
+UnitModels.Parts = Parts
+UnitModels.H = Parts
+UnitModels.Palette = Kit.P
+UnitModels.Rig = Kit.Rig
+UnitModels.LoadErrors = {}
+
+-- Lite — общий флаг Kit (его читают все хелперы); поле UnitModels.Lite лишь прокси
+setmetatable(UnitModels, {
+	__index = function(_, key)
+		if key == "Lite" then
+			return Kit.Lite == true
+		end
+		return nil
+	end,
+	__newindex = function(t, key, value)
+		if key == "Lite" then
+			Kit.Lite = value == true
+		else
+			rawset(t, key, value)
+		end
+	end,
+})
+
+local Builders, RegRarity = {}, {}
+local AllyBuilders, RuneBuilders = {}, {}
+
+------------------------------------------------------------------------
+-- РЕЕСТР
+------------------------------------------------------------------------
+function UnitModels.Register(unitId, builder, rarity)
+	assert(type(unitId) == "string" and type(builder) == "function", "UnitModels.Register(unitId, builder, rarity?)")
+	Builders[unitId] = builder
+	RegRarity[unitId] = rarity
+end
+
+function UnitModels.RegisterAlly(key, builder)
+	assert(type(key) == "string" and type(builder) == "function", "UnitModels.RegisterAlly(allyIdOrFamily, builder)")
+	AllyBuilders[key] = builder
+end
+
+function UnitModels.RegisterRune(runeId, builder)
+	assert(type(runeId) == "string" and type(builder) == "function", "UnitModels.RegisterRune(runeId, builder)")
+	RuneBuilders[runeId] = builder
+end
+
+function UnitModels.Has(unitId)
+	return Builders[unitId] ~= nil
+end
+
+local function allyBuilder(allyId)
+	local def = Config.Allies and Config.Allies[allyId]
+	if not def then
+		return nil, nil
+	end
+	return AllyBuilders[allyId] or AllyBuilders[def.Family], def
+end
+
+function UnitModels.HasAlly(allyId)
+	return (allyBuilder(allyId)) ~= nil
+end
+
+function UnitModels.HasRune(runeId)
+	return RuneBuilders[runeId] ~= nil
+end
+
+function UnitModels.Rarity(unitId)
+	local def = Config.Units and Config.Units[unitId]
+	return (def and def.Rarity) or RegRarity[unitId]
+end
+
+function UnitModels.Scale(unitId)
+	local def = Config.Units and Config.Units[unitId]
+	return (def and def.Scale) or 1
+end
+
+------------------------------------------------------------------------
+-- СКИН УРОВНЯ И АУРА РЕДКОСТИ
+------------------------------------------------------------------------
+local MAT = Enum.Material
+local RARITY_TINT = {
+	Epic = rgb(150, 80, 230),
+	Legendary = rgb(230, 180, 60),
+	Mythic = rgb(150, 70, 230),
+	Secret = rgb(230, 30, 40),
+}
+
+local RARITY_AURA = {
+	Epic = { Color = ColorSequence.new(rgb(170, 80, 255)), Rate = 3, Size = 0.22 },
+	Legendary = { Color = ColorSequence.new(rgb(255, 205, 70), rgb(190, 110, 255)), Rate = 5, Size = 0.28 },
+	Mythic = { Color = ColorSequence.new(rgb(255, 50, 150), rgb(150, 60, 255)), Rate = 8, Size = 0.34 },
+	Secret = { Color = ColorSequence.new(rgb(255, 20, 40), rgb(20, 0, 0)), Rate = 14, Size = 0.45 },
+}
+UnitModels.RarityTint = RARITY_TINT
+
+-- 1 — потёртый ржавый металл, 2–3 — металл, 4–5 — блестящая фольга; на 5-м броня с оттенком редкости
+local function applyLevelSkin(model, lv, rarity)
+	local tint = RARITY_TINT[rarity or ""]
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart"
+			and (d.Transparency < 1 or d:GetAttribute("StormFX") ~= nil or d:GetAttribute("PT") ~= nil) then
+			local mat = d.Material
+			if mat == MAT.Metal then
+				if lv == 1 then
+					d.Material = MAT.CorrodedMetal
+				elseif lv >= 4 then
+					d.Material = MAT.Foil
+					if lv >= 5 and tint then
+						d.Color = d.Color:Lerp(tint, 0.1)
+					end
+				end
+			elseif mat == MAT.SmoothPlastic then
+				if lv == 1 then
+					d.Material = MAT.Plastic
+				end
+			elseif mat == MAT.Fabric then
+				if lv >= 5 and tint then
+					d.Color = d.Color:Lerp(tint, 0.06)
+				end
+			end
+		end
+	end
+end
+UnitModels.ApplyLevelSkin = applyLevelSkin
+
+local function addRarityAura(rig, rarity)
+	local aura = RARITY_AURA[rarity or ""]
+	if not aura or Kit.IsLite() or not rig.Root then
+		return nil
+	end
+	local at = Instance.new("Attachment")
+	at.Name = "AuraPoint"
+	at.Position = V(0, -(rig.HipHeight or 3) + 0.2, 0)
+	at.Parent = rig.Root
+	local e = Instance.new("ParticleEmitter")
+	e.Name = "RarityAura"
+	e.Color = aura.Color
+	e.LightEmission = 1
+	e.LightInfluence = 0
+	e.Rate = aura.Rate
+	e.Lifetime = NumberRange.new(1.2, 2)
+	e.Speed = NumberRange.new(0.6, 1.6)
+	e.EmissionDirection = Enum.NormalId.Top
+	e.SpreadAngle = Vector2.new(70, 70)
+	e.Acceleration = V(0, 1.2, 0)
+	e.RotSpeed = NumberRange.new(-90, 90)
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, aura.Size), NumberSequenceKeypoint.new(1, 0) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+	e.Parent = at
+	return e
+end
+
+------------------------------------------------------------------------
+-- ЮНИТЫ
+------------------------------------------------------------------------
+local function clampLevel(level)
+	local lv = tonumber(level) or 1
+	if lv ~= lv then
+		lv = 1
+	end
+	return math.clamp(math.floor(lv), 1, 5)
+end
+
+-- Модель стоит в начале координат, ноги на высоте -HipHeight
+function UnitModels.Build(unitId, level)
+	local builder = Builders[unitId]
+	if not builder then
+		error("Unknown unit " .. tostring(unitId), 2)
+	end
+	local lv = clampLevel(level)
+	local rig = Kit.WithCheap(false, builder, lv, unitId) -- юниты всегда в полной детализации
+	assert(type(rig) == "table" and rig.Model, "unit builder " .. unitId .. " returned no rig")
+	if not rig.Scale then
+		rig:Finish(UnitModels.Scale(unitId), rig.Idle)
+	end
+	local model = rig.Model
+	model.Name = unitId
+	local rarity = UnitModels.Rarity(unitId)
+	applyLevelSkin(model, lv, rarity)
+	Kit.Calm(model)
+	addRarityAura(rig, rarity) -- после Calm: аура не приглушается
+	model:SetAttribute("UnitId", unitId)
+	model:SetAttribute("Level", lv)
+	rig.UnitId = unitId
+	rig.Level = lv
+	return rig
+end
+
+------------------------------------------------------------------------
+-- СОЮЗНИКИ (призывы): лёгкие R6-фигуры, ходят толпой
+------------------------------------------------------------------------
+local function allyScale(allyId, def)
+	local tier = tonumber(def.Tier) or 1
+	if allyId == "GoldenMarionette" or tier > 5 then
+		return 1.3
+	end
+	return 0.82 + 0.06 * math.min(tier, 5)
+end
+
+function UnitModels.BuildAlly(allyId)
+	local builder, def = allyBuilder(allyId)
+	if not def then
+		error("Unknown ally " .. tostring(allyId), 2)
+	end
+	if not builder then
+		error("No model for ally " .. tostring(allyId) .. " (family " .. tostring(def.Family) .. ")", 2)
+	end
+	-- союзники ходят группами: дешёвая фаска (2 детали), без частиц и шлейфов
+	local r, glow = Kit.WithCheap(true, builder, allyId, def.Tier, def)
+	assert(type(r) == "table" and r.Model, "ally builder " .. tostring(allyId) .. " returned no rig")
+	if not r.Scale then
+		r:Finish(allyScale(allyId, def), {})
+	end
+	local model = r.Model
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Trail") or d:IsA("ParticleEmitter") or d:IsA("PointLight") then
+			d:Destroy()
+		end
+	end
+	if glow and not Kit.IsLite() and r.Torso then
+		-- одна подсветка вместо частиц
+		local l = Instance.new("PointLight")
+		l.Color = glow
+		l.Range = 6
+		l.Brightness = 0.8
+		l.Shadows = false
+		l.Parent = r.Torso
+	end
+	Kit.Calm(model)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = false
+			d.CanTouch = false
+			d.CastShadow = false
+		end
+	end
+	model.Name = allyId
+	model:SetAttribute("AllyId", allyId)
+	r.AllyId = allyId
+	r.Glow = glow
+	return r
+end
+
+------------------------------------------------------------------------
+-- РУНЫ (3D-иконки)
+------------------------------------------------------------------------
+function UnitModels.BuildRune(runeId)
+	local builder = RuneBuilders[runeId]
+	if not builder then
+		error("Unknown rune " .. tostring(runeId), 2)
+	end
+	local m = Instance.new("Model")
+	m.Name = "Rune_" .. runeId
+	local core = builder(m)
+	assert(typeof(core) == "Instance" and core:IsA("BasePart"), "rune builder " .. runeId .. " returned no core part")
+	-- pivot иконки — начало координат (одинаково в Studio и в моке)
+	core.PivotOffset = core.CFrame:Inverse()
+	m.PrimaryPart = core
+	m.WorldPivot = CF()
+	Kit.Calm(m, 0.2)
+	m:SetAttribute("RuneId", runeId)
+	return { Model = m, Core = core }
+end
+
+------------------------------------------------------------------------
+-- СЕМЕЙСТВА (дочерние модули)
+------------------------------------------------------------------------
+local CHILDREN = { "Void", "Shattered", "Blood", "Clockmaker", "Halloween", "Allies", "Runes" }
+for _, name in ipairs(CHILDREN) do
+	local mod = script:FindFirstChild(name)
+	if mod and mod:IsA("ModuleScript") then
+		local ok, err = xpcall(function()
+			local install = require(mod)
+			assert(type(install) == "function", "module must return function(UnitModels, Kit, Parts)")
+			install(UnitModels, Kit, Parts)
+		end, debug.traceback)
+		if not ok then
+			UnitModels.LoadErrors[name] = tostring(err)
+			warn("[UnitModels] " .. name .. ": " .. tostring(err))
+		end
+	end
+end
+
+return UnitModels
+]]></ProtectedString>
+					</Properties>
+					<Item class="ModuleScript" referent="RBX1378B689A19B0B02D94BAB32983D97DD">
+						<Properties>
+							<string name="Name">Allies</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units/Allies
+-- Союзники-призывы (Config.Allies, 16 шт.): лёгкие R6-фигуры трёх семейств, ходят толпой по дорожке.
+--   Illusion — тёмно-фиолетовые иллюзии (тень, карточный солдат, зеркальный рыцарь, маг, королевская иллюзия);
+--   Puppet   — шарнирные куклы на нитях кукловода (дерево, фарфор, железо ... золотая марионетка);
+--   Cursed   — проклятые люди с красными глазами (оборванец, теневой солдат, страж, багровый воин, рыцарь).
+-- Регистрирует UnitModels.RegisterAlly(family, builder(allyId, tier, def) -> r, glowColor). Rig отдаётся БЕЗ Finish:
+-- масштаб по ярусу, чистку частиц/шлейфов/света, одну подсветку glow, Calm и флаги деталей делает
+-- UnitModels.BuildAlly (строит с Kit.Cheap = true: фаска из 2 деталей, плоские шипы). Позы нет — прямая стойка R6.
+
+return function(UnitModels, Kit, Parts)
+	local V, CF, ANG, rad = Vector3.new, CFrame.new, CFrame.Angles, math.rad
+	local M, HW, rgb = Parts.M, Parts.HW, Parts.rgb
+	local bevel, spike = Kit.bevel, Kit.spike
+	local figure, eyes, shaft, blade = Parts.figure, Parts.eyes, Parts.shaft, Parts.blade
+
+	local CHEST = V(2.14, 1.1, 1.16) -- нагрудник поверх торса
+	local CHEST_AT = CF(0, 0.45, 0)
+	local PORCELAIN = rgb(236, 230, 236)
+
+	-- Ярус 1..5 (ярусы выше 5 — особые, их строитель обрабатывает отдельно)
+	local function tierOf(tier)
+		return math.clamp(math.floor(tonumber(tier) or 1), 1, 5)
+	end
+
+	-- Простой брусок без фаски (прозрачность — необязательно)
+	local function plain(r, limb, size, cf, color, mat, transparency)
+		return r:Box(limb, size, cf, color, mat or M.Plastic, transparency and { Transparency = transparency } or nil)
+	end
+
+	------------------------------------------------------------------------
+	-- ИЛЛЮЗИИ: тёмно-фиолетовые, стекло, карты и зеркала
+	------------------------------------------------------------------------
+	local ILL_EDGE = rgb(170, 120, 230)
+	local ILL_GLASS = rgb(150, 100, 220)
+	local MIRROR = rgb(200, 190, 230)
+
+	local function Illusion(id, tier)
+		tier = tierOf(tier)
+		local shade = tier == 1
+		local body = shade and rgb(16, 10, 24) or rgb(40, 22, 64)
+		local edge, glow = ILL_EDGE, HW.Violet
+		local r = figure(id, { Torso = body, Arm = body, Leg = body, Skin = shade and body or rgb(70, 40, 100), Edge = edge })
+		eyes(r, glow, true, 0.08)
+		if tier == 1 then
+			-- ShadowDouble: чёрный силуэт в стеклянной дымке, капюшон
+			for _, L in ipairs({ r.Torso, r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+				plain(r, L, L.Size + V(0.06, 0.06, 0.06), CF(), ILL_GLASS, M.Glass, 0.7)
+			end
+			Parts.hood(r, body, edge, glow, true)
+		elseif tier == 2 then
+			-- CardSoldier: тело-карта с бубнами, красная шапка с золотыми шипами, копьё-пика
+			plain(r, r.Torso, V(2.0, 2.6, 0.12), CF(0, -0.2, -0.58), rgb(236, 232, 240))
+			plain(r, r.Torso, V(1.7, 2.3, 0.13), CF(0, -0.2, -0.58), HW.Red, nil, 0.85)
+			for _, y in ipairs({ 0.6, -1.0 }) do
+				plain(r, r.Torso, V(0.4, 0.4, 0.14), CF(0, y, -0.6) * ANG(0, 0, rad(45)), HW.Red)
+			end
+			bevel(r, r.Head, V(1.3, 0.3, 1.3), CF(0, 0.65, 0), HW.Red, false)
+			for k = -1, 1 do
+				spike(r, r.Head, V(k * 0.4, 0.75, 0), V(k * 0.4, 1.15, 0), 0.3, HW.Gold, M.Metal, true, 0.08)
+			end
+			local top = shaft(r, r.RArm, -2.2, 2.0, HW.Black, 0.16)
+			spike(r, r.RArm, top, top + V(0, 0.8, 0), 0.5, HW.Red, M.Plastic, true, 0.1)
+		elseif tier == 3 then
+			-- MirrorKnight: блестящий шлем и кираса, зеркальный щит со стеклом, клинок
+			local steel = rgb(170, 160, 200)
+			Parts.helm(r, steel, edge, glow, nil, false)
+			bevel(r, r.Torso, CHEST, CHEST_AT, steel, edge, M.Foil)
+			Parts.plateShoulders(r, steel, edge)
+			bevel(r, r.LArm, V(0.2, 2.0, 1.4), CF(-0.65, -0.6, -0.1), MIRROR, glow, M.Foil)
+			plain(r, r.LArm, V(0.22, 1.6, 1.0), CF(-0.66, -0.6, -0.1), ILL_GLASS, M.Glass, 0.4)
+			blade(r, r.RArm, { Len = 2.2, W = 0.4, Blade = MIRROR, Guard = body, Glow = glow })
+		elseif tier == 4 then
+			-- PhantomMage: капюшон, мантия, посох со светящимся ромбом в стеклянной оболочке
+			Parts.hood(r, rgb(60, 30, 96), edge, glow, true)
+			Parts.robe(r, rgb(46, 24, 76), edge, 1.7)
+			local top = shaft(r, r.RArm, -2.4, 1.9, HW.Black, 0.16)
+			local orb = CF(top + V(0, 0.35, 0)) * ANG(rad(45), 0, rad(45))
+			r:Neon(r.RArm, V(0.5, 0.5, 0.5), orb, glow)
+			plain(r, r.RArm, V(0.75, 0.75, 0.75), orb, ILL_GLASS, M.Glass, 0.6)
+		else
+			-- RoyalIllusion: четырёхгранная корона, кираса с золотым кантом, плащ, два клинка
+			local royal = rgb(90, 50, 140)
+			Parts.kingCrown(r, r.Head, CF(0, 0.6, 0), 0.66, 0.6, rgb(200, 170, 240), glow, 4)
+			bevel(r, r.Torso, CHEST, CHEST_AT, royal, HW.Gold, M.Foil)
+			Parts.plateShoulders(r, royal, HW.Gold)
+			r:Cape(1.9, 2.6, rgb(60, 30, 96), false)
+			blade(r, r.RArm, { Len = 2.4, W = 0.45, Blade = MIRROR, Guard = HW.Gold, Glow = glow })
+			blade(r, r.LArm, { Len = 2.0, W = 0.4, Blade = MIRROR, Guard = HW.Gold, Glow = glow, Secondary = true })
+		end
+		return r, glow
+	end
+
+	------------------------------------------------------------------------
+	-- КУКЛЫ: шарнирные, нити кукловода над головой и руками
+	------------------------------------------------------------------------
+	local JOINT_DARK = rgb(60, 50, 56)
+	local DOLL_ARMOR = rgb(60, 40, 50)
+	-- по ярусам 1..5: дерево, кант, голова, шарниры, броня
+	local PUPPET = {
+		{ Wood = HW.WoodLight, Edge = HW.Wood, Skin = PORCELAIN, Joint = HW.Wood },
+		{ Wood = PORCELAIN, Edge = rgb(190, 180, 196), Skin = PORCELAIN, Joint = JOINT_DARK },
+		{ Wood = HW.Iron, Edge = HW.Edge, Joint = JOINT_DARK, Armor = HW.Iron },
+		{ Wood = rgb(40, 30, 36), Edge = rgb(130, 70, 80), Joint = JOINT_DARK, Armor = DOLL_ARMOR },
+		{ Wood = rgb(90, 40, 60), Edge = HW.Gold, Joint = JOINT_DARK, Armor = DOLL_ARMOR },
+	}
+	-- особая золотая марионетка (ярус > 5)
+	local GOLDEN = { Wood = HW.Gold, Edge = rgb(255, 230, 150), Joint = HW.GoldDark, Armor = HW.Gold, ArmorMat = M.Foil }
+	local DOLL_JOINTS = { V(1.0, 0.7, 0), V(-1.0, 0.7, 0), V(0.5, -1.0, 0), V(-0.5, -1.0, 0), V(0, 1.0, 0) }
+
+	local function Puppet(id, tier)
+		local golden = id == "GoldenMarionette" or (tonumber(tier) or 1) > 5
+		local t = golden and 6 or tierOf(tier)
+		local st = golden and GOLDEN or PUPPET[t]
+		local wood, edge = st.Wood, st.Edge
+		local hot = golden and HW.Orange or HW.Red -- зрачки, свечение клинка, камни короны
+		local r = figure(id, { Torso = wood, Arm = wood, Leg = wood, Skin = st.Skin or wood, Edge = edge })
+		local T, Hd = r.Torso, r.Head
+		-- лицо-маска: глаза-пуговицы со светящимися зрачками, рот-шов
+		for _, s in ipairs({ -1, 1 }) do
+			plain(r, Hd, V(0.24, 0.24, 0.05), CF(0.26 * s, 0.1, -0.62) * ANG(0, 0, rad(45)), HW.Black)
+			r:Neon(Hd, V(0.08, 0.08, 0.04), CF(0.26 * s, 0.1, -0.65), hot)
+		end
+		if golden then
+			plain(r, Hd, V(0.5, 0.05, 0.04), CF(0, -0.3, -0.62), HW.GoldDark, M.Metal)
+		else
+			r:Neon(Hd, V(0.5, 0.05, 0.04), CF(0, -0.3, -0.62), HW.Red)
+		end
+		-- шарниры: плечи, бёдра, шея + кольца-стыки на конечностях
+		for _, p in ipairs(DOLL_JOINTS) do
+			plain(r, T, V(0.45, 0.45, 0.45), CF(p) * ANG(rad(45), 0, rad(45)), st.Joint, M.Metal)
+		end
+		for _, L in ipairs({ r.RArm, r.LArm, r.RLeg, r.LLeg }) do
+			plain(r, L, V(1.06, 0.12, 1.06), CF(), st.Joint, M.Metal)
+		end
+		if t == 2 then
+			-- PorcelainDoll: платье, трещина на лице, тёмные волосы
+			bevel(r, T, V(2.3, 1.4, 1.3), CF(0, -1.1, 0), rgb(110, 30, 60), false, M.Fabric)
+			Kit.crack(r, Hd, { V(0.2, 0.5, -0.62), V(0.35, 0.2, -0.62), V(0.25, -0.05, -0.62) }, 0.04, rgb(60, 50, 60))
+			bevel(r, Hd, V(1.3, 0.35, 1.3), CF(0, 0.55, 0.05), rgb(60, 30, 20), false, M.Fabric)
+		elseif t >= 3 then
+			-- броня: железо (3), тёмная (4–5), золотая фольга (золотая марионетка)
+			bevel(r, T, CHEST, CHEST_AT, st.Armor, edge, st.ArmorMat or M.Metal)
+			Parts.plateShoulders(r, st.Armor, edge)
+		end
+		if t >= 4 then
+			blade(r, r.RArm, { Len = t >= 5 and 2.6 or 2.2, W = 0.45, Blade = golden and HW.Gold or HW.Iron, Guard = edge, Glow = hot })
+		elseif t == 3 then
+			Parts.shield(r, r.LArm, { Color = HW.Iron, Edge = edge, H = 1.6, W = 1.1 })
+		end
+		if t >= 5 then -- корона и плащ
+			Parts.kingCrown(r, Hd, CF(0, 0.6, 0), 0.66, 0.55, HW.Gold, hot, 4)
+			r:Cape(1.8, 2.4, golden and HW.Gold or HW.Burgundy, false)
+		end
+		-- нити кукловода
+		local threadC = golden and rgb(255, 210, 120) or HW.Red
+		Parts.thread(r, Hd, V(0, 0.6, 0), V(0, 3.2, 0), threadC, 0.04)
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			Parts.thread(r, A, V(0, 1, 0), V(0, 3.4, 0), threadC, 0.035)
+		end
+		return r, threadC
+	end
+
+	------------------------------------------------------------------------
+	-- ПРОКЛЯТЫЕ ЛЮДИ: красно-чёрные, светящиеся красные глаза
+	------------------------------------------------------------------------
+	local CURSED_CLOTH = { rgb(70, 54, 50), rgb(30, 24, 30), rgb(40, 36, 44), rgb(110, 24, 36), rgb(24, 18, 22) }
+	local CURSED_EDGE = rgb(140, 70, 70)
+
+	local function Cursed(id, tier)
+		tier = tierOf(tier)
+		local cloth = CURSED_CLOTH[tier]
+		local edge, glow = CURSED_EDGE, HW.Red
+		local r = figure(id, { Torso = cloth, Arm = tier == 1 and rgb(150, 140, 142) or cloth, Leg = rgb(30, 24, 28), Skin = rgb(160, 150, 150), Edge = edge })
+		local T = r.Torso
+		eyes(r, glow, true, 0.08)
+		if tier == 1 then
+			-- CursedPerson: рваная рубаха, бледные руки, красные трещины на груди и лице
+			Kit.tatter(r, T, -1.0, -0.56, 2.0, 4, cloth, M.Fabric, 1)
+			Kit.crack(r, T, { V(-0.4, 0.6, -0.52), V(-0.1, 0.2, -0.52), V(-0.3, -0.3, -0.52) }, 0.06, glow)
+			Kit.crack(r, r.Head, { V(0.3, 0.5, -0.61), V(0.15, 0.25, -0.61) }, 0.05, glow)
+		elseif tier == 2 then
+			-- ShadowSoldier: капюшон без хвоста, нагрудник, чёрное копьё с железным наконечником
+			Parts.hood(r, cloth, edge, glow, false)
+			bevel(r, T, CHEST, CHEST_AT, rgb(50, 40, 50), edge)
+			local top = shaft(r, r.RArm, -2.4, 2.2, HW.Black, 0.16)
+			spike(r, r.RArm, top, top + V(0, 0.9, 0), 0.4, HW.Iron, M.Metal)
+		elseif tier == 3 then
+			-- CursedGuard: шлем, нагрудник, наплечники, щит с красным камнем, короткий клинок
+			local plate = rgb(60, 50, 60)
+			Parts.helm(r, plate, edge, glow, nil, false)
+			bevel(r, T, CHEST, CHEST_AT, plate, edge)
+			Parts.plateShoulders(r, plate, edge)
+			Parts.shield(r, r.LArm, { Color = rgb(60, 20, 30), Edge = edge, H = 1.8, W = 1.2, Gem = glow })
+			blade(r, r.RArm, { Len = 1.8, W = 0.4, Blade = HW.Iron, Guard = plate })
+		elseif tier == 4 then
+			-- CrimsonWarrior: багровая шапка-шлем, нагрудник, наплечники, топор с красной кромкой
+			local crimson = rgb(130, 30, 44)
+			bevel(r, r.Head, V(1.32, 0.5, 1.34), CF(0, 0.45, 0), crimson, edge)
+			bevel(r, T, CHEST, CHEST_AT, crimson, edge)
+			Parts.plateShoulders(r, crimson, edge)
+			Parts.axe(r, r.RArm, { Head = HW.Iron, Edge = edge, Glow = glow, Wood = HW.Black })
+		else
+			-- CursedKnight: высокий шлем с красным визором и гребнем, ступенчатые наплечники, плащ, клинок
+			local plate = rgb(30, 22, 26)
+			Parts.helm(r, plate, edge, glow, rgb(130, 30, 44), true)
+			bevel(r, T, CHEST, CHEST_AT, plate, edge)
+			Parts.bigShoulders(r, plate, edge, glow, 0.9, 1)
+			r:Cape(1.8, 2.6, rgb(90, 18, 30), false)
+			blade(r, r.RArm, { Len = 2.6, W = 0.5, Blade = rgb(40, 34, 40), Guard = plate, Glow = glow })
+		end
+		return r, glow
+	end
+
+	UnitModels.RegisterAlly("Illusion", Illusion)
+	UnitModels.RegisterAlly("Puppet", Puppet)
+	UnitModels.RegisterAlly("Cursed", Cursed)
+end
+]]></ProtectedString>
+						</Properties>
+					</Item>
+					<Item class="ModuleScript" referent="RBXA21578988253EA9DFEAF563689C755A6">
+						<Properties>
+							<string name="Name">Blood</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units/Blood
+-- Юниты кейса Blood Moon (6, кровавые акценты): BloodAcolyte (Blood Initiate), CrimsonGunslinger
+-- (Scarlet Hunter), MoonWitch (Crimson Witch), BloodfangWarlord (Blood Paladin), LunarSeraph
+-- (Moon Devourer), CrimsonEclipse (Scarlet Eclipse). R6 в угловатом стиле, Muzzle на острие, 5 уровней.
+
+return function(UnitModels, Kit, Parts)
+	local V = Vector3.new
+	local V2 = Vector2.new
+	local CF = CFrame.new
+	local ANG = CFrame.Angles
+	local rad = math.rad
+
+	local AC, M, rgb, GRIP = Parts.AC, Parts.M, Parts.rgb, Parts.GRIP
+	local BL = Parts.BL
+	local BLOOD, BLOOD_SOFT, CRIMSON, CRIMSON_D, BL_EDGE, BL_DARK = BL.Blood, BL.BloodSoft, BL.Crimson, BL.CrimsonD, BL.Edge, BL.Dark
+	local bevel, spike, gem, bar = Kit.bevel, Kit.spike, Kit.gem, Kit.bar
+	local SIDES = { -1, 1 }
+
+	local function register(id, build)
+		UnitModels.Register(id, function(lv)
+			local r, idle = build(lv)
+			Parts.levelAura(r, lv, BLOOD)
+			return r:Finish(UnitModels.Scale(id), idle)
+		end)
+	end
+
+	-- Серповидное лезвие из брусков по точкам pts (+ неоновая кромка, смещённая на edgeDy)
+	local function crescent(r, A, pts, width, color, glow, edgeDy)
+		for i = 1, #pts - 1 do
+			bar(r, A, pts[i], pts[i + 1], V2(0.12, width - i * 0.07), color)
+			if glow then
+				bar(r, A, pts[i] + V(0, edgeDy[1], 0), pts[i + 1] + V(0, edgeDy[2], 0), V2(0.14, 0.05), glow, M.Neon)
+			end
+		end
+	end
+
+	------------------------------------------------------------------------
+	-- BLOOD INITIATE: послушник в капюшоне с глефой
+	------------------------------------------------------------------------
+	register("BloodAcolyte", function(lv)
+		local r = Parts.figure("BloodAcolyte", { Torso = CRIMSON_D, Arm = CRIMSON_D, Leg = BL_DARK, Edge = BL_EDGE })
+		local A = r.RArm
+		Parts.hood(r, CRIMSON, BL_EDGE, BLOOD)
+		Parts.robe(r, CRIMSON_D, lv >= 3 and CRIMSON or nil, 1.6)
+		Parts.belt(r, rgb(40, 26, 26), BL_EDGE, lv >= 2 and BLOOD or nil)
+		if lv >= 2 then
+			Parts.mantle(r, CRIMSON, BL_EDGE)
+		end
+		Parts.bracers(r, BL_DARK, BL_EDGE)
+		-- глефа с серповидным лезвием
+		local top = Parts.shaft(r, A, -2.4, 2.2, rgb(40, 26, 26), 0.2)
+		local pts = { top, top + V(0, 0.45, -0.5), top + V(0, 0.3, -1.1), top + V(0, -0.15, -1.4) }
+		for i = 1, 3 do
+			bar(r, A, pts[i], pts[i + 1], V2(0.12, 0.34 - i * 0.06), lv >= 5 and CRIMSON or AC.ArmorMid)
+		end
+		if lv >= 3 then
+			bar(r, A, pts[2] + V(0, -0.15, 0), pts[3] + V(0, -0.12, 0), V2(0.14, 0.05), BLOOD, M.Neon)
+		end
+		spike(r, A, top + V(0, 0.1, 0), top + V(0, 0.8, 0), 0.3, AC.ArmorMid, M.Metal)
+		r:WeaponTrail(A, top + V(0, 0.3, -0.5), pts[4], BLOOD)
+		Parts.muzzle(r, A, CF(pts[4]))
+		if lv >= 4 then
+			Parts.capeWith(r, 1.9, 3.0, CRIMSON, nil)
+		end
+		if lv >= 5 then
+			r:Orbit("OrbitBlood", r.Torso, CF(0, 0.5, 0), 1.8, 3, 0.3, BLOOD)
+		end
+		return r, { RS = { 20, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- SCARLET HUNTER: красный охотник с луком
+	------------------------------------------------------------------------
+	register("CrimsonGunslinger", function(lv)
+		local r = Parts.figure("CrimsonGunslinger", { Torso = BL_DARK, Arm = BL_DARK, Leg = BL_DARK, Edge = BL_EDGE })
+		Parts.hood(r, CRIMSON, BL_EDGE, BLOOD)
+		bevel(r, r.Torso, V(2.12, 1.2, 1.12), CF(0, 0.35, 0), rgb(50, 26, 30), BL_EDGE, M.Fabric) -- куртка
+		bar(r, r.Torso, V(-0.9, 0.95, -0.58), V(0.9, -0.6, -0.58), V2(0.2, 0.06), rgb(70, 40, 34)) -- ремень
+		if lv >= 3 then -- кровавый самоцвет на ремне
+			gem(r, r.Torso, 0.22, CF(0, 0.18, -0.63), BLOOD, BL_EDGE)
+		end
+		Parts.belt(r, rgb(50, 30, 28), BL_EDGE, lv >= 3 and BLOOD or nil)
+		Parts.quiver(r, rgb(60, 30, 28), BLOOD)
+		Parts.mantle(r, CRIMSON, BL_EDGE)
+		Parts.bracers(r, rgb(60, 30, 28), BL_EDGE)
+		Parts.greaves(r, BL_DARK, BL_EDGE, true)
+		Parts.bow(r, r.LArm, { Wood = lv >= 4 and CRIMSON_D or rgb(60, 34, 30), Glow = lv >= 2 and BLOOD or nil, Tip = BL_EDGE })
+		if lv >= 4 then
+			Parts.capeWith(r, 1.9, 3.0, CRIMSON, nil)
+		end
+		if lv >= 5 then
+			r:Box(r.Head, V(1.06, 0.4, 0.08), CF(0, -0.3, -0.64), BL_DARK, M.Metal) -- маска
+		end
+		return r, { LS = { 20, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- CRIMSON WITCH: ведьма в остроконечной шляпе с посохом-полумесяцем
+	------------------------------------------------------------------------
+	register("MoonWitch", function(lv)
+		local r = Parts.figure("MoonWitch", { Torso = CRIMSON_D, Arm = CRIMSON_D, Leg = BL_DARK, Skin = rgb(220, 196, 190), Edge = BL_EDGE })
+		local A = r.RArm
+		Parts.eyes(r, BLOOD, true, 0.06)
+		bevel(r, r.Head, V(1.3, 1.1, 0.3), CF(0, -0.1, 0.52), rgb(30, 18, 22), false, M.Plastic) -- волосы
+		Parts.wizardHat(r, BL_DARK, CRIMSON, BL_EDGE)
+		if lv >= 3 then -- самоцвет на ленте шляпы
+			gem(r, r.Head, 0.2, CF(0, 0.82, -0.72), BLOOD, BL_EDGE)
+		end
+		Parts.robe(r, CRIMSON_D, CRIMSON, 1.8)
+		Parts.belt(r, rgb(40, 24, 26), BL_EDGE, BLOOD)
+		if lv >= 2 then
+			Parts.mantle(r, CRIMSON, BL_EDGE)
+		end
+		-- посох с полумесяцем (дуга 200°..340° в плоскости YZ руки)
+		local top = Parts.shaft(r, A, -2.4, 2.3, rgb(40, 24, 26), 0.2)
+		if lv >= 3 then -- светящееся кольцо под полумесяцем
+			r:Neon(A, V(0.28, 0.12, 0.28), CF(top - V(0, 0.18, 0)), BLOOD)
+		end
+		local c = top + V(0, 0.6, 0)
+		for k = 0, 4 do
+			local a1, a2 = rad(200 + k * 28), rad(200 + (k + 1) * 28)
+			bar(r, A, c + V(0, math.sin(a1) * 0.55, math.cos(a1) * 0.55), c + V(0, math.sin(a2) * 0.55, math.cos(a2) * 0.55), V2(0.12, 0.14), BLOOD, M.Neon)
+		end
+		r:Neon(A, V(0.3, 0.3, 0.3), CF(c) * ANG(rad(45), 0, rad(45)), BLOOD_SOFT)
+		Parts.muzzle(r, A, CF(c))
+		if lv >= 4 then
+			Parts.capeWith(r, 1.9, 3.0, CRIMSON, BLOOD)
+		end
+		if lv >= 5 then
+			r:Orbit("OrbitMoon", r.Torso, CF(0, 1.4, 0), 1.9, 3, 0.3, BLOOD_SOFT)
+		end
+		return r, { RS = { 10, 0, 0 }, LS = { 10, 0, -10 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- BLOOD PALADIN: красная броня, башенный щит, топор
+	------------------------------------------------------------------------
+	register("BloodfangWarlord", function(lv)
+		local r = Parts.figure("BloodfangWarlord", { Torso = BL_DARK, Arm = CRIMSON, Leg = BL_DARK, Edge = BL_EDGE })
+		Parts.helm(r, CRIMSON, BL_EDGE, BLOOD, BL_DARK, true)
+		if lv >= 3 then
+			for _, s in ipairs(SIDES) do
+				Kit.hornA(r, r.Head, { V(0.6 * s, 0.45, 0), V(0.9 * s, 0.7, 0), V(0.95 * s, 1.2, -0.1) }, 0.22, BL_DARK, M.Metal)
+			end
+		end
+		Parts.chest(r, CRIMSON, BL_EDGE, BLOOD)
+		Parts.belt(r, rgb(40, 24, 26), BL_EDGE, BLOOD)
+		Parts.tassets(r, CRIMSON, BL_EDGE)
+		Parts.bigShoulders(r, CRIMSON, BL_EDGE, lv >= 3 and BLOOD or nil, lv >= 4 and 1.2 or 1.05, lv >= 4 and 2 or 1)
+		Parts.bracers(r, BL_DARK, BL_EDGE)
+		Parts.greaves(r, CRIMSON, BL_EDGE, true)
+		if lv >= 2 then -- кровавые трещины на нагруднике
+			Kit.crack(r, r.Torso, { V(0.8, 0.95, -0.59), V(0.45, 0.5, -0.6), V(0.65, 0.1, -0.59) }, 0.05, BLOOD)
+		end
+		Parts.axe(r, r.RArm, { Head = AC.ArmorMid, Edge = BL_EDGE, Glow = BLOOD, Wood = rgb(40, 24, 26) })
+		Parts.shield(r, r.LArm, { Color = CRIMSON, Edge = BL_EDGE, H = 2.8, W = 1.7, Rim = BL_DARK, Gem = BLOOD })
+		Parts.capeWith(r, 2.1, 3.3, CRIMSON_D, lv >= 3 and BLOOD or nil)
+		return r, { RS = { 30, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- MOON DEVOURER: рогатая тёмная броня, парные клинки-полумесяцы, кровавая луна за спиной
+	------------------------------------------------------------------------
+	local function moonGap(k)
+		return k >= 11 -- разрыв: полумесяц
+	end
+	register("LunarSeraph", function(lv)
+		local r = Parts.figure("LunarSeraph", { Torso = BL_DARK, Arm = BL_DARK, Leg = BL_DARK, Edge = BL_EDGE })
+		Parts.helm(r, BL_DARK, BL_EDGE, BLOOD, nil, true)
+		for _, s in ipairs(SIDES) do
+			local tip = V(1.0 * s, 2.0 + lv * 0.08, -0.15)
+			Kit.hornA(r, r.Head, { V(0.62 * s, 0.4, 0), V(1.1 * s, 0.75, 0.1), V(1.25 * s, 1.4, 0.05), tip }, 0.28, CRIMSON_D, M.Metal)
+			if lv >= 4 then -- раскалённые кончики рогов
+				spike(r, r.Head, V(1.2 * s, 1.6, 0), tip, 0.16, BLOOD, M.Neon, false, 0.08)
+			end
+		end
+		Parts.chest(r, CRIMSON_D, BL_EDGE, BLOOD)
+		Kit.crack(r, r.Torso, { V(-0.8, 0.95, -0.59), V(-0.4, 0.5, -0.6), V(-0.65, 0.05, -0.59) }, 0.05, BLOOD)
+		Parts.belt(r, BL_DARK, BL_EDGE, BLOOD)
+		Parts.tassets(r, CRIMSON_D, BL_EDGE)
+		Parts.bigShoulders(r, BL_DARK, BL_EDGE, BLOOD, 1.2, lv >= 3 and 3 or 2)
+		Parts.bracers(r, CRIMSON_D, BL_EDGE)
+		Parts.greaves(r, CRIMSON_D, BL_EDGE, true)
+		-- клинки-полумесяцы в обеих руках: рукоять с гардой и шейкой до середины лезвия (не висит в воздухе)
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			r:Box(A, V(0.22, 0.22, 0.7), CF(0, GRIP, 0.05), BL_DARK, M.Fabric)
+			bevel(r, A, V(0.26, 0.5, 0.26), CF(0, GRIP, -0.38), BL_DARK, BL_EDGE)
+			bar(r, A, V(0, GRIP, -0.45), V(0, GRIP, -1.3), V2(0.14, 0.16), CRIMSON_D, M.Metal)
+			local c = V(0, GRIP, -0.9)
+			for k = 0, 4 do
+				local a1, a2 = rad(-80 + k * 32), rad(-80 + (k + 1) * 32)
+				bar(r, A, c + V(0, math.sin(a1) * 0.9, -math.cos(a1) * 0.5), c + V(0, math.sin(a2) * 0.9, -math.cos(a2) * 0.5), V2(0.12, 0.2), AC.ArmorMid)
+				bar(r, A, c + V(0, math.sin(a1) * 1.0, -math.cos(a1) * 0.6), c + V(0, math.sin(a2) * 1.0, -math.cos(a2) * 0.6), V2(0.13, 0.05), BLOOD, M.Neon)
+			end
+		end
+		Parts.muzzle(r, r.RArm, CF(0, GRIP, -1.5))
+		Parts.muzzle(r, r.LArm, CF(0, GRIP, -1.5), true)
+		-- кровавая луна за спиной: медленно вращается (SpinRates)
+		local moon = r:Joint("MoonBack", r.Torso, V(0.2, 0.2, 0.2), CF(0, 1.2, 1.2), CF(), BLOOD)
+		moon.Transparency = 1
+		Kit.ring(r, moon, CF(), 1.5 + lv * 0.08, 16, 0.18, 0.14, BLOOD, M.Neon, moonGap)
+		r.SpinRates = r.SpinRates or {}
+		r.SpinRates.MoonBack = 0.35
+		Parts.capeWith(r, 2.2, 3.5, CRIMSON_D, BLOOD)
+		return r, { RS = { 10, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- SCARLET ECLIPSE: капюшон, кольцо затмения за головой, двойная глефа
+	------------------------------------------------------------------------
+	register("CrimsonEclipse", function(lv)
+		local r = Parts.figure("CrimsonEclipse", { Torso = BL_DARK, Arm = BL_DARK, Leg = BL_DARK, Edge = BL_EDGE })
+		local A = r.RArm
+		Parts.hood(r, CRIMSON_D, BL_EDGE, BLOOD, true)
+		r:Box(r.Head, V(0.9, 0.4, 0.06), CF(0, -0.28, -0.64), BL_DARK, M.Metal) -- маска нижней части лица
+		Parts.chest(r, CRIMSON_D, BL_EDGE, BLOOD)
+		Parts.belt(r, BL_DARK, BL_EDGE, BLOOD)
+		Parts.robe(r, BL_DARK, CRIMSON, 2.0)
+		Parts.bigShoulders(r, CRIMSON_D, BL_EDGE, BLOOD, 1.15, lv >= 3 and 3 or 2)
+		Parts.bracers(r, CRIMSON_D, BL_EDGE)
+		if lv >= 2 then -- кровавые трещины на маске
+			Kit.crack(r, r.Head, { V(-0.3, -0.12, -0.68), V(-0.12, -0.3, -0.68), V(-0.22, -0.44, -0.68) }, 0.04, BLOOD)
+		end
+		-- кольцо затмения: тёмный диск в кровавом ободе, медленно вращается (SpinRates)
+		local ecl = r:Joint("SpinEclipse", r.Head, V(0.2, 0.2, 0.2), CF(0, 0.3, 0.95), CF(), BLOOD)
+		ecl.Transparency = 1
+		Kit.ring(r, ecl, CF(), 1.25, 16, 0.2, 0.12, BLOOD, M.Neon)
+		r:Box(ecl, V(1.7, 1.7, 0.08), CF(0, 0, 0.06) * ANG(0, 0, rad(45)), rgb(10, 6, 8), M.Plastic)
+		r.SpinRates = r.SpinRates or {}
+		r.SpinRates.SpinEclipse = 0.5
+		-- двойная глефа: лезвия на обоих концах древка (зеркально)
+		local top = Parts.shaft(r, A, -2.2, 2.2, BL_DARK, 0.2)
+		for _, base in ipairs({ top, V(0, -2.2, -0.5) }) do
+			local d = base.Y > 0 and 1 or -1
+			local pts = { base, base + V(0, 0.4 * d, -0.6), base + V(0, 0.2 * d, -1.4), base + V(0, -0.3 * d, -1.9) }
+			crescent(r, A, pts, 0.4, CRIMSON_D, BLOOD, { -0.15 * d, -0.12 * d })
+		end
+		r:WeaponTrail(A, top + V(0, 0.3, -0.6), top + V(0, -0.3, -1.9), BLOOD)
+		Parts.muzzle(r, A, CF(top + V(0, -0.3, -1.9)))
+		Parts.capeWith(r, 2.2, 3.6, CRIMSON_D, BLOOD)
+		if lv >= 4 then
+			r:Orbit("OrbitBlood", r.Torso, CF(0, 0.5, 0), 2.4, lv >= 5 and 6 or 4, 0.3, BLOOD)
+		end
+		return r, { RS = { 8, 0, 0 } }
+	end)
+end
+]]></ProtectedString>
+						</Properties>
+					</Item>
+					<Item class="ModuleScript" referent="RBX40FF1132F1AB6F6F1BC4BAB1D0E584FF">
+						<Properties>
+							<string name="Name">Clockmaker</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units/Clockmaker
+-- CURSED CLOCKMAKER (Secret, Halloween): голова — старинные механические часы, стрелки и шестерни
+-- на моторах Clock*/Gear* (r.SpinRates: мотор -> рад/с, крутятся по Z в Anims.Apply, быстрее в бурю),
+-- оружие — Хроносекира (неоновые кромки с атрибутом AxeGlow), шестерни бури OrbitStormGears
+-- (атрибут StormFX: скрыты до «Временной бури»).
+
+return function(UnitModels, Kit, Parts)
+	local V = Vector3.new
+	local V2 = Vector2.new
+	local CF = CFrame.new
+	local ANG = CFrame.Angles
+	local rad = math.rad
+	local PI = math.pi
+
+	local M, rgb = Parts.M, Parts.rgb
+	local CLK = Parts.CLK
+	local bevel, spike, gem, bar = Kit.bevel, Kit.spike, Kit.gem, Kit.bar
+	local gear = Parts.gear
+	local SIDES = { -1, 1 }
+	local AXE_RADIUS = { 0.95, 1.15, 1.15, 1.3, 1.45 }
+
+	-- Хроносекира: тёмная рукоять с бронзовыми кольцами, два полукруглых зубчатых лезвия,
+	-- вращающаяся центральная шестерня и две малые
+	local function chronoaxe(r, A, lv)
+		local z = -0.5
+		local bottom, top = -2.5, 2.3
+		r:Box(A, V(0.22, top - bottom, 0.22), CF(0, (top + bottom) / 2, z), CLK.Steel, M.Metal)
+		for _, y in ipairs({ -1.6, -0.2, 1.2 }) do
+			bevel(r, A, V(0.34, 0.16, 0.34), CF(0, y, z), CLK.Bronze, false)
+		end
+		spike(r, A, V(0, bottom + 0.05, z), V(0, bottom - 0.5, z), 0.3, CLK.Bronze, M.Metal)
+		local c = V(0, top + 0.2, z)
+		local R = AXE_RADIUS[lv]
+		local blade = lv >= 5 and CLK.Black or CLK.Steel
+		local rimColor = lv >= 4 and CLK.Orange or CLK.OrangeDim
+		for _, side in ipairs(SIDES) do
+			local prev
+			for k = 0, 6 do
+				local phi = rad(-78 + k * 26)
+				local dir = V(0, math.sin(phi), side * math.cos(phi))
+				bar(r, A, c + dir * 0.3, c + dir * R, V2(0.1, 2 * R * math.sin(rad(13)) + 0.1), blade, M.Metal)
+				spike(r, A, c + dir * (R - 0.02), c + dir * (R + 0.22), 0.2, CLK.Gold, M.Metal, true, 0.1)
+				local rim = c + dir * (R * 0.9)
+				if prev then -- неоновая кромка (в бурю Renderer перекрашивает по AxeGlow)
+					bar(r, A, prev, rim, V2(0.12, 0.07), rimColor, M.Neon):SetAttribute("AxeGlow", true)
+				end
+				prev = rim
+			end
+			bevel(r, A, V(0.14, 0.5, 0.35), CF(c + V(0, 0, side * 0.42)), CLK.Bronze, false) -- накладка у основания
+		end
+		local _, hub = gear(r, A, "GearAxe", CF(c) * ANG(0, PI / 2, 0), 0.38, 0.16, lv >= 3 and CLK.Gold or CLK.Bronze, CLK.Orange, 2.2)
+		hub:SetAttribute("AxeGlow", true)
+		gear(r, A, "GearAxeS1", CF(c + V(0, 0.5, -0.3)) * ANG(0, PI / 2, 0), 0.15, 0.12, CLK.Bronze, CLK.Black, -3.5)
+		gear(r, A, "GearAxeS2", CF(c + V(0, -0.5, 0.3)) * ANG(0, PI / 2, 0), 0.15, 0.12, CLK.Bronze, CLK.Black, 3.5)
+		r:Sparkles(hub, CLK.Orange, { Rate = lv >= 4 and 8 or 4, Size = 0.18 })
+		r:WeaponTrail(A, c + V(0, 0, -0.4), c + V(0, 0, -R), CLK.Orange)
+		return Parts.muzzle(r, A, CF(c))
+	end
+
+	local function goldRingGap(k)
+		return k % 4 == 3
+	end
+
+	UnitModels.Register("CursedClockmaker", function(lv)
+		local edge = CLK.GoldDark
+		local r = Kit.Rig.new({ Name = "CursedClockmaker", HeadSize = V(1.2, 1.2, 1.2), Torso = CLK.Black, Arm = CLK.Black, Leg = CLK.Black, Head = CLK.Black })
+		r.SpinRates = {}
+		local T, H, RA, LA, RL, LL = r.Torso, r.Head, r.RArm, r.LArm, r.RLeg, r.LLeg
+		for _, L in ipairs({ T, H, RA, LA, RL, LL }) do
+			L.Transparency = 1
+		end
+		local gearColor = lv >= 3 and CLK.Gold or (lv >= 2 and CLK.Silver or CLK.Bronze)
+		local frame = lv >= 3 and CLK.Gold or CLK.Bronze
+
+		-- R6-тело: чёрный костюм с золотым кантом
+		bevel(r, T, V(2, 2, 1), CF(), CLK.Black, edge)
+		for _, L in ipairs({ RA, LA, RL, LL }) do
+			bevel(r, L, V(1, 2, 1), CF(), CLK.Black, edge)
+		end
+		-- жилет, лацканы, пуговицы, брошь
+		bevel(r, T, V(1.5, 1.7, 1.08), CF(0, 0.1, 0), CLK.Suit, edge, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			bar(r, T, V(0.25 * s, 0.98, -0.56), V(0.62 * s, -0.4, -0.56), V2(0.12, 0.05), CLK.Gold, M.Metal)
+		end
+		for k = 0, 2 do
+			r:Box(T, V(0.12, 0.12, 0.06), CF(0, 0.45 - k * 0.38, -0.57) * ANG(0, 0, PI / 4), CLK.Gold, M.Metal)
+		end
+		gem(r, T, 0.26, CF(0, 0.82, -0.6), CLK.Orange, CLK.Gold)
+		-- золотая цепочка и карманные часы
+		bar(r, T, V(0, 0.07, -0.58), V(-0.45, -0.3, -0.58), V2(0.06, 0.06), CLK.Gold, M.Metal)
+		bar(r, T, V(-0.45, -0.3, -0.58), V(-0.75, -0.05, -0.58), V2(0.06, 0.06), CLK.Gold, M.Metal)
+		Parts.miniClock(r, T, CF(-0.78, -0.25, -0.58), 0.18)
+		-- пояс с пряжкой-шестерёнкой (неподвижной)
+		bevel(r, T, V(2.1, 0.3, 1.12), CF(0, -0.82, 0), CLK.Black, edge)
+		gear(r, T, nil, CF(0, -0.82, -0.6), 0.16, 0.08, CLK.Gold, CLK.Orange)
+		-- полы длинного сюртука
+		for _, s in ipairs(SIDES) do
+			bevel(r, T, V(0.95, 1.6, 0.16), CF(0.52 * s, -1.75, 0.46), CLK.Suit, edge, M.Fabric)
+		end
+		Kit.tatter(r, T, -2.55, 0.46, 2.0, 4, CLK.Suit, M.Fabric, 5)
+
+		-- ГОЛОВА-ЧАСЫ: рама, циферблат, стрелки ClockHour/ClockMinute
+		local a = lv >= 5 and 1.0 or 0.92
+		local headCF = CF(0, 0.35, 0)
+		Parts.clockFace(r, H, headCF, a, frame, "Clock", CLK.Gold, lv >= 4)
+		gear(r, H, "GearHeadA", headCF * CF(0, -a * 0.38, -0.29), a * 0.16, 0.04, CLK.Orange, CLK.Dial, 3, M.Neon)
+		for _, s in ipairs(SIDES) do
+			gear(r, H, s == 1 and "GearHeadR" or "GearHeadL", headCF * CF(a * 0.98 * s, a * 0.45, 0), a * 0.24, 0.2, gearColor, CLK.Orange, 1.4 * s)
+		end
+		-- заводная головка сверху
+		bevel(r, H, V(0.3, 0.3, 0.3), headCF * CF(0, a + 0.1, 0), frame, false)
+		bevel(r, H, V(0.44, 0.12, 0.44), headCF * CF(0, a + 0.3, 0), frame, false)
+
+		-- НАПЛЕЧНИКИ: с 3 ур. ступенчатые с оранжевым самоцветом, иначе стальные пластины с шестернями
+		if lv >= 3 then
+			local size, spikes = lv >= 5 and 1.2 or 1.05, lv >= 5 and 2 or 1
+			Kit.pauldron(r, RA, 1, size, CLK.Black, CLK.Gold, CLK.Orange, spikes)
+			Kit.pauldron(r, LA, -1, size, CLK.Black, CLK.Gold, CLK.Orange, spikes)
+		else
+			for _, side in ipairs({ 1, -1 }) do
+				local A = side == 1 and RA or LA
+				bevel(r, A, V(1.3, 0.45, 1.25) * (lv >= 2 and 1.1 or 1), CF(0.12 * side, 0.9, 0) * ANG(0, 0, rad(-12 * side)), CLK.Steel, lv >= 2 and CLK.Silver or CLK.Bronze)
+				gear(r, A, nil, CF(0.62 * side, 0.85, 0) * ANG(0, PI / 2, 0), 0.2, 0.08, gearColor, CLK.Black)
+			end
+		end
+		-- рукава: золотые манжеты, перчатки, с 2 ур. стальной наруч
+		for _, A in ipairs({ RA, LA }) do
+			bevel(r, A, V(1.16, 0.3, 1.16), CF(0, -0.55, 0), CLK.Gold, false)
+			bevel(r, A, V(1.04, 0.42, 1.04), CF(0, -0.82, 0), lv >= 2 and CLK.Steel or CLK.Bronze, edge)
+			if lv >= 2 then
+				bevel(r, A, V(1.12, 0.5, 1.12), CF(0, -0.2, 0), CLK.Steel, CLK.Silver)
+			end
+		end
+		-- ноги: наколенники (с 2 ур.), сапоги с золотым кантом
+		for _, Lg in ipairs({ RL, LL }) do
+			if lv >= 2 then
+				bevel(r, Lg, V(0.8, 0.45, 0.26), CF(0, 0.0, -0.58), CLK.Steel, CLK.Silver)
+			end
+			Kit.bootA(r, Lg, CLK.Black, CLK.Gold, 1.12)
+		end
+
+		-- МЕХАНИЗМ НА СПИНЕ
+		gear(r, T, "GearBack", CF(0, 0.3, 0.7), 0.7, 0.2, gearColor, CLK.Orange, 0.8)
+		if lv >= 3 then
+			gear(r, T, "GearBack2", CF(0.75, -0.35, 0.82), 0.42, 0.18, CLK.Bronze, CLK.Black, -1.4)
+			gear(r, T, "GearBack3", CF(-0.7, -0.45, 0.82), 0.32, 0.18, CLK.Bronze, CLK.Black, 1.9)
+			for _, s in ipairs(SIDES) do
+				r:Box(T, V(0.14, 1.4, 0.14), CF(0.55 * s, 0.4, 0.66), CLK.Bronze, M.Metal)
+			end
+		end
+		-- ПЛАЩ (роскошный с 4 ур.)
+		local cape = r:Cape(lv >= 4 and 2.3 or 2.0, lv >= 4 and 4.2 or 3.6, lv >= 4 and rgb(26, 16, 30) or CLK.Black, true)
+		if lv >= 4 then
+			gem(r, cape, 0.5, CF(0, 0.1, 0.08) * ANG(0, PI, 0), CLK.Orange, CLK.Gold)
+			r:Box(cape, V(2.34, 0.1, 0.14), CF(0, 0.9, 0), CLK.Gold, M.Metal)
+		end
+		-- ОГРОМНЫЕ ЧАСЫ ЗА СПИНОЙ (MAX): стрелки ClockBigHour/ClockBigMinute
+		if lv >= 5 then
+			Parts.clockFace(r, T, CF(0, 1.5, 1.15), 1.9, CLK.Gold, "ClockBig", CLK.Gold, true)
+		end
+		-- парящие золотые часы
+		local orb = r:Orbit("OrbitClocks", T, CF(0, 0.5, 0), 2.6, 0, 0.2, CLK.Gold)
+		local n = lv >= 5 and 5 or (lv >= 3 and 4 or 3)
+		for i = 0, n - 1 do
+			local ang = i / n * PI * 2
+			Parts.miniClock(r, orb, CF(math.cos(ang) * 2.6, math.sin(ang * 2) * 0.4, math.sin(ang) * 2.6) * ANG(0, -ang + PI / 2, 0), 0.3)
+		end
+		-- вращающееся золотое кольцо (с 4 ур.)
+		if lv >= 4 then
+			local ringHub = r:Orbit("OrbitGoldRing", T, CF(0, -0.2, 0), 2.1, 0, 0.2, CLK.Gold)
+			Kit.ring(r, ringHub, ANG(rad(90), 0, 0), 2.1, 16, 0.08, 0.14, CLK.Gold, M.Metal, goldRingGap)
+		end
+		-- шестерни бури: видны только во время «Временной бури» (явная пометка StormFX по метке)
+		local storm = r:Orbit("OrbitStormGears", T, CF(0, 0.2, 0), 3.2, 0, 0.2, CLK.Gold)
+		local mark = r:Mark()
+		for i = 0, 5 do
+			local ang = i / 6 * PI * 2
+			gear(r, storm, nil, CF(math.cos(ang) * 3.2, math.sin(ang * 3) * 0.5, math.sin(ang) * 3.2) * ANG(0, -ang, 0), 0.3, 0.1, CLK.Gold, CLK.Orange)
+		end
+		Parts.stormFX(r:Since(mark))
+
+		-- ХРОНОСЕКИРА в правой руке
+		chronoaxe(r, RA, lv)
+		Parts.levelAura(r, lv, CLK.Orange)
+		return r:Finish(UnitModels.Scale("CursedClockmaker"), { RS = { 20, 0, 0 }, LS = { 10, 0, -5 } })
+	end)
+end
+]]></ProtectedString>
+						</Properties>
+					</Item>
+					<Item class="ModuleScript" referent="RBX84F2B02AFDEE4B162A170567BB2703C4">
+						<Properties>
+							<string name="Name">Halloween</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units/Halloween
+-- 11 юнитов события «Хэллоуин» в угловатом R6-стиле: у каждого предмет/оружие в руке, 5 заметно разных
+-- уровней, Muzzle на острие/огне оружия, вращающиеся детали на моторах Orbit*.
+-- Подключается из Models/Units: return function(UnitModels, Kit, Parts) — регистрирует строителей
+-- UnitModels.Register(id, builder(lv, id) -> rig, rarity). Тыквы, фонари, короны, вороны, колокола, карты,
+-- нити — общие детали Parts (раздел ХЭЛЛОУИН). Масштаб — Config.Units[id].Scale (UnitModels.Scale).
+--
+-- Моторы: Root Neck RS LS RH LH, Cape/Cape2 (плащи), OrbitCrows OrbitGhostClock OrbitClocks OrbitFlasks
+-- OrbitSwords OrbitMirrors OrbitCards OrbitPuppets OrbitEmbers OrbitPumpkins. Частицы: PoisonMist (Чумной доктор),
+-- GhostMist (Призрачный рыцарь), NeckFire (Безголовый палач) — не создаются в Lite.
+
+return function(UnitModels, Kit, Parts)
+	local V, V2, CF, ANG = Vector3.new, Vector2.new, CFrame.new, CFrame.Angles
+	local rad, PI = math.rad, math.pi
+
+	local M, HW, rgb = Parts.M, Parts.HW, Parts.rgb
+	local GRIP, AIM = Parts.GRIP, Parts.AIM
+	local bevel, spike, bar = Kit.bevel, Kit.spike, Kit.bar
+	local figure, eyes, belt, robe, mantle = Parts.figure, Parts.eyes, Parts.belt, Parts.robe, Parts.mantle
+	local muzzle, shaft, capeWith, levelAura = Parts.muzzle, Parts.shaft, Parts.capeWith, Parts.levelAura
+	local tri, downIn, pumpkin, lantern = Parts.tri, Parts.downIn, Parts.pumpkin, Parts.lantern
+	local brimHat, crow, star, flask = Parts.brimHat, Parts.crow, Parts.star, Parts.flask
+	local bell, card, thread, embers = Parts.bell, Parts.card, Parts.thread, Parts.embers
+
+	local SIDES = { -1, 1 }
+	local WHITE = rgb(236, 232, 240) -- перчатки, манишки
+	local PORCELAIN = rgb(236, 230, 236)
+	local POTION = rgb(200, 80, 255) -- фиолетовое зелье (вторая склянка)
+
+	------------------------------------------------------------------------
+	-- ОБЩЕЕ
+	------------------------------------------------------------------------
+	local function finish(r, id, idle)
+		return r:Finish(UnitModels.Scale(id), idle)
+	end
+
+	-- Рамка висящего предмета в точке at: +Y — вверх по миру (dn — «вниз» в координатах руки, Parts.downIn)
+	local function hang(at, dn)
+		return CFrame.lookAt(at, at + dn, V(0, 0, -1)) * ANG(-PI / 2, 0, 0) * ANG(PI, 0, 0)
+	end
+
+	-- Пустой узел-орбита (крутится по Y в Anims); содержимое добавляет строитель
+	local function orbitHub(r, name, limb, offset)
+		return r:Orbit(name, limb, offset, 0, 0, 0.2)
+	end
+
+	-- Угол и точка i-го из n предметов на окружности радиуса R
+	local function around(i, n, R, y)
+		local a = i / n * PI * 2
+		return a, V(math.cos(a) * R, y or 0, math.sin(a) * R)
+	end
+
+	-- Манжеты/перчатки на обе руки
+	local function cuffs(r, size, y, color, mat)
+		for _, A in ipairs({ r.RArm, r.LArm }) do
+			bevel(r, A, size, CF(0, y, 0), color, false, mat)
+		end
+	end
+
+	local function seq(a, b)
+		return NumberSequence.new({ NumberSequenceKeypoint.new(0, a), NumberSequenceKeypoint.new(1, b) })
+	end
+
+	-- Собственные частицы юнита (дымка, огонь); в Lite не создаются
+	local function emitter(parent, name, props)
+		if Kit.IsLite() then
+			return nil
+		end
+		local e = Instance.new("ParticleEmitter")
+		e.Name = name
+		for k, v in pairs(props) do
+			e[k] = v
+		end
+		e.Parent = parent
+		return e
+	end
+
+	------------------------------------------------------------------------
+	-- 1. NIGHT WATCHMAN (Common) — ночной сторож с фонарём
+	------------------------------------------------------------------------
+	local function NightWatchman(lv, id)
+		local coat, coatD = rgb(40, 44, 66), rgb(28, 30, 46)
+		local r = figure(id, { Torso = coat, Arm = coat, Leg = coatD, Skin = rgb(206, 178, 156), Edge = HW.EdgeCool })
+		local T, Hd, A = r.Torso, r.Head, r.RArm
+		-- лицо: тёмные глаза, рот, седые бакенбарды; котелок (лента с 2-го)
+		eyes(r, rgb(30, 22, 18), false, 0.06)
+		r:Box(Hd, V(0.5, 0.08, 0.05), CF(0, -0.3, -0.62), rgb(90, 60, 50))
+		for _, s in ipairs(SIDES) do
+			r:Box(Hd, V(0.12, 0.5, 0.5), CF(0.62 * s, -0.2, -0.1), rgb(150, 146, 150), M.Fabric)
+		end
+		brimHat(r, HW.Coal, lv >= 2 and HW.Burgundy or nil, { Brim = 1.7, W = 1.24, Hgt = 0.5, Y = 0.6 })
+		-- длинное пальто: пуговицы (золото с 4-го), полы, ремень
+		bevel(r, T, V(2.14, 1.2, 1.14), CF(0, 0.38, 0), coat, HW.EdgeCool, M.Fabric)
+		for k = 0, 2 do
+			r:Box(T, V(0.14, 0.14, 0.06), CF(0, 0.7 - k * 0.42, -0.6), lv >= 4 and HW.Gold or HW.Iron, M.Metal)
+		end
+		for _, s in ipairs(SIDES) do
+			bevel(r, T, V(0.98, 1.3, 0.16), CF(0.52 * s, -1.6, -0.5), coatD, false, M.Fabric)
+		end
+		belt(r, HW.Leather, HW.Iron)
+		if lv >= 2 then -- шарф
+			bevel(r, T, V(1.4, 0.3, 1.2), CF(0, 0.98, 0), HW.Burgundy, false, M.Fabric)
+			r:Box(T, V(0.3, 0.8, 0.08), CF(0.4, 0.5, -0.62), HW.Burgundy, M.Fabric)
+		end
+		if lv >= 3 then -- накидка и связка ключей
+			mantle(r, coatD, HW.EdgeCool)
+			r:Box(T, V(0.2, 0.2, 0.06), CF(-0.7, -0.95, -0.6), HW.Iron, M.Metal)
+			r:Box(T, V(0.06, 0.4, 0.06), CF(-0.62, -1.2, -0.62), HW.Gold, M.Metal)
+			r:Box(T, V(0.06, 0.34, 0.06), CF(-0.78, -1.17, -0.62), HW.Gold, M.Metal)
+		end
+		-- дубинка в левой руке (железная с 4-го) и значок-звезда
+		local iron = lv >= 4
+		r:Box(r.LArm, V(0.22, 1.7, 0.22), CF(0, -1.6, -0.3) * ANG(rad(-20), 0, 0), iron and HW.Iron or HW.Wood, iron and M.Metal or M.Wood)
+		if lv >= 4 then
+			star(r, T, CF(-0.55, 0.6, -0.62), 0.9, HW.Gold)
+		end
+		-- фонарь висит на железном пруте под кулаком правой руки
+		local pose = { 35, 0, 0 }
+		local dn = downIn(pose)
+		local hand = V(0, GRIP, -0.2)
+		r:Seg(A, hand, hand + dn * 0.55, 0.06, HW.Iron, M.Metal)
+		local lc = hand + dn * 1.05
+		local flame = lantern(r, A, hang(lc, dn), lv >= 4 and 1.25 or 1.05, lv >= 4 and HW.Gold or HW.Iron,
+			lv >= 5 and rgb(255, 230, 150) or HW.Flame)
+		muzzle(r, A, CF(lc))
+		if lv >= 3 then
+			embers(r, flame, HW.Flame, 4, 0.15)
+		end
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do -- сапоги
+			bevel(r, L, V(1.1, 0.5, 1.2), CF(0, -0.75, -0.08), HW.Leather, false)
+		end
+		if lv >= 5 then
+			capeWith(r, 1.9, 2.9, coatD, HW.Flame)
+		end
+		levelAura(r, lv, HW.Flame)
+		return finish(r, id, { RS = pose, LS = { 8, 0, -6 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 2. GRAVEDIGGER (Rare) — могильщик с лопатой
+	------------------------------------------------------------------------
+	local function Gravedigger(lv, id)
+		local shirt, pants = rgb(70, 58, 50), rgb(44, 38, 36)
+		local r = figure(id, { Torso = shirt, Arm = shirt, Leg = pants, Skin = rgb(150, 160, 140), Edge = HW.Edge })
+		local T, A = r.Torso, r.RArm
+		-- глаза (тлеют с 3-го), щетина, шляпа с обвисшими полями
+		eyes(r, lv >= 3 and HW.Orange or rgb(30, 26, 22), lv >= 3, 0.08)
+		bevel(r, r.Head, V(1.24, 0.42, 0.3), CF(0, -0.42, -0.5), rgb(70, 64, 58), false, M.Fabric)
+		brimHat(r, rgb(46, 40, 36), rgb(90, 70, 46), { Brim = 1.9, W = 1.26, Hgt = 0.5, Y = 0.6, Tilt = -6 })
+		-- кожаный фартук на лямках
+		bevel(r, T, V(1.7, 1.9, 0.12), CF(0, -0.4, -0.56), HW.Leather, false, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			r:Box(T, V(0.08, 0.9, 0.06), CF(0.5 * s, 0.6, -0.56), HW.Leather, M.Fabric)
+		end
+		belt(r, HW.Leather, HW.Iron)
+		for _, arm in ipairs({ r.RArm, r.LArm }) do -- закатанные рукава и рабочие перчатки
+			bevel(r, arm, V(1.1, 0.3, 1.1), CF(0, -0.15, 0), rgb(96, 82, 70), false, M.Fabric)
+			bevel(r, arm, V(1.06, 0.55, 1.06), CF(0, -0.78, 0), rgb(46, 36, 30), false, M.Fabric)
+		end
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do
+			Kit.bootA(r, L, HW.Leather, false, 1.1)
+		end
+		if lv >= 2 then -- железные наплечники и ком земли на ботинке
+			Parts.plateShoulders(r, HW.Iron, HW.Edge, 0.9)
+			r:Box(r.RLeg, V(0.4, 0.2, 0.3), CF(0.2, -0.95, -0.6), rgb(60, 46, 34), M.Plastic)
+		end
+		if lv >= 3 then -- фонарь на поясе
+			lantern(r, T, CF(-0.95, -1.15, -0.25), 0.6, HW.Iron, HW.Flame)
+		end
+		if lv >= 4 then -- надгробие-ранец с крестом
+			local stone = rgb(96, 94, 104)
+			bevel(r, T, V(1.3, 1.6, 0.35), CF(0, 0.5, 0.75), stone, rgb(140, 138, 150), M.Slate)
+			bevel(r, T, V(0.95, 0.3, 0.37), CF(0, 1.4, 0.75), stone, false, M.Slate)
+			r:Box(T, V(0.15, 0.7, 0.05), CF(0, 0.6, 0.94), rgb(60, 58, 66), M.Slate)
+			r:Box(T, V(0.45, 0.15, 0.05), CF(0, 0.75, 0.94), rgb(60, 58, 66), M.Slate)
+		end
+		-- лопата: древко с Т-рукоятью внизу, полотно наверху (железо с 3-го, золото на 5-м)
+		local wood = lv >= 4 and HW.Wood or HW.WoodLight
+		local top = shaft(r, A, -2.4, 1.5, wood, 0.2)
+		r:Box(A, V(0.55, 0.16, 0.16), CF(0, -2.45, -0.5), wood, M.Wood)
+		local bc = top + V(0, 0.6, 0)
+		local metal = lv >= 5 and HW.Gold or (lv >= 3 and HW.Iron or rgb(110, 90, 70))
+		bevel(r, A, V(0.1, 0.36, 0.3), CF(top + V(0, 0.08, 0)), metal, false)
+		bevel(r, A, V(0.08, 0.9, 0.85), CF(bc), metal, lv >= 3 and HW.Edge or false)
+		spike(r, A, bc + V(0, 0.45, 0), bc + V(0, 0.8, 0), 0.85, metal, M.Metal, true, 0.08)
+		if lv >= 5 then
+			r:Neon(A, V(0.1, 0.06, 0.8), CF(bc + V(0, 0.42, 0)), HW.Orange)
+		end
+		if lv >= 4 then -- черепок на полотне
+			bevel(r, A, V(0.06, 0.3, 0.3), CF(bc + V(-0.06, 0, 0)), HW.Bone, false, M.Plastic)
+		end
+		r:WeaponTrail(A, top, bc + V(0, 0.8, 0), lv >= 5 and HW.Orange or rgb(180, 150, 110))
+		muzzle(r, A, CF(bc + V(0, 0.6, 0)))
+		if lv >= 5 then
+			capeWith(r, 1.9, 2.8, rgb(46, 40, 36), HW.Orange)
+		end
+		levelAura(r, lv, HW.Orange)
+		return finish(r, id, { RS = { 25, 0, 0 }, LS = { 10, 0, -6 }, Neck = { 6, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 3. CURSED SCARECROW (Rare) — проклятое пугало с вороньём и вилами
+	------------------------------------------------------------------------
+	local function CursedScarecrow(lv, id)
+		local shirt = lv >= 4 and rgb(110, 40, 40) or rgb(120, 90, 60)
+		local r = figure(id, { Torso = shirt, Arm = shirt, Leg = rgb(70, 60, 80), Skin = HW.Burlap, Edge = HW.StrawDark })
+		local T, Hd, A = r.Torso, r.Head, r.RArm
+		-- голова-мешок: глаза-кресты (светятся с 3-го) и зашитый рот
+		bevel(r, Hd, V(1.3, 1.25, 1.3), CF(), HW.Burlap, HW.StrawDark, M.Fabric)
+		local stitch = rgb(40, 26, 18)
+		for _, s in ipairs(SIDES) do
+			for _, a in ipairs({ 45, -45 }) do
+				local at = CF(0.28 * s, 0.12, -0.67) * ANG(0, 0, rad(a))
+				if lv >= 3 then
+					r:Neon(Hd, V(0.3, 0.07, 0.05), at, HW.Orange)
+				else
+					r:Box(Hd, V(0.3, 0.07, 0.05), at, stitch)
+				end
+			end
+		end
+		r:Box(Hd, V(0.7, 0.06, 0.05), CF(0, -0.28, -0.67), stitch)
+		for k = -2, 2 do
+			r:Box(Hd, V(0.04, 0.18, 0.05), CF(k * 0.15, -0.28, -0.68), stitch)
+		end
+		-- верёвка на шее и пучки соломы
+		r:Box(Hd, V(1.34, 0.12, 1.34), CF(0, -0.55, 0), HW.StrawDark, M.Fabric)
+		for k = 0, 5 do
+			local a = k / 6 * PI * 2
+			local c, s = math.cos(a), math.sin(a)
+			spike(r, Hd, V(c * 0.5, -0.6, s * 0.5), V(c * 0.85, -0.95, s * 0.85), 0.2, HW.Straw, M.Fabric, true, 0.05)
+		end
+		if lv >= 2 then -- колпак (бордовая лента с 4-го)
+			Parts.wizardHat(r, rgb(60, 46, 34), lv >= 4 and HW.Burgundy or rgb(90, 70, 46), false)
+		end
+		-- рубаха с заплатками
+		bevel(r, T, V(2.14, 2.0, 1.14), CF(), shirt, HW.StrawDark, M.Fabric)
+		r:Box(T, V(0.5, 0.45, 0.05), CF(0.45, -0.1, -0.6), rgb(150, 130, 90), M.Fabric)
+		r:Box(T, V(0.4, 0.4, 0.05), CF(-0.5, 0.5, -0.6), rgb(90, 70, 100), M.Fabric)
+		belt(r, rgb(120, 96, 50), HW.StrawDark)
+		for _, limb in ipairs({ r.RArm, r.LArm, r.RLeg, r.LLeg }) do -- солома из рукавов и штанин
+			for k = -1, 1 do
+				spike(r, limb, V(k * 0.28, -0.85, 0), V(k * 0.4, -1.35, -0.1), 0.24, HW.Straw, M.Fabric, true, 0.05)
+			end
+		end
+		-- крест-шест за спиной
+		r:Box(T, V(0.24, 4.6, 0.24), CF(0, -0.1, 0.72), HW.Wood, M.Wood)
+		r:Box(T, V(3.6, 0.22, 0.22), CF(0, 0.75, 0.72), HW.Wood, M.Wood)
+		-- вилы (железные с 4-го, светящиеся зубья на 5-м)
+		local top = shaft(r, A, -2.5, 2.0, HW.Wood, 0.18)
+		local fork = lv >= 4 and HW.Iron or rgb(100, 90, 80)
+		r:Box(A, V(0.12, 0.12, 0.85), CF(top + V(0, 0.05, 0)), fork, M.Metal)
+		for k = -1, 1 do
+			spike(r, A, top + V(0, 0.05, k * 0.38), top + V(0, 0.95, k * 0.38), 0.14, fork, M.Metal)
+		end
+		if lv >= 5 then
+			for k = -1, 1 do
+				r:Neon(A, V(0.05, 0.5, 0.05), CF(top + V(0, 0.45, k * 0.38 - 0.06)), HW.Orange)
+			end
+		end
+		muzzle(r, A, CF(top + V(0, 0.9, 0)))
+		r:WeaponTrail(A, top, top + V(0, 1, 0), HW.Orange)
+		-- вороньё: на плече (3), на перекладине креста (4), кружит над головой (5)
+		if lv >= 3 then
+			crow(r, r.LArm, CF(0, 1.02, 0) * ANG(0, rad(20), 0), 1, HW.Orange)
+		end
+		if lv >= 4 then
+			crow(r, T, CF(1.35, 0.85, 0.72) * ANG(0, rad(-30), 0), 0.9, HW.Orange)
+		end
+		if lv >= 5 then
+			local hub = orbitHub(r, "OrbitCrows", T, CF(0, 1.9, 0))
+			for i = 0, 2 do
+				local a = i / 3 * PI * 2
+				crow(r, hub, CF(math.cos(a) * 2.3, math.sin(a * 2) * 0.2, math.sin(a) * 2.3) * ANG(0, -a, 0), 0.9, HW.Orange)
+			end
+			capeWith(r, 1.9, 2.8, rgb(70, 54, 40), HW.Orange)
+		end
+		levelAura(r, lv, HW.Orange)
+		return finish(r, id, { RS = { 20, 0, 0 }, LS = { 75, 0, -25 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 4. CURSED SHERIFF (Epic) — проклятый шериф с зелёными револьверами
+	------------------------------------------------------------------------
+	-- Револьвер в рамке AIM (ствол вперёд при поднятой руке); secondary — второй, Muzzle не трогает
+	local function revolver(r, A, o, secondary)
+		local F = AIM
+		bevel(r, A, V(0.26, 0.5, 0.34), F * CF(0, -0.15, 0.15) * ANG(rad(-18), 0, 0), HW.Wood, false, M.Wood)
+		bevel(r, A, V(0.3, 0.32, 0.5), F * CF(0, 0.14, -0.15), o.Metal, o.Edge)
+		bevel(r, A, V(0.4, 0.34, 0.38), F * CF(0, 0.16, -0.5), o.Metal, o.Edge) -- барабан
+		r:Box(A, V(0.18, 0.18, 1.1), F * CF(0, 0.24, -1.15), o.Metal, M.Metal)
+		r:Box(A, V(0.06, 0.1, 0.1), F * CF(0, 0.36, -1.6), o.Metal, M.Metal) -- мушка
+		r:Neon(A, V(0.08, 0.08, 0.9), F * CF(0, 0.34, -1.1), o.Glow)
+		for k = 0, 1 do
+			r:Neon(A, V(0.42, 0.06, 0.06), F * CF(0, 0.16, -0.38 - k * 0.24), o.Glow)
+		end
+		return muzzle(r, A, F * CF(0, 0.24, -1.75), secondary)
+	end
+
+	local function CursedSheriff(lv, id)
+		local coat, coatD = rgb(76, 54, 38), rgb(46, 34, 28)
+		local glow = HW.Green
+		local r = figure(id, { Torso = rgb(56, 50, 46), Arm = coat, Leg = rgb(40, 36, 44), Skin = rgb(150, 170, 150), Edge = HW.Edge })
+		local T, Hd = r.Torso, r.Head
+		eyes(r, glow, true, 0.08)
+		-- платок на лице с треугольным концом (бордовый с 4-го)
+		local scarf = lv >= 4 and HW.Burgundy or rgb(110, 40, 40)
+		bevel(r, Hd, V(1.26, 0.5, 1.26), CF(0, -0.36, 0), scarf, false, M.Fabric)
+		spike(r, Hd, V(0, -0.6, -0.63), V(0, -0.95, -0.66), 0.5, scarf, M.Fabric, true, 0.06)
+		-- ковбойская шляпа: поля с загнутыми краями, тулья с вмятиной, лента (неон с 3-го)
+		local hat = lv >= 3 and HW.Black or rgb(70, 50, 36)
+		bevel(r, Hd, V(2.3, 0.12, 1.9), CF(0, 0.62, 0), hat, false, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			bevel(r, Hd, V(0.3, 0.12, 1.8), CF(1.2 * s, 0.75, 0) * ANG(0, 0, rad(35 * s)), hat, false, M.Fabric)
+		end
+		bevel(r, Hd, V(1.25, 0.62, 1.3), CF(0, 0.98, 0), hat, false, M.Fabric)
+		r:Wedge(Hd, V(1.25, 0.18, 0.6), CF(0, 1.38, -0.2) * ANG(0, PI, 0), hat, M.Fabric)
+		r:Box(Hd, V(1.29, 0.14, 1.34), CF(0, 0.74, 0), lv >= 3 and glow or rgb(140, 110, 70), lv >= 3 and M.Neon or M.Fabric)
+		if lv >= 4 then -- черепок на тулье
+			bevel(r, Hd, V(0.34, 0.34, 0.08), CF(0, 0.92, -0.68), HW.Bone, false, M.Plastic)
+			for _, s in ipairs(SIDES) do
+				r:Neon(Hd, V(0.08, 0.08, 0.04), CF(0.08 * s, 0.94, -0.73), glow)
+			end
+		end
+		-- жилет, звезда (золотая с 2-го), пояс; с 2-го — патронташ через грудь
+		bevel(r, T, V(2.12, 1.3, 1.12), CF(0, 0.32, 0), rgb(46, 40, 38), HW.Edge, M.Fabric)
+		star(r, T, CF(-0.5, 0.55, -0.6), 1.05, lv >= 2 and HW.Gold or HW.Iron)
+		belt(r, HW.Leather, HW.Gold)
+		if lv >= 2 then
+			bar(r, T, V(-0.9, 0.95, -0.58), V(0.9, -0.7, -0.58), V2(0.2, 0.06), HW.Leather)
+			for k = 0, 3 do
+				r:Box(T, V(0.08, 0.16, 0.06), CF(-0.6 + k * 0.38, 0.65 - k * 0.35, -0.62) * ANG(0, 0, rad(42)), HW.Gold, M.Metal)
+			end
+		end
+		-- пыльник: полы до колен, спинка, рваный край
+		for _, s in ipairs(SIDES) do
+			bevel(r, T, V(0.98, 1.7, 0.16), CF(0.56 * s, -1.75, -0.44), coat, HW.Edge, M.Fabric)
+			bevel(r, T, V(0.16, 1.7, 1.1), CF(1.05 * s, -1.75, 0), coat, false, M.Fabric)
+		end
+		bevel(r, T, V(2.1, 1.8, 0.16), CF(0, -1.8, 0.52), coat, false, M.Fabric)
+		Kit.tatter(r, T, -2.6, 0.55, 2.0, 4, coat, M.Fabric, 2)
+		cuffs(r, V(1.08, 0.4, 1.08), -0.75, HW.Leather, M.Fabric)
+		if lv >= 4 then
+			mantle(r, coatD, HW.Edge)
+		end
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do -- сапоги с золотыми шпорами
+			Kit.bootA(r, L, HW.Leather, HW.Edge, 1.1)
+			r:Box(L, V(0.1, 0.1, 0.3), CF(0, -0.95, 0.65), HW.Gold, M.Metal)
+		end
+		local gun = { Metal = lv >= 4 and rgb(40, 44, 40) or HW.Iron, Edge = lv >= 3 and HW.GreenDim or HW.Edge, Glow = glow }
+		revolver(r, r.RArm, gun)
+		if lv >= 3 then
+			revolver(r, r.LArm, gun, true) -- второй револьвер; Muzzle остаётся на правом
+		else
+			bevel(r, T, V(0.3, 0.6, 0.42), CF(-1.0, -1.15, -0.1), HW.Leather, false, M.Fabric) -- кобура
+		end
+		if lv >= 5 then -- плащ и проклятая цепь на поясе
+			capeWith(r, 1.9, 3.0, coatD, glow)
+			Kit.chain(r, T, 4, 0.22, rgb(60, 90, 60), CF(0.95, -0.95, -0.35))
+		end
+		levelAura(r, lv, glow)
+		return finish(r, id, { RS = { 72, 0, 0 }, LS = lv >= 3 and { 30, 0, -10 } or { 6, 0, -6 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 5. MIDNIGHT BELLRINGER (Epic) — горбатый звонарь с колоколом
+	------------------------------------------------------------------------
+	local BELL_SCALE = { 0.8, 0.85, 0.9, 1.0, 1.1 }
+
+	local function MidnightBellringer(lv, id)
+		local robeC, robeD = rgb(44, 34, 62), rgb(28, 22, 40)
+		local glow = rgb(190, 160, 255)
+		local r = figure(id, { Torso = robeC, Arm = robeC, Leg = robeD, Skin = rgb(170, 160, 176), Edge = HW.EdgeCool })
+		local T, A = r.Torso, r.RArm
+		Parts.hood(r, robeC, HW.EdgeCool, glow, true)
+		for _, s in ipairs(SIDES) do -- глаза светятся из тени капюшона
+			r:Neon(r.Head, V(0.22, 0.13, 0.05), CF(0.24 * s, 0.06, -0.66), glow)
+		end
+		bevel(r, T, V(1.7, 1.1, 0.8), CF(0, 0.65, 0.65) * ANG(rad(-15), 0, 0), robeC, HW.EdgeCool, M.Fabric) -- горб
+		robe(r, robeD, lv >= 3 and HW.Gold or nil, 1.8)
+		belt(r, rgb(70, 50, 40), HW.Gold, lv >= 2 and glow or nil)
+		r:Box(T, V(0.12, 1.4, 0.12), CF(0.75, -1.5, -0.6), rgb(170, 150, 110), M.Fabric) -- верёвка колокола
+		if lv >= 2 then
+			mantle(r, robeC, HW.EdgeCool)
+		end
+		-- ручной колокол: рукоять из кулака, колокол висит под ней (растёт с уровнем, золотой с 4-го)
+		local pose = { 62, 0, 10 }
+		local dn = downIn(pose)
+		local hand = V(0, GRIP, -0.15)
+		r:Seg(A, hand, hand + dn * 0.6, V2(0.2, 0.2), HW.Wood, M.Wood)
+		local s = BELL_SCALE[lv]
+		local at = hang(hand + dn * 0.6, dn)
+		local metal = lv >= 4 and HW.Gold or rgb(150, 110, 60)
+		local clapper = bell(r, A, at, s, metal, lv >= 4 and HW.GoldDark or rgb(110, 80, 44), glow)
+		muzzle(r, A, at * CF(0, -0.9 * s, 0))
+		r:Glow(clapper, glow, 8, 1)
+		if lv >= 2 then -- призрачные часы над плечом (крутятся как Orbit)
+			local c = r:Joint("OrbitGhostClock", T, V(0.1, 0.1, 0.1), CF(-1.4, 2.0, 0.6), CF(), glow)
+			c.Transparency = 1
+			r:Box(c, V(1.0, 1.0, 0.1), ANG(0, 0, rad(45)), glow, M.Glass, { Transparency = 0.55 })
+			r:Box(c, V(0.82, 0.82, 0.12), ANG(0, 0, rad(45)), rgb(30, 24, 50), M.Glass, { Transparency = 0.35 })
+			r:Neon(c, V(0.06, 0.34, 0.14), CF(0, 0.15, -0.02), glow)
+			r:Neon(c, V(0.26, 0.05, 0.14), CF(0.12, 0, -0.02), glow)
+		end
+		if lv >= 3 then -- малый колокол на поясе
+			bell(r, T, CF(-0.95, -0.8, -0.3), 0.45, metal, rgb(110, 80, 44), glow)
+		end
+		if lv >= 4 then -- кольцо призрачных циферблатов
+			local hub = orbitHub(r, "OrbitClocks", T, CF(0, 0.6, 0))
+			for i = 0, 2 do
+				local a, p = around(i, 3, 2.3)
+				local face = CF(p) * ANG(0, -a + PI / 2, 0)
+				r:Box(hub, V(0.6, 0.6, 0.08), face * ANG(0, 0, rad(45)), glow, M.Glass, { Transparency = 0.5 })
+				r:Neon(hub, V(0.05, 0.24, 0.1), face * CF(0, 0.1, 0), glow)
+			end
+		end
+		if lv >= 5 then
+			capeWith(r, 2.0, 3.0, robeC, glow)
+		end
+		levelAura(r, lv, glow)
+		return finish(r, id, { RS = pose, LS = { 15, 0, -8 }, Neck = { -4, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 6. PLAGUE DOCTOR (Legendary) — чумной доктор с колбой яда
+	------------------------------------------------------------------------
+	local function PlagueDoctor(lv, id)
+		local coat, coatD = rgb(30, 26, 32), rgb(20, 18, 24)
+		local glow = HW.Green
+		local r = figure(id, { Torso = coat, Arm = coat, Leg = coatD, Skin = rgb(60, 46, 38), Edge = HW.EdgeCool })
+		local T, Hd, A = r.Torso, r.Head, r.RArm
+		-- кожаная маска с длинным клювом и круглыми стёклами в золотой оправе (зелёные с 2-го)
+		local leather, seam = lv >= 4 and rgb(70, 48, 36) or rgb(96, 72, 54), rgb(130, 100, 76)
+		bevel(r, Hd, V(1.3, 1.3, 1.3), CF(), leather, seam, M.Fabric)
+		bevel(r, Hd, V(0.62, 0.5, 0.5), CF(0, -0.2, -0.82), leather, seam, M.Fabric)
+		spike(r, Hd, V(0, -0.22, -1.05), V(0, -0.55, -2.1), 0.5, leather, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			r:Box(Hd, V(0.38, 0.38, 0.08), CF(0.3 * s, 0.14, -0.67) * ANG(0, 0, rad(45)), HW.Gold, M.Metal)
+			r:Neon(Hd, V(0.3, 0.3, 0.1), CF(0.3 * s, 0.14, -0.68) * ANG(0, 0, rad(45)), lv >= 2 and glow or rgb(160, 200, 160))
+		end
+		brimHat(r, HW.Black, lv >= 3 and HW.Burgundy or rgb(40, 34, 38), { Brim = 2.4, W = 1.4, Hgt = 0.75, Y = 0.68, Edge = HW.EdgeCool })
+		-- длинный плащ, кожаный фартук, накидка, перчатки
+		robe(r, coat, lv >= 3 and HW.Burgundy or nil, 2.0)
+		bevel(r, T, V(1.4, 2.6, 0.12), CF(0, -0.9, -0.62), rgb(70, 52, 40), false, M.Fabric)
+		belt(r, HW.Leather, HW.Gold)
+		mantle(r, coatD, HW.EdgeCool)
+		cuffs(r, V(1.1, 0.6, 1.1), -0.78, rgb(36, 30, 30), M.Fabric)
+		for k = 0, (lv >= 2 and 3 or 2) - 1 do -- склянки на поясе
+			flask(r, T, CF(-0.75 + k * 0.42, -1.18, -0.68), 0.75, k % 2 == 0 and glow or POTION)
+		end
+		-- колба с ядом в правой руке (больше с 4-го, искрит с 3-го)
+		local at = CF(0, GRIP - 0.42, -0.25)
+		local liquid = flask(r, A, at, lv >= 4 and 1.5 or 1.25, glow)
+		muzzle(r, A, at)
+		r:Glow(liquid, glow, 7, 1)
+		if lv >= 3 then
+			r:Sparkles(liquid, glow, { Rate = 5, Up = 2, Size = 0.2 })
+		end
+		-- трость с черепом в левой руке
+		local top = shaft(r, r.LArm, -3.0, -0.4, HW.Black, 0.16)
+		bevel(r, r.LArm, V(0.42, 0.42, 0.42), CF(top + V(0, 0.2, 0)), HW.Bone, false, M.Plastic)
+		for _, s in ipairs(SIDES) do
+			r:Neon(r.LArm, V(0.1, 0.08, 0.04), CF(top + V(0.1 * s, 0.24, -0.22)), glow)
+		end
+		if lv >= 3 then -- ворон с зелёными глазами на плече
+			crow(r, r.LArm, CF(0.05, 1.02, 0) * ANG(0, rad(15), 0), 1.15, glow)
+		end
+		if lv >= 4 then
+			local hub = orbitHub(r, "OrbitFlasks", T, CF(0, 0.2, 0))
+			for i = 0, 2 do
+				local a = i / 3 * PI * 2
+				flask(r, hub, CF(math.cos(a) * 2.2, math.sin(a * 2) * 0.2, math.sin(a) * 2.2), 0.9, i == 1 and POTION or glow)
+			end
+		end
+		if lv >= 5 then -- плащ и ядовитая дымка
+			capeWith(r, 2.1, 3.3, coatD, glow)
+			emitter(T, "PoisonMist", {
+				Color = ColorSequence.new(rgb(80, 160, 70)), LightEmission = 0.3, Rate = 4,
+				Lifetime = NumberRange.new(1, 1.8), Speed = NumberRange.new(0.2, 0.6), SpreadAngle = V2(180, 180),
+				Size = seq(0.6, 1.6), Transparency = seq(0.7, 1),
+			})
+		end
+		levelAura(r, lv, glow)
+		return finish(r, id, { RS = { 40, 0, 0 }, LS = { 15, 0, -8 }, Neck = { 6, 0, 0 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 7. PHANTOM KNIGHT (Legendary) — призрачный рыцарь с синим мечом
+	------------------------------------------------------------------------
+	local SWORD_LEN = { 3.0, 3.2, 3.4, 3.7, 4.2 }
+
+	local function PhantomKnight(lv, id)
+		local ghost, deep, plate = rgb(70, 120, 190), rgb(34, 52, 96), rgb(46, 70, 120)
+		local edge, glow = rgb(150, 210, 255), HW.Ghost
+		local r = figure(id, { Torso = deep, Arm = deep, Leg = deep, Skin = rgb(20, 30, 50), Edge = edge })
+		local T, Hd = r.Torso, r.Head
+		local function shell(limb, size, cf) -- полупрозрачная оболочка призрака
+			return r:Box(limb, size, cf, ghost, M.Glass, { Transparency = 0.35 })
+		end
+		Parts.helm(r, plate, edge, glow, nil, true)
+		shell(Hd, V(1.42, 1.56, 1.42), CF(0, 0.1, 0))
+		for k = 1, lv >= 4 and 3 or (lv >= 2 and 2 or 1) do -- плюмаж из синего огня
+			spike(r, Hd, V(0, 0.75, 0.1 + k * 0.18), V(0, 1.4 + k * 0.1, 0.6 + k * 0.25), 0.4, glow, M.Neon, true, 0.08)
+		end
+		Parts.chest(r, plate, edge, glow)
+		shell(T, V(2.25, 2.1, 1.25), CF())
+		belt(r, deep, edge, glow)
+		Parts.tassets(r, plate, edge)
+		Parts.bigShoulders(r, plate, edge, lv >= 3 and glow or nil, lv >= 4 and 1.15 or 1.0, lv >= 4 and 2 or 1)
+		Parts.bracers(r, plate, edge)
+		for _, L in ipairs({ r.RLeg, r.LLeg }) do -- ноги растворяются в дымке
+			bevel(r, L, V(1.12, 0.8, 1.14), CF(0, 0.3, 0), plate, edge)
+			shell(L, V(1.16, 2.0, 1.16), CF())
+		end
+		emitter(r.RLeg, "GhostMist", {
+			Color = ColorSequence.new(glow), LightEmission = 0.6, Rate = 6,
+			Lifetime = NumberRange.new(0.8, 1.4), Speed = NumberRange.new(0.2, 0.7), SpreadAngle = V2(180, 180),
+			Size = seq(0.5, 1.2), Transparency = seq(0.6, 1),
+		})
+		-- светящийся меч растёт с уровнем (на 5-м — широкий двуручник)
+		Parts.blade(r, r.RArm, {
+			Len = SWORD_LEN[lv], W = lv >= 5 and 0.7 or 0.55, Blade = rgb(90, 150, 220), Guard = plate, Edge = edge,
+			Glow = glow, Core = lv >= 3 and rgb(220, 240, 255) or nil, Trail = glow,
+		})
+		if lv >= 3 then
+			capeWith(r, 2.0, 3.2, rgb(30, 50, 90), glow)
+		end
+		if lv >= 5 then -- призрачные мечи на орбите
+			local hub = orbitHub(r, "OrbitSwords", T, CF(0, 0.4, 0))
+			for i = 0, 2 do
+				local a, p = around(i, 3, 2.6)
+				r:Box(hub, V(0.1, 1.6, 0.32), CF(p) * ANG(0, -a, 0), glow, M.Glass, { Transparency = 0.3 })
+				r:Box(hub, V(0.12, 0.12, 0.7), CF(p + V(0, -0.7, 0)) * ANG(0, -a, 0), edge, M.Metal)
+				spike(r, hub, p + V(0, 0.8, 0), p + V(0, 1.2, 0), 0.3, glow, M.Neon, true, 0.08)
+			end
+		end
+		levelAura(r, lv, glow)
+		return finish(r, id, { RS = { 30, 0, 0 }, LS = { 10, 0, -8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 8. DARK ILLUSIONIST (Legendary) — тёмный иллюзионист с веером карт
+	------------------------------------------------------------------------
+	local function DarkIllusionist(lv, id)
+		local suit, suitD = rgb(30, 22, 40), rgb(20, 14, 28)
+		local glow, wine = HW.Violet, rgb(80, 20, 40)
+		local r = figure(id, { Torso = suit, Arm = suit, Leg = suitD, Skin = rgb(214, 200, 210), Edge = HW.EdgeCool })
+		local T, Hd = r.Torso, r.Head
+		-- маска-домино с фиолетовыми глазами и ухмылка
+		r:Box(Hd, V(1.1, 0.34, 0.06), CF(0, 0.12, -0.62), HW.Black, M.Plastic)
+		for _, s in ipairs(SIDES) do
+			r:Neon(Hd, V(0.2, 0.1, 0.05), CF(0.27 * s, 0.12, -0.66), glow)
+		end
+		r:Box(Hd, V(0.46, 0.06, 0.04), CF(0, -0.3, -0.62) * ANG(0, 0, rad(-6)), wine)
+		-- цилиндр: лента (неоновая с 3-го), с 2-го — карта за лентой
+		bevel(r, Hd, V(1.8, 0.1, 1.8), CF(0, 0.62, 0), HW.Black, false, M.Fabric)
+		bevel(r, Hd, V(1.15, 1.2, 1.15), CF(0, 1.25, 0), HW.Black, HW.EdgeCool, M.Fabric)
+		r:Box(Hd, V(1.19, 0.2, 1.19), CF(0, 0.8, 0), lv >= 3 and glow or HW.Burgundy, lv >= 3 and M.Neon or M.Fabric)
+		if lv >= 2 then
+			card(r, Hd, CF(0.4, 0.95, -0.62) * ANG(0, 0, rad(-15)), 0.8, HW.Red)
+		end
+		-- фрак: красный жилет, белый галстук-клин, лацканы, фалды
+		bevel(r, T, V(2.12, 2.0, 1.12), CF(), suit, HW.EdgeCool, M.Fabric)
+		r:Box(T, V(0.6, 1.3, 0.06), CF(0, 0.3, -0.58), wine, M.Fabric)
+		r:Wedge(T, V(0.5, 0.25, 0.06), CF(0, 0.9, -0.62) * ANG(0, 0, PI), WHITE, M.Plastic)
+		for _, s in ipairs(SIDES) do
+			r:Box(T, V(0.36, 1.3, 0.08), CF(0.48 * s, 0.35, -0.6) * ANG(0, 0, rad(12 * s)), HW.Black, M.Fabric)
+			bevel(r, T, V(0.85, 1.6, 0.14), CF(0.45 * s, -1.6, 0.52) * ANG(rad(-8), 0, rad(-6 * s)), suitD, false, M.Fabric)
+		end
+		belt(r, HW.Black, HW.Gold, lv >= 2 and glow or nil)
+		cuffs(r, V(1.06, 0.42, 1.06), -0.8, WHITE, M.Plastic) -- белые перчатки
+		-- плащ с бордовой подкладкой и высоким воротником (чёрный с 4-го, эмблема с 3-го)
+		local cape = capeWith(r, 2.1, 3.1, lv >= 4 and HW.Black or suitD, lv >= 3 and glow or nil)
+		r:Box(cape, V(1.95, 1.6, 0.04), CF(0, 0, -0.08), HW.Burgundy, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			r:Wedge(T, V(0.15, 0.9, 0.7), CF(0.9 * s, 1.35, 0.25) * ANG(0, PI, 0), HW.Burgundy, M.Fabric)
+		end
+		-- веер карт в правой руке (3, с 3-го — 5), лицом вперёд при поднятой руке
+		local n = lv >= 3 and 5 or 3
+		for k = 1, n do
+			local a = rad((k - (n + 1) / 2) * 22)
+			card(r, r.RArm, AIM * CF(0, 0.05, -0.4) * ANG(0, 0, -a) * CF(0, 0.42, -0.01 * k), 1.45, k % 2 == 0 and HW.Black or HW.Red)
+		end
+		muzzle(r, r.RArm, AIM * CF(0, 0.05, -0.5))
+		-- трость с фиолетовым кристаллом в левой руке
+		local top = shaft(r, r.LArm, -2.3, 1.3, HW.Black, 0.14)
+		r:Box(r.LArm, V(0.18, 0.12, 0.18), CF(top), HW.Gold, M.Metal)
+		r:Neon(r.LArm, V(0.32, 0.32, 0.32), CF(top + V(0, 0.25, 0)) * ANG(rad(45), 0, rad(45)), glow)
+		if lv >= 4 then -- осколки зеркал на орбите (3, на 5-м — 5)
+			local cnt = lv >= 5 and 5 or 3
+			local hub = orbitHub(r, "OrbitMirrors", T, CF(0, 0.6, 0))
+			for i = 0, cnt - 1 do
+				local a = i / cnt * PI * 2
+				local at = CF(math.cos(a) * 2.3, math.sin(a * 3) * 0.25, math.sin(a) * 2.3) * ANG(0, -a + PI / 2, 0)
+				tri(r, hub, at, 0.5, 0.8, rgb(200, 190, 230), M.Foil, 0.06)
+				r:Neon(hub, V(0.05, 0.4, 0.07), at, glow)
+			end
+		end
+		if lv >= 5 then -- карты кружат над шляпой
+			local hub = orbitHub(r, "OrbitCards", Hd, CF(0, 1.9, 0))
+			for i = 0, 3 do
+				local a, p = around(i, 4, 1.2)
+				card(r, hub, CF(p) * ANG(0, -a, rad(20)), 0.9, HW.Red, i % 2 == 1)
+			end
+		end
+		levelAura(r, lv, glow)
+		return finish(r, id, { RS = { 60, 0, 10 }, LS = { 10, 0, -8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 9. HALLOWEEN PUPPETEER (Mythic) — кукловод с вагой и красными нитями
+	------------------------------------------------------------------------
+	local THREAD_LEN = { 1.6, 1.8, 2.0, 2.0, 2.2 }
+	local THREAD_ENDS = { V(-0.8, 0, 0), V(0.8, 0, 0), V(0, 0, -0.6), V(0, 0, 0.6) }
+
+	-- Деревянная марионетка с фарфоровой головой (cf — центр тела)
+	local function marionette(r, limb, cf, s)
+		local wood = HW.WoodLight
+		bevel(r, limb, V(0.5, 0.6, 0.3) * s, cf, wood, false, M.Wood)
+		r:Box(limb, V(0.4, 0.4, 0.4) * s, cf * CF(0, 0.55 * s, 0), PORCELAIN, M.Plastic)
+		for _, x in ipairs(SIDES) do
+			r:Neon(limb, V(0.06, 0.06, 0.04) * s, cf * CF(0.09 * s * x, 0.6 * s, -0.21 * s), HW.Red)
+			r:Box(limb, V(0.14, 0.5, 0.14) * s, cf * CF(0.34 * s * x, 0, 0), wood, M.Wood)
+			r:Box(limb, V(0.16, 0.5, 0.16) * s, cf * CF(0.14 * s * x, -0.58 * s, 0), wood, M.Wood)
+		end
+	end
+
+	local function HalloweenPuppeteer(lv, id)
+		local coat, coatD = rgb(26, 18, 26), rgb(16, 12, 18)
+		local red, trim = HW.Red, rgb(130, 70, 80)
+		local r = figure(id, { Torso = coat, Arm = coat, Leg = coatD, Skin = rgb(228, 222, 230), Edge = trim })
+		local T, Hd, A = r.Torso, r.Head, r.RArm
+		-- фарфоровая маска: красные глаза-треугольники, улыбка с уголками (трещина с 2-го)
+		r:Box(Hd, V(1.0, 1.0, 0.06), CF(0, -0.02, -0.62), PORCELAIN, M.Plastic)
+		for _, s in ipairs(SIDES) do
+			tri(r, Hd, CF(0.26 * s, 0.14, -0.66) * ANG(0, 0, PI), 0.24, 0.16, red, M.Neon, 0.04)
+		end
+		r:Box(Hd, V(0.5, 0.06, 0.04), CF(0, -0.27, -0.66), red, M.Neon)
+		for _, s in ipairs(SIDES) do
+			r:Box(Hd, V(0.06, 0.14, 0.04), CF(0.27 * s, -0.22, -0.66), red, M.Neon)
+		end
+		if lv >= 2 then
+			Kit.crack(r, Hd, { V(-0.1, 0.45, -0.66), V(-0.22, 0.25, -0.66), V(-0.12, 0.05, -0.66) }, 0.04, rgb(60, 40, 50))
+		end
+		-- высокий цилиндр набекрень с красной лентой (неон с 3-го)
+		bevel(r, Hd, V(1.7, 0.1, 1.7), CF(0, 0.62, 0), HW.Black, false, M.Fabric)
+		bevel(r, Hd, V(1.1, 1.4, 1.1), CF(0, 1.35, 0) * ANG(0, 0, rad(-5)), HW.Black, rgb(90, 50, 60), M.Fabric)
+		r:Box(Hd, V(1.14, 0.18, 1.14), CF(0, 0.82, 0), lv >= 3 and red or HW.Burgundy, lv >= 3 and M.Neon or M.Fabric)
+		-- фрак до пола, бордовый жилет, высокий воротник
+		robe(r, coat, HW.Burgundy, 2.0)
+		bevel(r, T, V(2.14, 1.2, 1.14), CF(0, 0.4, 0), HW.Burgundy, trim, M.Fabric)
+		r:Box(T, V(0.5, 1.2, 0.06), CF(0, 0.4, -0.6), HW.Black, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			r:Wedge(T, V(0.15, 1.1, 0.8), CF(0.95 * s, 1.45, 0.2) * ANG(0, PI, 0), coat, M.Fabric)
+		end
+		belt(r, HW.Black, HW.Gold, red)
+		mantle(r, coatD, trim)
+		cuffs(r, V(1.06, 0.42, 1.06), -0.8, WHITE, M.Plastic)
+		-- вага-крестовина в правой руке (чёрная с золотом с 4-го), 4 нити вниз
+		local pose = { 70, 0, 18 }
+		local dn = downIn(pose)
+		local c = V(0, GRIP - 0.25, -0.1)
+		local cross = hang(c, dn)
+		local wood = lv >= 4 and HW.Black or HW.Wood
+		r:Box(A, V(1.7, 0.16, 0.16), cross, wood, M.Wood)
+		r:Box(A, V(0.16, 0.16, 1.3), cross, wood, M.Wood)
+		if lv >= 4 then
+			for _, x in ipairs({ -0.85, 0.85 }) do
+				r:Box(A, V(0.2, 0.2, 0.2), cross * CF(x, 0, 0), HW.Gold, M.Metal)
+			end
+		end
+		local len = THREAD_LEN[lv]
+		for _, e in ipairs(THREAD_ENDS) do
+			local p = cross * e
+			thread(r, A, p, p + dn * len, red)
+		end
+		muzzle(r, A, CF(c + dn * len))
+		if lv >= 3 then -- кукла на нитях
+			marionette(r, A, hang(c + dn * (len + 0.55), dn), 1.2)
+		end
+		-- левая рука: нити от пальцев
+		local pose2 = { 55, 0, -20 }
+		local dn2 = downIn(pose2)
+		for k = -1, 1 do
+			local p = V(k * 0.3, GRIP - 0.3, -0.1)
+			thread(r, r.LArm, p, p + dn2 * (1.4 + math.abs(k) * 0.3), red)
+		end
+		if lv >= 4 then
+			capeWith(r, 2.1, 3.4, HW.Burgundy, red)
+		end
+		if lv >= 5 then -- огромная катушка за спиной и куклы на орбите
+			for _, y in ipairs({ -0.6, 0.6 }) do
+				bevel(r, T, V(1.5, 0.2, 1.5), CF(0, 0.3 + y, 1.25) * ANG(0, PI / 4, 0), HW.Black, trim)
+			end
+			r:Neon(T, V(1.1, 1.0, 1.1), CF(0, 0.3, 1.25), red)
+			local hub = orbitHub(r, "OrbitPuppets", T, CF(0, -0.4, 0))
+			for i = 0, 2 do
+				local a, p = around(i, 3, 2.6)
+				local at = CF(p) * ANG(0, -a, 0)
+				marionette(r, hub, at, 1.0)
+				thread(r, hub, at * V(0, 0.8, 0), at * V(0, 2.2, 0), red)
+			end
+		end
+		levelAura(r, lv, red)
+		return finish(r, id, { RS = pose, LS = pose2 })
+	end
+
+	------------------------------------------------------------------------
+	-- 10. HEADLESS EXECUTIONER (Mythic) — безголовый палач с огромным топором
+	------------------------------------------------------------------------
+	local AXE_R = { 1.3, 1.4, 1.5, 1.7, 1.9 }
+
+	local function HeadlessExecutioner(lv, id)
+		local leather, iron, strap = rgb(50, 32, 28), rgb(54, 52, 60), rgb(30, 22, 20)
+		local fire = HW.Orange
+		local r = figure(id, { Torso = rgb(70, 50, 44), Arm = rgb(110, 80, 70), Leg = rgb(36, 28, 30), Skin = rgb(70, 50, 44), Edge = HW.Edge })
+		local T, A = r.Torso, r.RArm
+		Parts.hideHead(r)
+		-- обрубок шеи: железный ворот, тлеющие угли и языки пламени
+		bevel(r, T, V(1.3, 0.35, 1.0), CF(0, 1.12, 0), iron, HW.Edge)
+		local ember = r:Neon(T, V(0.8, 0.12, 0.6), CF(0, 1.32, 0), fire)
+		r:Box(T, V(0.5, 0.14, 0.4), CF(0, 1.36, 0), rgb(120, 30, 20), M.Plastic)
+		for k = 0, 3 do
+			local a = k / 4 * PI * 2 + 0.4
+			local c, s = math.cos(a), math.sin(a)
+			spike(r, T, V(c * 0.25, 1.35, s * 0.2), V(c * 0.32, 1.75 + (k % 2) * 0.2, s * 0.25), 0.22, fire, M.Neon, true, 0.05)
+		end
+		emitter(ember, "NeckFire", {
+			Color = ColorSequence.new(rgb(255, 190, 80), rgb(255, 70, 20)), LightEmission = 1, LightInfluence = 0, Rate = 14,
+			Lifetime = NumberRange.new(0.4, 0.8), Speed = NumberRange.new(1.5, 3), EmissionDirection = Enum.NormalId.Top,
+			SpreadAngle = V2(15, 15), Size = seq(0.5, 0), Transparency = seq(0.2, 1),
+		})
+		r:Glow(ember, fire, 10, 1.6)
+		-- кожаный нагрудник с ремнями крест-накрест и медальоном; железные наручи и поножи
+		bevel(r, T, V(2.14, 2.0, 1.14), CF(), leather, HW.Edge, M.Fabric)
+		bar(r, T, V(-0.9, 0.95, -0.6), V(0.9, -0.7, -0.6), V2(0.22, 0.07), strap)
+		bar(r, T, V(0.9, 0.95, -0.6), V(-0.9, -0.7, -0.6), V2(0.22, 0.07), strap)
+		r:Box(T, V(0.3, 0.3, 0.08), CF(0, 0.12, -0.64) * ANG(0, 0, rad(45)), HW.Iron, M.Metal)
+		belt(r, strap, HW.Gold, lv >= 3 and fire or nil)
+		Parts.tassets(r, leather, HW.Edge)
+		Parts.bracers(r, iron, HW.Edge)
+		Parts.greaves(r, iron, HW.Edge, true)
+		if lv >= 2 then
+			Parts.bigShoulders(r, iron, HW.Edge, lv >= 4 and fire or nil, lv >= 4 and 1.15 or 1.0, lv >= 3 and 2 or 1)
+		end
+		-- капюшон палача висит на поясе (прорези тлеют с 3-го)
+		bevel(r, T, V(0.75, 0.85, 0.5), CF(-1.0, -1.3, -0.25), HW.Black, false, M.Fabric)
+		for _, s in ipairs(SIDES) do
+			r:Box(T, V(0.14, 0.1, 0.05), CF(-1.0 + 0.17 * s, -1.2, -0.52), lv >= 3 and fire or rgb(60, 20, 20), lv >= 3 and M.Neon or M.Plastic)
+		end
+		if lv >= 3 then -- цепи на руке и бедре
+			Kit.chain(r, r.LArm, 4, 0.26, HW.Iron, CF(0.55, -0.2, 0))
+			Kit.chain(r, T, 3, 0.24, HW.Iron, CF(0.9, -0.95, -0.4))
+		end
+		-- топор: длинная рукоять, лезвие-полумесяц из 7 секторов (растёт с уровнем), огненная кромка с 2-го
+		local top = shaft(r, A, -2.8, 2.6, lv >= 4 and HW.Black or HW.Wood, 0.26)
+		bevel(r, A, V(0.36, 0.25, 0.36), CF(0, -2.8, -0.5), iron, false)
+		local R = AXE_R[lv]
+		local c = top + V(0, -0.4, -0.3)
+		local bladeC = lv >= 5 and rgb(30, 26, 32) or iron
+		local sector = V2(0.14, 2 * R * math.sin(rad(11.7)) + 0.1)
+		local prev
+		for k = 0, 6 do
+			local phi = rad(-70 + k * 23.3)
+			local dir = V(0, math.sin(phi), -math.cos(phi))
+			bar(r, A, c + dir * 0.25, c + dir * R, sector, bladeC, M.Metal)
+			local rim = c + dir * (R * 0.94)
+			if prev and lv >= 2 then
+				bar(r, A, prev, rim, V2(0.16, 0.08), fire, M.Neon)
+			end
+			prev = rim
+		end
+		bevel(r, A, V(0.3, 0.6, 0.6), CF(top + V(0, -0.4, 0)), iron, HW.Edge)
+		spike(r, A, top + V(0, -0.4, 0.2), top + V(0, -0.4, 0.8), 0.45, iron, M.Metal, true, 0.12) -- обух
+		if lv >= 4 then
+			Kit.crack(r, A, { c + V(0.08, 0.4, -0.5), c + V(0.08, 0.1, -0.8), c + V(0.08, -0.2, -0.6) }, 0.07, fire)
+		end
+		r:WeaponTrail(A, c + V(0, 0, -0.5), c + V(0, 0, -R), fire)
+		muzzle(r, A, CF(c + V(0, 0, -R)))
+		if lv >= 5 then -- плащ, угли на орбите, искры из шеи
+			capeWith(r, 2.2, 3.4, HW.BurgDark, fire)
+			r:Orbit("OrbitEmbers", T, CF(0, 0.2, 0), 2.4, 5, 0.32, fire)
+			embers(r, ember, fire, 10, 0.3)
+		end
+		levelAura(r, lv, fire)
+		return finish(r, id, { RS = { 25, 0, 0 }, LS = { 20, 0, -8 } })
+	end
+
+	------------------------------------------------------------------------
+	-- 11. LANTERN KING (Secret) — Король фонарей с тыквенной головой
+	------------------------------------------------------------------------
+	local LANTERN_SCALE = { 1.0, 1.1, 1.2, 1.3, 1.45 }
+
+	local function LanternKing(lv, id)
+		local robeC, robeD = rgb(44, 20, 60), rgb(26, 12, 38)
+		local fire = HW.Orange
+		local r = figure(id, { Torso = robeC, Arm = robeC, Leg = robeD, Skin = HW.Pumpkin, Edge = HW.GoldDark })
+		local T, Hd, A = r.Torso, r.Head, r.RArm
+		Parts.hideHead(r)
+		-- голова-тыква с вырезанным светящимся лицом и огнём внутри; золотая корона (выше и с камнями с 2-го)
+		pumpkin(r, Hd, CF(0, 0.12, 0), 0.92, 1.45, HW.Pumpkin, HW.PumpkinDark, lv >= 5 and rgb(255, 220, 120) or rgb(255, 170, 50))
+		local inner = r:Neon(Hd, V(0.9, 0.9, 0.9), CF(0, 0.12, 0), rgb(255, 120, 20), { Transparency = 0.2 })
+		r:Glow(inner, fire, 12, 1.8)
+		Parts.kingCrown(r, Hd, CF(0, 0.82, 0), 0.62, lv >= 2 and 0.85 or 0.65, HW.Gold, lv >= 2 and fire or nil, 8)
+		-- королевская мантия: золотая полоса, огненный камень, меховой воротник с тыквенными кисточками
+		robe(r, robeD, HW.Gold, 2.0)
+		bevel(r, T, V(2.14, 2.0, 1.14), CF(), robeC, HW.GoldDark, M.Fabric)
+		r:Box(T, V(0.4, 2.0, 0.06), CF(0, 0, -0.58), HW.Gold, M.Fabric)
+		Kit.gem(r, T, 0.4, CF(0, 0.45, -0.64), fire, HW.Gold)
+		belt(r, HW.Black, HW.Gold, fire)
+		bevel(r, T, V(2.5, 0.45, 1.4), CF(0, 0.92, 0), HW.Black, HW.PumpkinDark, M.Fabric)
+		for k = -2, 2 do
+			r:Box(T, V(0.3, 0.2, 0.06), CF(k * 0.45, 0.92, -0.71), HW.PumpkinDark, M.Fabric)
+		end
+		if lv >= 4 then
+			Parts.bigShoulders(r, HW.Gold, HW.GoldDark, fire, 1.0, 1)
+		else
+			mantle(r, robeC, HW.GoldDark)
+		end
+		cuffs(r, V(1.08, 0.45, 1.08), -0.75, HW.Gold)
+		capeWith(r, 2.2, lv >= 3 and 3.6 or 3.2, lv >= 3 and HW.Burgundy or robeD, fire)
+		-- посох: чёрное древко с золотыми кольцами, крюк, фонарь (растёт с уровнем) с тыковкой внутри
+		local top = shaft(r, A, -2.6, 2.4, HW.Black, 0.22)
+		for _, y in ipairs({ -1.6, 0.4, 1.6 }) do
+			bevel(r, A, V(0.34, 0.14, 0.34), CF(0, y, -0.5), HW.Gold, false)
+		end
+		local hook = { top, top + V(0, 0.5, -0.1), top + V(0, 0.7, -0.5), top + V(0, 0.5, -0.85) }
+		for i = 1, 3 do
+			bar(r, A, hook[i], hook[i + 1], V2(0.14, 0.14), HW.Gold, M.Metal)
+		end
+		local s = LANTERN_SCALE[lv]
+		local lc = hook[4] + V(0, -0.85 * s, 0)
+		local flame = lantern(r, A, CF(lc), s, HW.Gold, rgb(255, 160, 40), rgb(255, 140, 50))
+		pumpkin(r, A, CF(lc + V(0, -0.02 * s, 0)), 0.16 * s, 0.24 * s, HW.Pumpkin, HW.PumpkinDark, nil, { Cheap = true })
+		embers(r, flame, fire, lv >= 4 and 10 or 5, 0.22)
+		muzzle(r, A, CF(lc))
+		if lv >= 3 then -- огненные тыквы на орбите (2, на 5-м — 4)
+			local n = lv >= 5 and 4 or 2
+			local hub = orbitHub(r, "OrbitPumpkins", T, CF(0, 1.2, 0))
+			for i = 0, n - 1 do
+				local a = i / n * PI * 2
+				local at = CF(math.cos(a) * 2.6, math.sin(a * 2) * 0.3, math.sin(a) * 2.6) * ANG(0, -a - PI / 2, 0)
+				pumpkin(r, hub, at, 0.38, 0.55, HW.Pumpkin, HW.PumpkinDark, rgb(255, 190, 70), { Cheap = true })
+			end
+		end
+		if lv >= 5 then
+			embers(r, T, fire, 12, 0.3)
+		end
+		levelAura(r, lv, fire)
+		return finish(r, id, { RS = { 22, 0, 0 }, LS = { 12, 0, -10 } })
+	end
+
+	------------------------------------------------------------------------
+	-- РЕГИСТРАЦИЯ (редкость — запасная; основная берётся из Config.Units[id].Rarity)
+	------------------------------------------------------------------------
+	local UNITS = {
+		{ "NightWatchman", NightWatchman, "Common" },
+		{ "Gravedigger", Gravedigger, "Rare" },
+		{ "CursedScarecrow", CursedScarecrow, "Rare" },
+		{ "CursedSheriff", CursedSheriff, "Epic" },
+		{ "MidnightBellringer", MidnightBellringer, "Epic" },
+		{ "PlagueDoctor", PlagueDoctor, "Legendary" },
+		{ "PhantomKnight", PhantomKnight, "Legendary" },
+		{ "DarkIllusionist", DarkIllusionist, "Legendary" },
+		{ "HalloweenPuppeteer", HalloweenPuppeteer, "Mythic" },
+		{ "HeadlessExecutioner", HeadlessExecutioner, "Mythic" },
+		{ "LanternKing", LanternKing, "Secret" },
+	}
+	for _, u in ipairs(UNITS) do
+		UnitModels.Register(u[1], u[2], u[3])
+	end
+end
+]]></ProtectedString>
+						</Properties>
+					</Item>
+					<Item class="ModuleScript" referent="RBX58D79BFF33F06A4B783FC84EA8BA9921">
+						<Properties>
+							<string name="Name">Runes</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units/Runes
+-- 3D-иконки рун (Config.RuneOrder): LanternHeart, CursedThreads, PhantomCrown. Без rig: заякоренные детали
+-- Parts.rpart / Parts.rwedge прямо в Model, координаты — от центра иконки (~2.5 студа в высоту).
+-- Регистрирует UnitModels.RegisterRune(runeId, builder(m) -> corePart); PrimaryPart = core, pivot в начале
+-- координат и Kit.Calm(m, 0.2) ставит UnitModels.BuildRune. Свет — Parts.rlight (не в Lite).
+
+return function(UnitModels, Kit, Parts)
+	local V, CF, ANG, rad, PI = Vector3.new, CFrame.new, CFrame.Angles, math.rad, math.pi
+	local M, HW, rgb = Parts.M, Parts.HW, Parts.rgb
+	local rpart, rwedge, rlight = Parts.rpart, Parts.rwedge, Parts.rlight
+	local SIDES = { -1, 1 }
+
+	-- Сердце фонаря: оранжевое сердце за стеклом в золотой клетке-фонаре
+	local function LanternHeart(m)
+		local gold, orange = HW.Gold, HW.Orange
+		-- сердце: ромб и две доли-цилиндра сверху
+		local core = rpart(m, V(1.0, 1.0, 0.5), CF(0, -0.15, 0) * ANG(0, 0, rad(45)), orange, M.Neon)
+		for _, s in ipairs(SIDES) do
+			rpart(m, V(0.5, 0.72, 0.72), CF(0.36 * s, 0.32, 0) * ANG(0, PI / 2, 0), orange, M.Neon, { Shape = Enum.PartType.Cylinder })
+		end
+		rpart(m, V(1.6, 1.8, 0.8), CF(0, 0.05, 0), rgb(255, 170, 70), M.Glass, { Transparency = 0.6 })
+		-- клетка: 4 стойки, крышка и дно, колпак, кольцо для подвеса, клин снизу
+		for _, x in ipairs(SIDES) do
+			for _, z in ipairs(SIDES) do
+				rpart(m, V(0.12, 2.0, 0.12), CF(0.85 * x, 0.05, 0.45 * z), gold, M.Metal)
+			end
+		end
+		rpart(m, V(1.95, 0.22, 1.1), CF(0, 1.1, 0), gold, M.Metal)
+		rpart(m, V(1.95, 0.22, 1.1), CF(0, -1.0, 0), gold, M.Metal)
+		rpart(m, V(1.2, 0.2, 0.8), CF(0, 1.3, 0), HW.GoldDark, M.Metal)
+		rpart(m, V(0.12, 0.5, 0.5), CF(0, 1.6, 0), gold, M.Metal)
+		rpart(m, V(0.12, 0.12, 0.5), CF(0, 1.85, 0), gold, M.Metal)
+		rwedge(m, V(1.2, 0.25, 0.5), CF(0, -1.25, 0) * ANG(PI, 0, 0), HW.GoldDark, M.Metal)
+		rlight(core, orange, 9)
+		return core
+	end
+
+	-- Проклятые нити: катушка с витками красной нити, свисающая нить и игла насквозь
+	local function CursedThreads(m)
+		local red, needle = HW.Red, rgb(210, 214, 226)
+		for _, y in ipairs({ -0.75, 0.75 }) do -- щёчки катушки (восьмигранные) с золотым ободом
+			for k = 0, 3 do
+				rpart(m, V(1.6, 0.22, 0.66), CF(0, y, 0) * ANG(0, k * PI / 4, 0), HW.BurgDark, M.Wood)
+			end
+			rpart(m, V(1.7, 0.08, 0.3), CF(0, y + (y > 0 and 0.12 or -0.12), 0), HW.Gold, M.Metal)
+		end
+		rpart(m, V(0.5, 1.4, 0.5), CF(), HW.Wood, M.Wood)
+		local core
+		for k = 0, 4 do -- витки нити, повёрнутые друг относительно друга
+			local layer = rpart(m, V(1.12, 0.22, 1.12), CF(0, -0.48 + k * 0.24, 0) * ANG(0, k * 0.3, 0), red, M.Neon)
+			core = core or layer
+		end
+		rpart(m, V(0.05, 1.0, 0.05), CF(0.58, -0.9, -0.3) * ANG(0, 0, rad(10)), red, M.Neon)
+		rpart(m, V(0.05, 0.6, 0.05), CF(0.45, -1.5, -0.3) * ANG(0, 0, rad(-25)), red, M.Neon)
+		local tilt = CF(0.2, 0.25, -0.1) * ANG(rad(10), 0, rad(-35))
+		rpart(m, V(0.09, 2.6, 0.09), tilt, needle, M.Metal)
+		rpart(m, V(0.16, 0.26, 0.05), tilt * CF(0, 1.2, 0), needle, M.Metal) -- ушко
+		rlight(core, red, 8)
+		return core
+	end
+
+	-- Призрачная корона: восьмигранное прозрачное кольцо с зубцами, неоновый обод и камни
+	local function PhantomCrown(m)
+		local ghost, edge = HW.Ghost, rgb(200, 235, 255)
+		local R = 0.9
+		local w = 2 * R * math.tan(rad(22.5)) * 1.1
+		for k = 0, 7 do
+			local a = k * PI / 4
+			local face = CF(math.sin(a) * R, 0, -math.cos(a) * R) * ANG(0, -a, 0)
+			rpart(m, V(w, 0.5, 0.16), CF(0, -0.4, 0) * face, ghost, M.Glass, { Transparency = 0.3 })
+			rpart(m, V(w, 0.08, 0.18), CF(0, -0.68, 0) * face, edge, M.Neon)
+			-- зубец из двух клиньев: высокие и низкие чередуются
+			local hh = k % 2 == 0 and 1.2 or 0.8
+			local F = CF(0, -0.15 + hh / 2, 0) * face * ANG(0, PI / 2, 0)
+			rwedge(m, V(0.12, hh, w / 2), F * CF(0, 0, -w / 4), ghost, M.Glass, { Transparency = 0.25 })
+			rwedge(m, V(0.12, hh, w / 2), F * CF(0, 0, w / 4) * ANG(0, PI, 0), ghost, M.Glass, { Transparency = 0.25 })
+		end
+		local core = rpart(m, V(0.36, 0.36, 0.14), CF(0, -0.4, -R - 0.1) * ANG(0, 0, rad(45)), edge, M.Neon)
+		for _, s in ipairs(SIDES) do
+			rpart(m, V(0.24, 0.24, 0.14), CF(R * 0.71 * s, -0.4, -R * 0.71 - 0.08) * ANG(0, rad(-45 * s), rad(45)), ghost, M.Neon)
+		end
+		rpart(m, V(1.2, 0.6, 1.2), CF(0, 0.15, 0), ghost, M.Neon, { Transparency = 0.75 }) -- внутреннее свечение
+		rlight(core, ghost, 9)
+		return core
+	end
+
+	UnitModels.RegisterRune("LanternHeart", LanternHeart)
+	UnitModels.RegisterRune("CursedThreads", CursedThreads)
+	UnitModels.RegisterRune("PhantomCrown", PhantomCrown)
+end
+]]></ProtectedString>
+						</Properties>
+					</Item>
+					<Item class="ModuleScript" referent="RBXD851FE6DD8CD83B20CC5CB88D3E03748">
+						<Properties>
+							<string name="Name">Shattered</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units/Shattered
+-- Юниты кейса Shattered Reality (6, синие акценты): RiftScout CrystalHunter VoidPuppeteer Starbreaker
+-- RiftMonarch RealityDestroyer. R6 в угловатом стиле, оружие в руке, Muzzle на острие, 5 уровней.
+
+return function(UnitModels, Kit, Parts)
+	local V = Vector3.new
+	local CF = CFrame.new
+	local ANG = CFrame.Angles
+	local rad = math.rad
+	local PI = math.pi
+
+	local P, AC, M, rgb, GRIP = Parts.P, Parts.AC, Parts.M, Parts.rgb, Parts.GRIP
+	local VOID = Parts.VOID
+	local SH = Parts.SH
+	local BLUE, BLUE_SOFT, NAVY, NAVY_D, SH_EDGE = SH.Blue, SH.BlueSoft, SH.Navy, SH.NavyD, SH.Edge
+	local bevel, spike, gem = Kit.bevel, Kit.spike, Kit.gem
+	local SIDES = { -1, 1 }
+
+	local function register(id, build)
+		UnitModels.Register(id, function(lv)
+			local r, idle, aura = build(lv)
+			Parts.levelAura(r, lv, aura)
+			return r:Finish(UnitModels.Scale(id), idle)
+		end)
+	end
+
+	------------------------------------------------------------------------
+	-- RIFT SCOUT: разведчик в капюшоне с двумя кинжалами
+	------------------------------------------------------------------------
+	register("RiftScout", function(lv)
+		local r = Parts.figure("RiftScout", { Torso = NAVY_D, Arm = NAVY_D, Leg = rgb(22, 24, 36), Edge = SH_EDGE })
+		local steel = BLUE_SOFT:Lerp(AC.ArmorMid, 0.6)
+		Parts.hood(r, NAVY, SH_EDGE, BLUE)
+		bevel(r, r.Torso, V(1.6, 0.35, 1.2), CF(0, 0.92, 0), BLUE:Lerp(NAVY, 0.6), false, M.Fabric) -- шарф
+		if lv >= 3 then -- светящаяся кайма шарфа
+			r:Neon(r.Torso, V(1.62, 0.06, 0.05), CF(0, 0.8, -0.61), BLUE)
+		end
+		bevel(r, r.Torso, V(1.9, 0.9, 1.1), CF(0, 0.4, 0), rgb(36, 40, 60), SH_EDGE, M.Fabric) -- куртка
+		Parts.belt(r, rgb(40, 34, 40), SH_EDGE, lv >= 3 and BLUE or nil)
+		if lv >= 2 then
+			bevel(r, r.RArm, V(1.2, 0.45, 1.2), CF(0.1, 0.9, 0) * ANG(0, 0, rad(-12)), NAVY, SH_EDGE)
+		end
+		Parts.bracers(r, NAVY, SH_EDGE)
+		Parts.greaves(r, NAVY, SH_EDGE, true)
+		Parts.dagger(r, r.RArm, lv >= 2 and BLUE or nil, 1.2 + (lv >= 4 and 0.3 or 0), steel)
+		-- кинжал в левой руке (второе оружие: острие "Tip", Muzzle не меняется)
+		local A = r.LArm
+		r:Box(A, V(0.2, 0.2, 0.7), CF(0, GRIP, 0.05), AC.ClothDark, M.Fabric)
+		r:Box(A, V(0.12, 0.3, 1.1), CF(0, GRIP, -0.9), steel, M.Metal)
+		if lv >= 2 then
+			r:Neon(A, V(0.14, 0.06, 1.05), CF(0, GRIP + 0.12, -0.9), BLUE)
+		end
+		spike(r, A, V(0, GRIP, -1.44), V(0, GRIP, -1.85), 0.3, steel, M.Metal, true, 0.12)
+		Parts.muzzle(r, A, CF(0, GRIP, -1.85), true)
+		if lv >= 4 then
+			Parts.capeWith(r, 1.7, 2.6, NAVY, nil)
+		end
+		if lv >= 5 then
+			r:Orbit("OrbitShards", r.Torso, CF(0, 0.3, 0), 1.9, 3, 0.25, BLUE)
+		end
+		return r, { RS = { 25, 0, 10 }, LS = { 25, 0, -10 } }, BLUE
+	end)
+
+	------------------------------------------------------------------------
+	-- CRYSTAL HUNTER: охотник с кристальным арбалетом
+	------------------------------------------------------------------------
+	register("CrystalHunter", function(lv)
+		local plate = rgb(40, 44, 62)
+		local r = Parts.figure("CrystalHunter", { Torso = rgb(26, 26, 36), Arm = rgb(26, 26, 36), Leg = rgb(22, 22, 30), Edge = SH_EDGE })
+		Parts.helm(r, rgb(30, 32, 46), SH_EDGE, BLUE, nil)
+		Parts.chest(r, plate, SH_EDGE, BLUE)
+		Parts.belt(r, rgb(40, 34, 40), SH_EDGE)
+		Parts.plateShoulders(r, plate, SH_EDGE)
+		for _, side in ipairs({ 1, -1 }) do -- кристаллы на плечах
+			local A = side == 1 and r.RArm or r.LArm
+			for k = 0, (lv >= 3 and 2 or 1) do
+				spike(r, A, V(0.3 * side, 1.1, -0.3 + k * 0.4), V((0.65 + k * 0.1) * side, 1.75 + k * 0.1, -0.35 + k * 0.5), 0.3, BLUE, M.Neon)
+			end
+		end
+		if lv >= 2 then -- кристаллы на спине
+			for k = -1, 1 do
+				spike(r, r.Torso, V(k * 0.5, 0.6, 0.5), V(k * 0.7, 1.4 - math.abs(k) * 0.3, 1.0), 0.35, BLUE, M.Neon)
+			end
+		end
+		Parts.bracers(r, plate, SH_EDGE)
+		Parts.greaves(r, plate, SH_EDGE, true)
+		Parts.crossbow(r, r.RArm, { Stock = plate, Edge = SH_EDGE, Prong = rgb(30, 32, 46), Glow = BLUE })
+		if lv >= 4 then
+			Parts.capeWith(r, 1.8, 2.8, NAVY, BLUE)
+		end
+		if lv >= 5 then
+			r:Orbit("OrbitCrystals", r.Torso, CF(0, 0.5, 0), 2.0, 4, 0.3, BLUE)
+		end
+		return r, { RS = { 75, 0, 0 }, LS = { 65, 0, -25 } }, BLUE
+	end)
+
+	------------------------------------------------------------------------
+	-- VOID PUPPETEER: кукловод в маске-улыбке, нити из ладоней, куклы на орбите
+	------------------------------------------------------------------------
+	local PUPPET_IDLE = { RS = { 40, 0, 20 }, LS = { 40, 0, -20 } }
+	register("VoidPuppeteer", function(lv)
+		local cloth, hoodC, mask, wood = rgb(34, 22, 52), rgb(46, 28, 72), rgb(226, 220, 232), rgb(120, 90, 70)
+		local r = Parts.figure("VoidPuppeteer", { Torso = cloth, Arm = cloth, Leg = cloth, Skin = rgb(220, 214, 226), Edge = AC.Edge })
+		Parts.hood(r, hoodC, AC.Edge, VOID, true)
+		r:Box(r.Head, V(0.86, 0.86, 0.06), CF(0, -0.04, -0.64), mask, M.Plastic) -- белая маска
+		for _, s in ipairs(SIDES) do
+			r:Neon(r.Head, V(0.18, 0.08, 0.04), CF(0.2 * s, 0.1, -0.68) * ANG(0, 0, rad(-14 * s)), VOID)
+		end
+		r:Box(r.Head, V(0.4, 0.06, 0.04), CF(0, -0.25, -0.68), rgb(20, 14, 26))
+		Parts.robe(r, cloth, AC.Edge, 1.8)
+		Parts.mantle(r, hoodC, AC.Edge)
+		Parts.belt(r, rgb(50, 36, 30), AC.Edge, VOID)
+		if lv >= 2 then -- самоцветы-застёжки на накидке
+			for _, s in ipairs(SIDES) do
+				gem(r, r.Torso, 0.22, CF(0.62 * s, 0.82, -0.66), VOID, AC.Edge)
+			end
+		end
+		-- сферы-ромбы в ладонях; нити свисают вертикально (по миру в позе покоя)
+		for _, side in ipairs({ 1, -1 }) do
+			local A = side == 1 and r.RArm or r.LArm
+			local c = V(0, -1.45, -0.2)
+			r:Neon(A, V(0.45, 0.45, 0.45), CF(c) * ANG(rad(45), 0, rad(45)), VOID)
+			if side == 1 then
+				Parts.muzzle(r, A, CF(c))
+			end
+			local down = Parts.downIn(side == 1 and PUPPET_IDLE.RS or PUPPET_IDLE.LS)
+			for k = -1, 1 do
+				local a = c + V(k * 0.18, 0, 0) + down * 0.2
+				Parts.thread(r, A, a, a + down * 1.3, P.NeonSoft, 0.03)
+			end
+		end
+		-- марионетки на орбите (пустой узел + свои детали)
+		local n = lv >= 4 and 3 or 2
+		local hub = r:Orbit("OrbitPuppets", r.Torso, CF(0, -0.2, 0), 2.4, 0, 0.2, VOID)
+		for i = 0, n - 1 do
+			local a = i / n * PI * 2
+			local p = V(math.cos(a) * 2.4, 0, math.sin(a) * 2.4)
+			r:Box(hub, V(0.5, 0.55, 0.3), CF(p), wood, M.Wood)
+			r:Box(hub, V(0.36, 0.36, 0.36), CF(p + V(0, 0.48, 0)), mask, M.Plastic)
+			r:Box(hub, V(0.16, 0.45, 0.16), CF(p + V(-0.18, -0.48, 0)), wood, M.Wood)
+			r:Box(hub, V(0.16, 0.45, 0.16), CF(p + V(0.18, -0.48, 0)), wood, M.Wood)
+			r:Neon(hub, V(0.03, 1.2, 0.03), CF(p + V(0, 1.2, 0)), P.NeonSoft)
+		end
+		if lv >= 3 then
+			Parts.capeWith(r, 2.0, 3.2, hoodC, VOID)
+		end
+		return r, PUPPET_IDLE
+	end)
+
+	------------------------------------------------------------------------
+	-- STARBREAKER: золото-белый паладин с боевым молотом
+	------------------------------------------------------------------------
+	register("Starbreaker", function(lv)
+		local gold, white, edge, star = rgb(200, 160, 74), rgb(226, 222, 234), rgb(255, 235, 180), rgb(255, 240, 200)
+		local r = Parts.figure("Starbreaker", { Torso = white, Arm = gold, Leg = white, Edge = edge })
+		Parts.helm(r, gold, edge, BLUE, gold, true)
+		Parts.chest(r, gold, edge, BLUE)
+		for k = 0, 3 do -- звёздная эмблема
+			local dir = V(math.cos(k * PI / 2), math.sin(k * PI / 2), 0)
+			spike(r, r.Torso, V(0, 0.5, -0.66), V(0, 0.5, -0.66) + dir * 0.45, 0.2, star, M.Metal, true, 0.06)
+		end
+		Parts.belt(r, rgb(60, 50, 40), gold, BLUE)
+		Parts.tassets(r, gold, edge)
+		Parts.bigShoulders(r, white, edge, BLUE, lv >= 4 and 1.2 or 1.05, lv >= 3 and 2 or 1)
+		Parts.bracers(r, gold, edge)
+		if lv >= 2 then -- синие самоцветы на наручах
+			for _, s in ipairs({ 1, -1 }) do
+				gem(r, s == 1 and r.RArm or r.LArm, 0.2, CF(0.58 * s, -0.55, 0) * ANG(0, -s * PI / 2, 0), BLUE, edge)
+			end
+		end
+		Parts.greaves(r, gold, edge, true)
+		Parts.hammer(r, r.RArm, { Head = white, Edge = edge, Trim = gold, Glow = BLUE, Wood = rgb(60, 50, 40) })
+		Parts.capeWith(r, 2.1, 3.3, NAVY, lv >= 3 and BLUE or nil)
+		if lv >= 5 then
+			r:Orbit("OrbitStars", r.Head, CF(0, 1.3, 0), 1.6, 5, 0.3, rgb(255, 225, 140))
+		end
+		return r, { RS = { 30, 0, 0 }, LS = { 20, 0, 0 } }, rgb(255, 210, 110)
+	end)
+
+	------------------------------------------------------------------------
+	-- RIFT MONARCH: монарх в короне с посохом и кольцами-порталами за спиной
+	------------------------------------------------------------------------
+	local function skipEvery5th(k)
+		return k % 5 == 4
+	end
+	register("RiftMonarch", function(lv)
+		local royal, black, edge = rgb(46, 40, 110), rgb(22, 22, 40), rgb(140, 150, 220)
+		local r = Parts.figure("RiftMonarch", { Torso = black, Arm = royal, Leg = black, Edge = edge })
+		Parts.helm(r, royal, edge, BLUE, nil, true)
+		Parts.crown(r, rgb(200, 210, 255), BLUE, 0.6 + lv * 0.06)
+		Parts.chest(r, royal, edge, BLUE)
+		Parts.belt(r, black, edge, VOID)
+		Parts.robe(r, royal, edge, 1.7)
+		if lv >= 4 then -- светящиеся швы мантии
+			for _, s in ipairs(SIDES) do
+				r:Neon(r.Torso, V(0.06, 1.4, 0.05), CF(0.32 * s, -1.75, -0.6), BLUE)
+			end
+		end
+		Parts.bigShoulders(r, black, edge, BLUE, 1.2, lv >= 3 and 2 or 1)
+		Parts.bracers(r, royal, edge)
+		if lv >= 2 then -- разломы на нагруднике
+			Kit.crack(r, r.Torso, { V(-0.8, 0.95, -0.59), V(-0.45, 0.55, -0.6), V(-0.6, 0.15, -0.59) }, 0.05, BLUE)
+		end
+		Parts.capeWith(r, 2.3, 3.8, rgb(36, 30, 90), VOID)
+		Parts.staff(r, r.RArm, { Glow = BLUE, Prong = edge, Wood = black, Top = 2.6, Big = true })
+		for i, color in ipairs({ BLUE, VOID }) do -- кольца-порталы (второе с 3 ур.)
+			if i == 1 or lv >= 3 then
+				local radius = 1.0 + i * 0.35
+				local hub = r:Orbit("OrbitRift" .. i, r.Torso, CF(0, 0.6, 1.6) * ANG(rad(90), 0, 0), radius, 0, 0.2, color)
+				Kit.ring(r, hub, ANG(rad(90), 0, 0), radius, 14, 0.1, 0.1, color, M.Neon, skipEvery5th)
+			end
+		end
+		return r, { RS = { 12, 0, 0 } }, BLUE
+	end)
+
+	------------------------------------------------------------------------
+	-- REALITY DESTROYER: красно-чёрный разрушитель с огромным мечом
+	------------------------------------------------------------------------
+	register("RealityDestroyer", function(lv)
+		local RED, black, mid, edge = rgb(255, 40, 50), rgb(24, 18, 22), rgb(44, 30, 36), rgb(160, 100, 110)
+		local r = Parts.figure("RealityDestroyer", { Torso = black, Arm = black, Leg = black, Edge = edge })
+		Parts.helm(r, black, edge, RED, nil, true)
+		if lv >= 2 then -- самоцвет над визором
+			gem(r, r.Head, 0.2, CF(0, 0.48, -0.7), RED, edge)
+		end
+		for _, s in ipairs(SIDES) do
+			Kit.hornA(r, r.Head, { V(0.6 * s, 0.4, 0), V(1.0 * s, 0.7, 0), V(1.1 * s, 1.3, -0.05), V(0.9 * s, 1.8 + lv * 0.08, -0.2) }, 0.26, mid, M.Metal)
+		end
+		Parts.chest(r, mid, edge, RED)
+		Kit.crack(r, r.Torso, { V(-0.85, 0.95, -0.59), V(-0.45, 0.45, -0.6), V(-0.7, -0.05, -0.59) }, 0.06, RED)
+		Kit.crack(r, r.Torso, { V(0.7, 0.9, -0.59), V(0.85, 0.35, -0.59) }, 0.05, RED)
+		Parts.belt(r, black, edge, RED)
+		Parts.tassets(r, mid, edge)
+		Parts.bigShoulders(r, black, edge, RED, 1.2 + (lv >= 4 and 0.1 or 0), lv >= 3 and 3 or 2)
+		Parts.bracers(r, mid, edge)
+		Parts.greaves(r, mid, edge, true)
+		Parts.blade(r, r.RArm, {
+			Len = 4.0 + lv * 0.15, W = 0.75, GuardW = 1.7, Blade = black, Glow = RED,
+			Core = lv >= 3 and rgb(255, 150, 150) or nil, Guard = mid, Edge = edge, Trail = RED,
+		})
+		Parts.capeWith(r, 2.3, 3.6, rgb(90, 10, 20), RED)
+		if lv >= 4 then
+			r:Orbit("OrbitShards", r.Torso, CF(0, 0.6, 0), 2.6, lv >= 5 and 6 or 4, 0.3, RED)
+		end
+		return r, { RS = { 25, 0, 0 } }, RED
+	end)
+end
+]]></ProtectedString>
+						</Properties>
+					</Item>
+					<Item class="ModuleScript" referent="RBX2632994EB866ECC5E9EB7DF65D0283D9">
+						<Properties>
+							<string name="Name">Void</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: Models/Units/Void
+-- Юниты кейса Пустоты (11): VoidSoldier ShadowArcher LostMage VoidKnight DarkGunner AbyssReaper
+-- CorruptedSamurai EclipseGuardian FallenAngel VoidEmperor AbyssOverlord.
+-- R6 в угловатом стиле, оружие в руке, Muzzle на острие; 5 уровней заметно отличаются деталями.
+-- Модуль ставится из Units/init: `require(Void)(UnitModels, Kit, Parts)`.
+
+return function(UnitModels, Kit, Parts)
+	local V = Vector3.new
+	local V2 = Vector2.new
+	local CF = CFrame.new
+	local ANG = CFrame.Angles
+	local rad = math.rad
+	local PI = math.pi
+
+	local P, AC, M, rgb, GRIP = Parts.P, Parts.AC, Parts.M, Parts.rgb, Parts.GRIP
+	local VOID = Parts.VOID
+	local bevel, spike, gem, bar = Kit.bevel, Kit.spike, Kit.gem, Kit.bar
+	local SIDES = { -1, 1 }
+
+	-- Регистрация: строитель возвращает rig, позу покоя и цвет эффектов уровня;
+	-- эффекты уровня и Finish (масштаб из Config.Units[id].Scale) — здесь
+	local function register(id, build)
+		UnitModels.Register(id, function(lv)
+			local r, idle, aura = build(lv)
+			Parts.levelAura(r, lv, aura)
+			return r:Finish(UnitModels.Scale(id), idle)
+		end)
+	end
+
+	------------------------------------------------------------------------
+	-- VOID SOLDIER: латник с мечом и щитом
+	------------------------------------------------------------------------
+	register("VoidSoldier", function(lv)
+		local r = Parts.figure("VoidSoldier", { Torso = AC.Armor, Arm = AC.Armor, Leg = rgb(28, 26, 34), Edge = AC.Edge })
+		Parts.chest(r, AC.ArmorMid, AC.Edge, lv >= 3 and VOID or nil)
+		Parts.belt(r, rgb(40, 30, 38), AC.Edge, lv >= 2 and VOID or nil)
+		Parts.tassets(r, AC.ArmorMid, AC.Edge)
+		Parts.helm(r, AC.Armor, AC.Edge, VOID, lv >= 3 and AC.Armor or nil)
+		if lv >= 2 then
+			Parts.plateShoulders(r, AC.ArmorMid, AC.Edge, lv >= 4 and 1.15 or 1)
+		end
+		Parts.bracers(r, AC.ArmorMid, AC.Edge)
+		Parts.greaves(r, AC.ArmorMid, AC.Edge, true)
+		Parts.blade(r, r.RArm, {
+			Len = 2.6 + (lv >= 4 and 0.4 or 0), W = 0.45, Edge = AC.Edge,
+			Blade = lv >= 5 and AC.Cloth or AC.ArmorMid, Glow = lv >= 3 and VOID or nil,
+		})
+		Parts.shield(r, r.LArm, {
+			Color = lv >= 3 and AC.Cloth or AC.ArmorMid, Edge = AC.Edge,
+			H = lv >= 3 and 2.2 or 1.7, W = lv >= 3 and 1.5 or 1.25,
+			Rim = lv >= 2 and AC.Edge or nil, Gem = lv >= 3 and VOID or nil,
+		})
+		if lv >= 4 then -- табард
+			r:Box(r.Torso, V(0.9, 1.1, 0.06), CF(0, -1.5, -0.6), AC.Cloth, M.Fabric)
+			Kit.tatter(r, r.Torso, -2.05, -0.6, 0.9, 3, AC.Cloth, M.Fabric, 2)
+		end
+		if lv >= 5 then
+			for _, s in ipairs(SIDES) do
+				Kit.hornA(r, r.Head, { V(0.6 * s, 0.35, 0), V(0.9 * s, 0.6, 0.05), V(0.95 * s, 1.1, -0.05) }, 0.2, AC.Armor, M.Metal)
+			end
+			Parts.capeWith(r, 1.9, 2.8, AC.ClothDark, VOID)
+		end
+		return r, { RS = { 15, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- SHADOW ARCHER: лучник в капюшоне
+	------------------------------------------------------------------------
+	register("ShadowArcher", function(lv)
+		local r = Parts.figure("ShadowArcher", { Torso = rgb(30, 26, 36), Arm = rgb(30, 26, 36), Leg = rgb(24, 22, 30), Edge = rgb(90, 84, 104) })
+		Parts.hood(r, AC.ClothDark, AC.Edge, VOID)
+		bevel(r, r.Torso, V(2.12, 1.2, 1.12), CF(0, 0.35, 0), rgb(40, 32, 44), AC.Edge, M.Fabric) -- куртка
+		bar(r, r.Torso, V(-0.9, 0.95, -0.58), V(0.9, -0.6, -0.58), V2(0.2, 0.06), rgb(70, 50, 40)) -- ремень колчана
+		Parts.belt(r, rgb(50, 36, 30), AC.Edge)
+		Parts.quiver(r, rgb(50, 36, 30), lv >= 3 and VOID or AC.Edge)
+		if lv >= 2 then
+			bevel(r, r.LArm, V(1.2, 0.5, 1.2), CF(-0.1, 0.9, 0) * ANG(0, 0, rad(12)), AC.ArmorMid, AC.Edge)
+		end
+		Parts.bracers(r, rgb(50, 36, 30), AC.Edge)
+		Parts.greaves(r, rgb(34, 30, 40), AC.Edge, true)
+		Parts.bow(r, r.LArm, { Wood = lv >= 4 and AC.Armor or rgb(56, 40, 34), Glow = lv >= 3 and VOID or nil, Tip = AC.Edge })
+		if lv >= 4 then
+			Parts.capeWith(r, 1.9, 3.0, AC.ClothDark, nil)
+		end
+		if lv >= 5 then
+			r:Box(r.Head, V(1.06, 0.4, 0.08), CF(0, -0.3, -0.64), AC.Armor, M.Metal) -- маска
+			Parts.mantle(r, AC.Cloth, AC.Edge)
+		end
+		return r, { LS = { 20, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- LOST MAGE: маг в остроконечной шляпе с посохом
+	------------------------------------------------------------------------
+	register("LostMage", function(lv)
+		local r = Parts.figure("LostMage", { Torso = AC.ClothDark, Arm = AC.ClothDark, Leg = AC.ClothDark, Skin = rgb(64, 56, 72), Edge = AC.Edge })
+		r:Box(r.Head, V(1.04, 1.0, 0.05), CF(0, -0.05, -0.61), rgb(14, 10, 20), M.Plastic) -- тёмное лицо
+		Parts.eyes(r, VOID, true, 0.05)
+		Parts.wizardHat(r, lv >= 4 and AC.Cloth or AC.ClothDark, lv >= 3 and rgb(150, 110, 60) or rgb(60, 44, 70), AC.Edge)
+		Parts.robe(r, AC.ClothDark, lv >= 2 and AC.Cloth or nil, 1.8)
+		Parts.belt(r, rgb(50, 36, 30), AC.Edge, lv >= 3 and VOID or nil)
+		if lv >= 2 then
+			Parts.mantle(r, AC.Cloth, AC.Edge)
+		end
+		bevel(r, r.Torso, V(0.2, 0.6, 0.5), CF(-1.08, -0.9, -0.1), rgb(70, 40, 30), AC.Edge) -- книга на поясе
+		Parts.staff(r, r.RArm, { Glow = VOID, Top = 2.2 + (lv >= 4 and 0.4 or 0), Big = lv >= 4 })
+		if lv >= 5 then
+			r:Orbit("OrbitStaff", r.Torso, CF(0, 0.4, 0), 2.0, 4, 0.3, P.NeonSoft)
+			Parts.capeWith(r, 1.9, 2.8, AC.Cloth, VOID)
+		end
+		return r, { RS = { 10, 0, 0 }, LS = { 8, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- VOID KNIGHT (по концепту): гранёная кираса, рогатый шлем, клинок Пустоты
+	------------------------------------------------------------------------
+	-- Клинок Пустоты: тёмное тело с неоновыми кромками, рогатая гарда с самоцветами
+	local function voidBlade(r, A, lv)
+		local y = GRIP
+		local len = 3.5 + (lv >= 4 and 0.5 or 0) + (lv >= 5 and 0.4 or 0)
+		local w = 0.62 + (lv >= 3 and 0.08 or 0)
+		local glow = lv >= 5 and P.NeonSoft or P.Neon
+		local body = lv >= 5 and AC.Cloth or AC.ArmorMid
+		r:Box(A, V(0.24, 0.24, 0.95), CF(0, y, 0.1), AC.ClothDark, M.Fabric) -- рукоять
+		r:Box(A, V(0.34, 0.34, 0.3), CF(0, y, 0.65) * ANG(0, 0, rad(45)), AC.Armor, M.Metal) -- навершие
+		bevel(r, A, V(0.32, 1.4, 0.32), CF(0, y, -0.45), AC.Armor, AC.Edge) -- гарда
+		for _, s in ipairs(SIDES) do
+			spike(r, A, V(0, y + 0.62 * s, -0.45), V(0, y + 0.95 * s, -0.85), 0.32, AC.Armor, M.Metal, true, 0.14)
+		end
+		gem(r, A, 0.3, CF(-0.17, y, -0.45) * ANG(0, PI / 2, 0), P.Neon)
+		gem(r, A, 0.3, CF(0.17, y, -0.45) * ANG(0, -PI / 2, 0), P.Neon)
+		local z0 = -0.6
+		r:Box(A, V(0.14, w, len), CF(0, y, z0 - len / 2), body, M.Metal)
+		for _, s in ipairs(SIDES) do -- кромки
+			r:Neon(A, V(0.16, 0.08, len * 0.97), CF(0, y + s * (w / 2 - 0.03), z0 - len / 2), glow)
+		end
+		if lv >= 3 then -- светящийся дол
+			r:Neon(A, V(0.17, 0.08, len * 0.7), CF(0, y, z0 - len * 0.42), P.NeonSoft)
+		end
+		spike(r, A, V(0, y, z0 - len + 0.02), V(0, y, z0 - len - w * 1.3), w, body, M.Metal, true, 0.14)
+		spike(r, A, V(0, y, z0 - len + 0.02), V(0, y, z0 - len - w * 1.15), w * 0.75, glow, M.Neon, true, 0.16)
+		r:WeaponTrail(A, V(0, y, z0 - 0.15), V(0, y, z0 - len - w), P.NeonSoft)
+		return Parts.muzzle(r, A, CF(0, y, z0 - len - w))
+	end
+
+	register("VoidKnight", function(lv)
+		local r = Kit.Rig.new({ Name = "VoidKnight", Torso = AC.Armor, Arm = AC.Armor, Leg = AC.Armor, Head = AC.Armor, TorsoMat = M.Metal })
+		local T, H, RA, LA = r.Torso, r.Head, r.RArm, r.LArm
+		for _, L in ipairs({ T, H, RA, LA, r.RLeg, r.LLeg }) do
+			L.Transparency = 1
+		end
+		local leather = rgb(40, 30, 38)
+		-- кираса
+		bevel(r, T, V(2.05, 2.0, 1.05), CF(), AC.Armor, AC.Edge)
+		bevel(r, T, V(2.25, 1.0, 1.25), CF(0, 0.5, -0.02), AC.ArmorMid, AC.Edge)
+		bevel(r, T, V(1.85, 0.32, 1.15), CF(0, -0.15, 0), AC.ArmorMid, AC.Edge)
+		bevel(r, T, V(1.8, 0.32, 1.12), CF(0, -0.45, 0), AC.Armor, AC.Edge)
+		if lv >= 2 then -- центральное ребро и самоцвет
+			bevel(r, T, V(0.34, 0.95, 0.18), CF(0, 0.5, -0.7), AC.Armor, AC.Edge)
+			gem(r, T, 0.42, CF(0, 0.55, -0.8), P.Neon, AC.Edge)
+		end
+		if lv >= 3 then
+			Kit.crack(r, T, { V(-0.85, 0.85, -0.66), V(-0.5, 0.45, -0.66), V(-0.7, 0.1, -0.66) }, 0.06)
+			Kit.crack(r, T, { V(0.55, 0.9, -0.66), V(0.8, 0.4, -0.66) }, 0.05)
+		end
+		-- пояс с пряжкой, табард, набедренники
+		bevel(r, T, V(2.15, 0.32, 1.2), CF(0, -0.8, 0), leather, AC.Edge, M.Fabric)
+		bevel(r, T, V(0.48, 0.44, 0.14), CF(0, -0.8, -0.66), AC.Edge, AC.ArmorMid)
+		gem(r, T, 0.2, CF(0, -0.8, -0.75), P.Neon)
+		r:Box(T, V(0.95, 1.0, 0.08), CF(0, -1.45, -0.6), AC.Cloth, M.Fabric)
+		if lv >= 2 then
+			Kit.tatter(r, T, -1.95, -0.6, 0.95, 3, AC.Cloth, M.Fabric, 1)
+		end
+		for _, s in ipairs(SIDES) do
+			bevel(r, T, V(0.75, 0.7, 0.95), CF(0.78 * s, -1.25, -0.02) * ANG(0, 0, rad(10 * s)), AC.ArmorMid, AC.Edge)
+		end
+		if lv >= 3 then
+			Kit.chain(r, T, 4, 0.26, nil, CF(0.75, -1.0, -0.62))
+			Kit.chain(r, T, 3, 0.26, nil, CF(-0.7, -1.0, 0.62))
+		end
+		-- шлем: гранёный, лицевая пластина, Т-визор, двускатный верх, нащёчники
+		bevel(r, H, V(1.35, 1.4, 1.4), CF(0, 0.05, 0), AC.Armor, AC.Edge)
+		bevel(r, H, V(1.12, 1.05, 0.22), CF(0, -0.05, -0.72), AC.ArmorMid, AC.Edge)
+		r:Neon(H, V(0.5, 0.09, 0.06), CF(0, 0.2, -0.84), P.Neon)
+		r:Neon(H, V(0.1, 0.62, 0.06), CF(0, -0.08, -0.84), P.Neon)
+		r:Wedge(H, V(1.36, 0.42, 0.7), CF(0, 0.96, -0.35), AC.Armor, M.Metal)
+		r:Wedge(H, V(1.36, 0.42, 0.7), CF(0, 0.96, 0.35) * ANG(0, PI, 0), AC.Armor, M.Metal)
+		r:Box(H, V(1.38, 0.06, 0.06), CF(0, 1.16, 0), AC.Edge, M.Metal)
+		for _, s in ipairs(SIDES) do
+			r:Wedge(H, V(0.28, 0.55, 0.55), CF(0.58 * s, -0.5, -0.5) * ANG(PI, 0, 0), AC.Armor, M.Metal)
+		end
+		if lv >= 2 then
+			spike(r, H, V(0, 1.0, -0.3), V(0, 1.45 + lv * 0.12, 0.2), 0.8, AC.Armor, M.Metal, true, 0.14) -- гребень
+			local big = lv >= 5 and 1.6 or (lv >= 4 and 1.2 or 0.85)
+			for _, s in ipairs(SIDES) do
+				Kit.hornA(r, H, { V(0.6 * s, 0.3, 0), V(0.95 * s, 0.45 + 0.1 * big, 0.05), V(1.05 * s, 0.8 * big, 0.05), V(0.85 * s, 1.35 * big, -0.1) }, 0.24 + 0.04 * big, AC.Armor, M.Metal)
+				if lv >= 5 then
+					spike(r, H, V(0.95 * s, 1.0 * big, -0.05), V(0.85 * s, 1.35 * big, -0.1), 0.2, P.Neon, M.Neon, false, 0.1)
+				end
+			end
+		end
+		-- наплечники и руки: плечо, наруч с манжетой, латная перчатка
+		for _, a in ipairs({ { RA, 1 }, { LA, -1 } }) do
+			local A, s = a[1], a[2]
+			if lv == 1 then
+				bevel(r, A, V(1.35, 0.55, 1.3), CF(0.12 * s, 0.85, 0) * ANG(0, 0, rad(-12 * s)), AC.ArmorMid, AC.Edge)
+			else
+				local size = lv >= 5 and 1.22 or (lv >= 4 and 1.1 or 1.0)
+				Kit.pauldron(r, A, s, size, AC.Armor, AC.Edge, lv >= 3 and P.Neon or nil, lv >= 5 and 3 or (lv >= 4 and 2 or 1))
+			end
+			bevel(r, A, V(1.0, 0.9, 1.0), CF(0, 0.15, 0), AC.Armor, AC.Edge)
+			bevel(r, A, V(1.15, 0.85, 1.15), CF(0, -0.55, 0), AC.ArmorMid, AC.Edge)
+			bevel(r, A, V(1.28, 0.24, 1.28), CF(0, -0.15, 0), AC.Armor, AC.Edge)
+			bevel(r, A, V(1.02, 0.42, 1.02), CF(0, -1.12, 0), AC.Armor, AC.Edge)
+			if lv >= 3 then -- шипы на локтях
+				spike(r, A, V(0.55 * s, -0.5, 0), V(0.95 * s, -0.4, 0.15), 0.32, AC.Armor, M.Metal, true, 0.1)
+			end
+		end
+		-- ноги: бедро, наколенник, голень, латный сапог
+		for _, Lg in ipairs({ r.RLeg, r.LLeg }) do
+			bevel(r, Lg, V(1.0, 0.95, 1.02), CF(0, 0.45, 0), AC.Armor, AC.Edge)
+			if lv >= 2 then
+				bevel(r, Lg, V(0.75, 0.45, 0.25), CF(0, 0.0, -0.58), AC.ArmorMid, AC.Edge)
+			end
+			bevel(r, Lg, V(1.08, 0.7, 1.1), CF(0, -0.38, 0), AC.ArmorMid, AC.Edge)
+			Kit.bootA(r, Lg, AC.Armor, AC.Edge, 1.1)
+		end
+		local tip = voidBlade(r, RA, lv)
+		if lv >= 3 then
+			r:Sparkles(tip, P.Neon, { Rate = 10, Size = 0.3 })
+		end
+		if lv >= 4 then -- рваный плащ с эмблемой
+			local cape = r:Cape(2.1, 3.5, AC.Cloth, true)
+			gem(r, cape, 0.55, CF(0, 0.1, 0.08) * ANG(0, PI, 0), P.NeonSoft)
+		end
+		return r, { RS = { 20, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- DARK GUNNER: стрелок в кепи-шлеме с очками и винтовкой
+	------------------------------------------------------------------------
+	register("DarkGunner", function(lv)
+		local r = Parts.figure("DarkGunner", { Torso = rgb(30, 28, 36), Arm = rgb(30, 28, 36), Leg = rgb(26, 24, 30), Edge = rgb(96, 92, 112) })
+		local H = r.Head
+		bevel(r, H, V(1.3, 0.55, 1.32), CF(0, 0.42, 0.02), AC.ArmorMid, AC.Edge) -- кепи
+		bevel(r, H, V(1.32, 0.12, 0.5), CF(0, 0.2, -0.82), AC.ArmorMid, AC.Edge) -- козырёк
+		r:Box(H, V(1.2, 0.28, 0.08), CF(0, 0.06, -0.62), rgb(14, 10, 20), M.Plastic) -- ремень очков
+		for _, s in ipairs(SIDES) do
+			r:Neon(H, V(0.34, 0.18, 0.06), CF(0.27 * s, 0.06, -0.66), VOID)
+		end
+		r:Box(H, V(1.1, 0.4, 0.08), CF(0, -0.32, -0.62), AC.Armor, M.Metal) -- защита челюсти
+		Parts.chest(r, AC.ArmorMid, AC.Edge, lv >= 3 and VOID or nil)
+		for _, s in ipairs(SIDES) do -- подсумки
+			bevel(r, r.Torso, V(0.42, 0.4, 0.2), CF(0.6 * s, -0.35, -0.6), rgb(50, 40, 36), false, M.Fabric)
+		end
+		Parts.belt(r, rgb(46, 36, 32), AC.Edge)
+		for _, s in ipairs(SIDES) do -- полы плаща
+			bevel(r, r.Torso, V(0.95, 1.4, 0.18), CF(0.55 * s, -1.55, 0.45), AC.ClothDark, false, M.Fabric)
+		end
+		if lv >= 2 then
+			Parts.plateShoulders(r, AC.ArmorMid, AC.Edge)
+		end
+		Parts.bracers(r, AC.ArmorMid, AC.Edge)
+		Parts.greaves(r, rgb(40, 36, 46), AC.Edge, true)
+		Parts.rifle(r, r.RArm, { Body = lv >= 4 and AC.Cloth or AC.ArmorMid, Edge = AC.Edge, Glow = VOID, Barrel = AC.Armor })
+		if lv >= 4 then -- ранец с неоновой полосой
+			bevel(r, r.Torso, V(1.4, 1.3, 0.5), CF(0, 0.2, 0.78), AC.ArmorMid, AC.Edge)
+			r:Neon(r.Torso, V(0.9, 0.12, 0.06), CF(0, 0.5, 1.04), VOID)
+		end
+		if lv >= 5 then
+			Parts.capeWith(r, 1.8, 2.6, AC.ClothDark, VOID)
+		end
+		return r, { RS = { 75, 0, 0 }, LS = { 70, 0, -25 }, Neck = { 0, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- ABYSS REAPER: жнец в маске-черепе с косой
+	------------------------------------------------------------------------
+	register("AbyssReaper", function(lv)
+		local cloth, edge, bone, hole = rgb(26, 20, 32), rgb(80, 70, 96), rgb(200, 190, 175), rgb(10, 8, 14)
+		local r = Parts.figure("AbyssReaper", { Torso = cloth, Arm = cloth, Leg = cloth, Skin = bone, Edge = edge })
+		Parts.hood(r, cloth, edge, VOID, true)
+		r:Box(r.Head, V(0.9, 0.85, 0.06), CF(0, -0.05, -0.63), bone, M.Plastic) -- маска-череп
+		for _, s in ipairs(SIDES) do
+			r:Box(r.Head, V(0.24, 0.22, 0.04), CF(0.2 * s, 0.07, -0.66), hole)
+			r:Neon(r.Head, V(0.1, 0.1, 0.04), CF(0.2 * s, 0.07, -0.68), VOID)
+		end
+		for k = -1, 1 do -- зубы
+			r:Box(r.Head, V(0.08, 0.16, 0.04), CF(k * 0.14, -0.35, -0.66), hole)
+		end
+		Parts.robe(r, cloth, edge, 2.0)
+		Parts.mantle(r, rgb(36, 28, 44), edge)
+		Parts.belt(r, rgb(40, 30, 38), AC.Edge, VOID)
+		if lv >= 2 then -- костяные наплечники с шипами
+			for _, side in ipairs({ 1, -1 }) do
+				local A = side == 1 and r.RArm or r.LArm
+				bevel(r, A, V(1.25, 0.45, 1.2), CF(0.15 * side, 1.12, 0) * ANG(0, 0, rad(-14 * side)), bone, rgb(120, 110, 100), M.Plastic)
+				spike(r, A, V(0.4 * side, 1.3, 0), V(0.8 * side, 1.85, 0), 0.3, bone, M.Plastic, true, 0.1)
+			end
+		end
+		if lv >= 3 then
+			Kit.chain(r, r.Torso, 4, 0.26, nil, CF(0.7, -1.0, -0.6))
+		end
+		Parts.scythe(r, r.RArm, { Blade = lv >= 5 and AC.Cloth or AC.ArmorMid, Glow = lv >= 3 and VOID or nil, Wood = rgb(36, 28, 32) })
+		if lv >= 4 then
+			Parts.capeWith(r, 2.0, 3.4, cloth, nil)
+		end
+		if lv >= 5 then
+			r:Orbit("OrbitSouls", r.Torso, CF(0, 0.6, 0), 2.3, 4, 0.32, P.NeonSoft, M.Neon, 0.25)
+		end
+		return r, { RS = { 8, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- CORRUPTED SAMURAI: кабуто, ламеллярный доспех, катана
+	------------------------------------------------------------------------
+	register("CorruptedSamurai", function(lv)
+		local red, black, gold = rgb(130, 22, 30), rgb(26, 20, 24), rgb(190, 150, 70)
+		local edge, glow = rgb(150, 110, 110), rgb(255, 50, 60)
+		local r = Parts.figure("CorruptedSamurai", { Torso = black, Arm = black, Leg = black, Edge = edge })
+		Parts.kabuto(r, black, edge, lv >= 3 and gold or rgb(150, 120, 80), red)
+		for i = 0, 2 do -- до: пластины-ламели
+			bevel(r, r.Torso, V(2.14, 0.34, 1.16), CF(0, 0.75 - i * 0.36, 0), i % 2 == 0 and red or black, edge)
+		end
+		Parts.belt(r, rgb(60, 30, 30), gold)
+		for i, x in ipairs({ -0.62, 0, 0.62 }) do -- кусадзури
+			for k = 0, 1 do
+				bevel(r, r.Torso, V(0.62, 0.36, 0.18), CF(x, -1.2 - k * 0.36, -0.58 - k * 0.04) * ANG(rad(-6), 0, 0), (i + k) % 2 == 0 and red or black, edge)
+			end
+		end
+		for _, side in ipairs({ 1, -1 }) do -- содэ
+			local A = side == 1 and r.RArm or r.LArm
+			for k = 0, lv >= 2 and 2 or 1 do
+				bevel(r, A, V(0.25, 0.38, 1.3), CF(0.62 * side, 0.82 - k * 0.38, 0) * ANG(0, 0, rad(-12 * side)), k % 2 == 0 and red or black, edge)
+			end
+		end
+		Parts.bracers(r, red, edge)
+		Parts.greaves(r, black, edge, true)
+		Parts.blade(r, r.RArm, {
+			Len = 3.4 + (lv >= 4 and 0.4 or 0), W = 0.24, GuardW = 0.55, Blade = rgb(180, 180, 195),
+			Glow = lv >= 3 and glow or nil, Guard = gold, Grip = red,
+		})
+		bevel(r, r.Torso, V(0.2, 0.22, 2.6), CF(-0.9, -0.85, -0.2) * ANG(rad(-20), rad(10), 0), black, edge) -- ножны
+		if lv >= 4 then
+			Parts.capeWith(r, 1.9, 3.0, red, nil)
+		end
+		if lv >= 5 then
+			Kit.crack(r, r.Torso, { V(-0.8, 0.95, -0.59), V(-0.4, 0.5, -0.59), V(-0.6, 0.1, -0.59) }, 0.06, glow)
+		end
+		return r, { RS = { 25, 0, 0 }, LS = { 10, 0, 0 } }, glow
+	end)
+
+	------------------------------------------------------------------------
+	-- ECLIPSE GUARDIAN: золотой страж с копьём-алебардой
+	------------------------------------------------------------------------
+	register("EclipseGuardian", function(lv)
+		local gold, goldD, white, black = rgb(200, 158, 70), rgb(140, 104, 44), rgb(220, 214, 226), rgb(30, 26, 34)
+		local edge, warm = rgb(250, 225, 160), rgb(255, 220, 140)
+		local r = Parts.figure("EclipseGuardian", { Torso = black, Arm = gold, Leg = black, Edge = edge })
+		Parts.helm(r, gold, edge, warm, nil, true)
+		for _, s in ipairs(SIDES) do -- крылья на шлеме
+			for k = 0, 2 do
+				bevel(r, r.Head, V(0.12, 0.7 - k * 0.15, 0.22), CF(0.72 * s, 0.4 + k * 0.25, 0.1 + k * 0.15) * ANG(rad(-30 - k * 10), 0, rad(-20 * s)), gold, edge)
+			end
+		end
+		Parts.chest(r, gold, edge, nil)
+		gem(r, r.Torso, 0.55, CF(0, 0.5, -0.62), black, gold) -- эмблема затмения
+		r:Neon(r.Torso, V(0.15, 0.15, 0.06), CF(0, 0.5, -0.72) * ANG(0, 0, rad(45)), warm)
+		Parts.belt(r, goldD, gold)
+		r:Box(r.Torso, V(1.0, 1.5, 0.06), CF(0, -1.6, -0.6), white, M.Fabric) -- табард
+		Kit.tatter(r, r.Torso, -2.35, -0.6, 1.0, 3, white, M.Fabric, 4)
+		Parts.bigShoulders(r, gold, edge, lv >= 3 and warm or nil, lv >= 4 and 1.15 or 1, lv >= 5 and 2 or 1)
+		Parts.bracers(r, goldD, edge)
+		Parts.greaves(r, gold, edge, true)
+		Parts.spear(r, r.RArm, { Top = 2.8, Head = gold, Metal = goldD, Edge = edge, Glow = lv >= 3 and warm or nil, Axe = lv >= 2, Wing = lv >= 4, Wood = black })
+		if lv >= 4 then
+			Parts.capeWith(r, 2.1, 3.4, white, gold)
+		end
+		return r, { RS = { 30, 0, 0 } }, rgb(255, 210, 110)
+	end)
+
+	------------------------------------------------------------------------
+	-- FALLEN ANGEL: серебряный ангел с крыльями и посохом
+	------------------------------------------------------------------------
+	register("FallenAngel", function(lv)
+		local silver, white, edge = rgb(170, 168, 186), rgb(232, 228, 238), rgb(255, 255, 255)
+		local r = Parts.figure("FallenAngel", { Torso = silver, Arm = silver, Leg = rgb(60, 56, 72), Skin = rgb(226, 214, 208), Edge = edge })
+		local H = r.Head
+		Parts.eyes(r, VOID, true, 0.06)
+		-- белые волосы: макушка, затылок, бока и две пряди
+		bevel(r, H, V(1.32, 0.35, 1.34), CF(0, 0.62, 0.02), white, false, M.Plastic)
+		bevel(r, H, V(1.32, 1.1, 0.3), CF(0, 0.1, 0.55), white, false, M.Plastic)
+		for _, s in ipairs(SIDES) do
+			bevel(r, H, V(0.18, 1.0, 0.9), CF(0.62 * s, 0.1, 0.2), white, false, M.Plastic)
+			spike(r, H, V(0.5 * s, -0.4, 0.5), V(0.6 * s, -1.2, 0.65), 0.35, white, M.Plastic, true, 0.12)
+		end
+		if lv >= 2 then -- серебряный обруч с самоцветом
+			r:Box(H, V(1.36, 0.1, 1.38), CF(0, 0.38, 0.02), silver, M.Metal)
+			gem(r, H, 0.18, CF(0, 0.38, -0.72), VOID)
+		end
+		Parts.chest(r, white, edge, VOID)
+		Parts.belt(r, rgb(70, 60, 90), edge, VOID)
+		Parts.robe(r, rgb(60, 50, 84), white, 1.6)
+		Parts.bigShoulders(r, white, edge, lv >= 3 and VOID or nil, lv >= 4 and 1.1 or 1, 1)
+		Parts.bracers(r, white, edge)
+		Parts.wings(r, lv >= 5 and rgb(200, 190, 230) or white, edge, lv >= 3 and VOID or nil, 0.9 + lv * 0.06)
+		Parts.staff(r, r.RArm, { Glow = VOID, Prong = white, Wood = silver, Top = 2.6, Big = lv >= 4 })
+		if lv >= 5 then -- сломанный нимб
+			r:Orbit("OrbitHalo", H, CF(0, 1.1, 0.1), 0.85, 6, 0.2, rgb(240, 230, 255))
+		end
+		return r, { RS = { 10, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- VOID EMPEROR: император в короне со скипетром
+	------------------------------------------------------------------------
+	register("VoidEmperor", function(lv)
+		local royal, gold, black = rgb(66, 30, 110), rgb(196, 150, 64), rgb(26, 22, 34)
+		local edge = rgb(150, 120, 200)
+		local r = Parts.figure("VoidEmperor", { Torso = black, Arm = royal, Leg = black, Skin = rgb(54, 48, 64), Edge = edge })
+		r:Box(r.Head, V(1.04, 0.9, 0.05), CF(0, -0.05, -0.61), rgb(12, 9, 18), M.Plastic) -- тёмное лицо
+		Parts.eyes(r, VOID, true, 0.04)
+		Parts.crown(r, gold, VOID, 0.8 + lv * 0.08)
+		Parts.chest(r, royal, gold, VOID)
+		Parts.belt(r, rgb(50, 36, 30), gold, VOID)
+		Parts.robe(r, royal, gold, 1.9)
+		Parts.bigShoulders(r, black, gold, VOID, 1.1 + (lv >= 4 and 0.1 or 0), lv >= 3 and 2 or 1)
+		Parts.bracers(r, black, gold)
+		if lv >= 2 then -- золотые манжеты
+			for _, A in ipairs({ r.RArm, r.LArm }) do
+				r:Box(A, V(1.2, 0.14, 1.2), CF(0, -0.88, 0), gold, M.Metal)
+			end
+		end
+		Parts.capeWith(r, 2.4, 4.0, royal, gold)
+		Parts.staff(r, r.RArm, { Glow = VOID, Prong = gold, Wood = gold, Top = 2.6, Big = true }) -- скипетр
+		if lv >= 4 then
+			r:Orbit("OrbitCrown", r.Head, CF(0, 1.5, 0), 1.4, 5, 0.26, P.NeonSoft)
+		end
+		return r, { RS = { 15, 0, 0 } }
+	end)
+
+	------------------------------------------------------------------------
+	-- ABYSS OVERLORD: рогатый владыка с двуручным мечом
+	------------------------------------------------------------------------
+	register("AbyssOverlord", function(lv)
+		local black, mid, edge = rgb(26, 22, 32), rgb(44, 38, 56), rgb(130, 110, 160)
+		local r = Parts.figure("AbyssOverlord", { Torso = black, Arm = black, Leg = black, Edge = edge })
+		Parts.helm(r, black, edge, VOID, nil, true)
+		if lv >= 2 then -- самоцвет над визором
+			gem(r, r.Head, 0.2, CF(0, 0.48, -0.7), VOID, edge)
+		end
+		for _, s in ipairs(SIDES) do
+			Kit.hornA(r, r.Head, { V(0.62 * s, 0.35, 0), V(1.1 * s, 0.6, 0.05), V(1.3 * s, 1.2, 0), V(1.1 * s, 1.9 + lv * 0.1, -0.15) }, 0.3, mid, M.Metal)
+		end
+		Parts.chest(r, mid, edge, VOID)
+		Kit.crack(r, r.Torso, { V(-0.85, 0.95, -0.59), V(-0.45, 0.45, -0.6), V(-0.7, -0.05, -0.59) }, 0.06)
+		Kit.crack(r, r.Torso, { V(0.7, 0.9, -0.59), V(0.85, 0.35, -0.59) }, 0.05)
+		Parts.belt(r, black, edge, VOID)
+		Parts.tassets(r, mid, edge)
+		Parts.bigShoulders(r, black, edge, VOID, 1.2 + (lv >= 4 and 0.1 or 0), lv >= 3 and 3 or 2)
+		Parts.bracers(r, mid, edge)
+		Parts.greaves(r, mid, edge, true)
+		Parts.blade(r, r.RArm, {
+			Len = 4.2 + lv * 0.15, W = 0.85, GuardW = 1.8, Blade = black, Glow = VOID,
+			Core = lv >= 3 and P.NeonSoft or nil, Guard = mid, Edge = edge,
+		})
+		Parts.capeWith(r, 2.3, 3.6, rgb(40, 18, 64), VOID)
+		if lv >= 4 then
+			r:Orbit("OrbitRocks", r.Torso, CF(0, 0.3, 0), 3.0, lv >= 5 and 6 or 4, 0.5, mid, M.Slate)
+		end
+		return r, { RS = { 12, 0, 8 }, LS = { 12, 0, -8 } }
+	end)
+end
+]]></ProtectedString>
+						</Properties>
+					</Item>
 				</Item>
 			</Item>
 			<Item class="ModuleScript" referent="RBX32E739BF70238E1540BC550858CBB2DC">
@@ -4862,6 +8152,17 @@ FX.Env = setmetatable({ Config = Config }, {
 			rawset(env, "Path", p)
 			return p
 		end
+		-- Init без ctx: Renderer — соседний модуль Render (к моменту эффектов уже загружен)
+		if k == "Renderer" then
+			local mod = script.Parent and script.Parent:FindFirstChild("Render")
+			if mod and mod:IsA("ModuleScript") then
+				local ok, r = pcall(require, mod)
+				if ok and type(r) == "table" then
+					rawset(env, "Renderer", r)
+					return r
+				end
+			end
+		end
 		return nil
 	end,
 })
@@ -4876,28 +8177,15 @@ function FX.Ground(pos)
 	return V(pos.X, groundY() + 0.15, pos.Z)
 end
 
-function FX.EnemyCenter(id)
+-- позиции врагов/юнитов через Renderer (nil, если его ещё нет или объекта нет)
+local function rend(key)
 	local r = FX.Env.Renderer
-	return r and r.EnemyCenter and r.EnemyCenter(id) or nil
+	return r and r[key]
 end
-
-function FX.EnemyPosition(id)
-	local r = FX.Env.Renderer
-	return r and r.EnemyPosition and r.EnemyPosition(id) or nil
-end
-
-function FX.UnitView(uid)
-	local r = FX.Env.Renderer
-	return r and r.UnitViews and r.UnitViews[uid] or nil
-end
-
-function FX.MuzzlePos(view)
-	local r = FX.Env.Renderer
-	if r and r.MuzzlePos and view and view.Rig then
-		return r.MuzzlePos(view)
-	end
-	return nil
-end
+function FX.EnemyCenter(id) local f = rend("EnemyCenter"); return f and f(id) or nil end
+function FX.EnemyPosition(id) local f = rend("EnemyPosition"); return f and f(id) or nil end
+function FX.UnitView(uid) local t = rend("UnitViews"); return t and t[uid] or nil end
+function FX.MuzzlePos(view) local f = rend("MuzzlePos"); return (f and view and view.Rig) and f(view) or nil end
 
 function FX.CamFacing(pos)
 	local cam = workspace.CurrentCamera
@@ -5094,20 +8382,10 @@ function FX.Shake(mag, dur)
 			table.remove(shakes, i)
 		end
 	end
-	local entry = { Until = t + dur, Dur = dur, Mag = mag }
-	if #shakes < MAX_SHAKES then
-		shakes[#shakes + 1] = entry
-	else
-		-- заменяем самую слабую
-		local weakest, wv = 1, math.huge
-		for i, s in ipairs(shakes) do
-			local v = (s.Until - t) / s.Dur * s.Mag
-			if v < wv then
-				weakest, wv = i, v
-			end
-		end
-		shakes[weakest] = entry
+	if #shakes >= MAX_SHAKES then
+		table.remove(shakes, 1) -- самая старая
 	end
+	shakes[#shakes + 1] = { Until = t + dur, Dur = dur, Mag = mag }
 end
 
 local function shakeAmount(t)
@@ -5483,6 +8761,11 @@ end
 -- ЦИФРЫ УРОНА
 ------------------------------------------------------------------------
 local numberCount = 0
+local NUMBER_STYLE = {
+	[0] = { Suffix = "", Color = Color3.fromRGB(240, 220, 255), Size = UDim2.fromOffset(90, 30) },
+	[1] = { Suffix = "!", Color = Color3.fromRGB(255, 210, 70), Size = UDim2.fromOffset(150, 50) },
+	[2] = { Suffix = "", Color = Color3.fromRGB(170, 170, 200), Size = UDim2.fromOffset(80, 26) },
+}
 
 function FX.DamageNumber(pos, amount, flag)
 	if numberCount > (FX.Lite and 20 or 70) then
@@ -5503,19 +8786,11 @@ function FX.DamageNumber(pos, amount, flag)
 	label.TextScaled = true
 	label.TextStrokeTransparency = 0
 	label.TextStrokeColor3 = Color3.fromRGB(20, 0, 30)
-	if flag == 2 then
-		label.Text = "PHASE"
-		label.TextColor3 = Color3.fromRGB(170, 170, 200)
-		gui.Size = UDim2.fromOffset(80, 26)
-	elseif flag == 1 then
-		label.Text = tostring(amount) .. "!"
-		label.TextColor3 = Color3.fromRGB(255, 210, 70)
-		gui.Size = UDim2.fromOffset(150, 50)
-	else
-		label.Text = tostring(amount)
-		label.TextColor3 = Color3.fromRGB(240, 220, 255)
-		gui.Size = UDim2.fromOffset(90, 30)
-	end
+	-- 2 = уклонение фазой, 1 = крит, иначе обычный урон
+	local st = NUMBER_STYLE[flag] or NUMBER_STYLE[0]
+	label.Text = flag == 2 and "PHASE" or (tostring(amount) .. st.Suffix)
+	label.TextColor3 = st.Color
+	gui.Size = st.Size
 	label.Parent = gui
 	gui.Parent = anchor
 	tween(gui, 0.8, { StudsOffsetWorldSpace = gui.StudsOffsetWorldSpace + V(0, 2.5, 0) })
@@ -5692,14 +8967,10 @@ function FX.Init(ctx)
 	local env = FX.Env
 	if ctx then
 		rawset(env, "Ctx", ctx)
-		if ctx.Config then
-			rawset(env, "Config", ctx.Config)
-		end
-		if ctx.Path then
-			rawset(env, "Path", ctx.Path)
-		end
-		if ctx.Renderer then
-			rawset(env, "Renderer", ctx.Renderer)
+		for _, k in ipairs({ "Config", "Path", "Renderer" }) do
+			if ctx[k] then
+				rawset(env, k, ctx[k])
+			end
 		end
 		if ctx.Lite ~= nil then
 			FX.SetLite(ctx.Lite)
@@ -5738,6 +9009,781 @@ FX.LocalPlayer = Players.LocalPlayer
 return FX
 ]]></ProtectedString>
 					</Properties>
+				</Item>
+				<Item class="Folder" referent="RBX8959391D0E44981EF6F09C8608809CED">
+					<Properties>
+						<string name="Name">UI</string>
+					</Properties>
+					<Item class="ModuleScript" referent="RBXBF8658C63611D6B53A19895BF059F1A5">
+						<Properties>
+							<string name="Name">Kit</string>
+							<ProtectedString name="Source"><![CDATA[--!nocheck
+-- VOID TD :: UI.Kit (клиент) — тема, конструкторы, нарисованные иконки, 3D-превью, теги события
+-- Весь интерфейс создаётся кодом: без картинок и эмодзи в иконках (иконки — из Frame).
+--
+-- ПОДКЛЮЧЕНИЕ
+--   local Kit = require(script.Kit); Kit.Build(UI, ctx)   -- первым из детей UI
+--   Build: Kit.UI = UI; UI.Kit = Kit; UI.Theme = Kit.Theme; UI.Modals = UI.Modals or {} (Kit.Modals — та же
+--   таблица); модели берутся из ctx (UnitModels, EnemyModels, CaseModels), иначе из ReplicatedStorage.VoidTD.Models.
+--   Окна (modal) кладутся в UI.Root (или Kit.Root, если задан); Kit.SetRoot(frame) — сменить вручную.
+--
+-- ТЕМА
+--   Kit.Theme = { BG BG2 BG3 Accent AccentDark Text Dim Good Bad Gold Pink, Orange (255,130,30) HGold (255,205,80) }
+--
+-- КОНСТРУКТОРЫ (props — свойства экземпляра; Parent ставится ПОСЛЕДНИМ; служебные ключи
+--   Radius / StrokeColor / StrokeThickness не пишутся в экземпляр)
+--   Kit.new(class, props?, children?) -> Instance
+--   Kit.corner(r=8) -> UICorner (offset)
+--   Kit.stroke(color=Accent, th=2, transparency=0) -> UIStroke Name="Border" (Border mode; код меняет obj.Border.Color)
+--   Kit.textStroke(th=1.5) -> UIStroke (10,0,20) Contextual
+--   Kit.pad(px) -> UIPadding со всех сторон
+--   Kit.tween(obj, t, goal, style=Quad, dir=Out) -> Tween (уже запущен)
+--   Kit.panel(props) -> Frame  BG, прозрачность 0.12, угол Radius|10, рамка Border StrokeColor|AccentDark (2)
+--   Kit.label(props) -> TextLabel  без фона, FredokaOne, цвет Text, TextScaled (если не false), обводка StrokeThickness
+--   Kit.button(props, onClick?) -> TextButton  BG3, FredokaOne, угол Radius|8, рамка Border StrokeColor|Accent,
+--        UIScale с анимацией наведения (1.06 / 1 / 0.94 / 1.04); onClick — на Activated
+--   Kit.shape(parent, x, y, w, h, color, rot?, round?, z?, props?) -> Frame  фигура в долях контейнера (центр x,y)
+--   Kit.shade(frame, top, bottom, rot=90) -> UIGradient
+--
+-- ИКОНКИ
+--   Kit.icon(kind, parent, props?) -> Frame "Icon"..kind (квадрат, UIAspectRatioConstraint)
+--        props: Size (по умолчанию scale 1,1), Position, AnchorPoint, ZIndex (фигуры рисуются с ZIndex+1..)
+--        kind: Gem Coin Helmet Gear Back Pumpkin Rune; Kit.Icons[kind] = function(container, z) — свои иконки
+--   Kit.iconButton(parent, order, kind, caption, top, bottom, edge, onClick?, size=76) -> button, captionLabel
+--        TextButton Name = kind.."Button", градиент top->bottom, рамка edge, блик, иконка 0.72, подпись снизу
+--
+-- ОКНА
+--   Kit.modal(name, title, size, iconKind?, parent?) -> Frame
+--        панель по центру (ZIndex 5, скрыта, UIScale для анимации открытия), иконка 38x38, заголовок
+--        (прямой ребёнок окна — по нему тесты ищут окна), кнопка "✕" прячет окно; регистрируется в UI.Modals[name]
+--
+-- 3D-ПРЕВЬЮ (ViewportFrame; частицы, свет, шлейфы, огонь/дым убираются — во ViewportFrame они не рисуются)
+--   Kit.unitViewport(parent, unitId, level=1, props?) -> vf, rig|nil   (props.Silhouette — чёрный силуэт)
+--   Kit.enemyViewport(parent, enemyId, props?) -> vf, rig|nil
+--   Kit.runeViewport(parent, runeId, props?) -> vf, r|nil   (вращается в Kit.StepSpins; vf:GetAttribute("Spin"))
+--   Kit.caseViewport(parent, caseId, props?) -> r   (r = CaseModels.Build(caseId) + r.Viewport; при ошибке —
+--        заглушка { Model = пустая Model, Base = {}, Shards = {}, Cracks = {}, Failed = true, Viewport })
+--   props: Size (scale 1,1), Position, AnchorPoint, ZIndex. Kit.viewport = Kit.unitViewport (как в легаси).
+--
+-- ПРОЧЕЕ
+--   Kit.rarityColor(unitId) -> Color3 (цвет редкости; неизвестный юнит — Theme.Dim)
+--   Kit.eventTag(parent, unitId, z=1, textPos?, textSize?)  -- только для юнитов события (def.Event):
+--        тыква 22x22 в углу, подпись Events[ev].Tag (если textPos), 4 искры. Рамка остаётся цветом редкости.
+--   Kit.eventSparks(parent, z, n=4)
+--   Kit.StepSparks(t=os.clock())  -- каждый кадр из UI.Update: искры поднимаются и гаснут; также крутит руны
+--   Kit.StepSpins(t=os.clock())   -- только вращение 3D-рун (видимых)
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("VoidTD")
+local Config = require(Shared:WaitForChild("Config"))
+
+local Kit = {}
+Kit.Modals = {}
+
+local V2 = Vector2.new
+local V3 = Vector3.new
+local rgb = Color3.fromRGB
+local WHITE = Color3.new(1, 1, 1)
+
+local Theme = {
+	BG = rgb(16, 10, 26),
+	BG2 = rgb(32, 20, 50),
+	BG3 = rgb(48, 30, 72),
+	Accent = rgb(170, 80, 255),
+	AccentDark = rgb(90, 40, 150),
+	Text = rgb(242, 234, 255),
+	Dim = rgb(170, 155, 195),
+	Good = rgb(90, 220, 140),
+	Bad = rgb(255, 80, 110),
+	Gold = rgb(255, 205, 70),
+	Pink = rgb(255, 70, 170),
+	-- цвета события Хэллоуин
+	Orange = rgb(255, 130, 30),
+	HGold = rgb(255, 205, 80),
+}
+Kit.Theme = Theme
+
+------------------------------------------------------------------------
+-- ПОДКЛЮЧЕНИЕ
+------------------------------------------------------------------------
+local ctx
+
+function Kit.Build(UI, c)
+	ctx = c or ctx
+	if UI then
+		Kit.UI = UI
+		UI.Kit = Kit
+		UI.Theme = Theme
+		local modals = UI.Modals or {}
+		for name, m in pairs(Kit.Modals) do
+			if modals[name] == nil then
+				modals[name] = m
+			end
+		end
+		UI.Modals = modals
+		Kit.Modals = modals
+	end
+	return Kit
+end
+
+function Kit.SetRoot(frame)
+	Kit.Root = frame
+end
+
+-- модели: из ctx, иначе напрямую из ReplicatedStorage
+local function models(key, child)
+	local m = ctx and ctx[key]
+	if m then
+		return m
+	end
+	local folder = Shared:FindFirstChild("Models")
+	local mod = folder and folder:FindFirstChild(child)
+	if mod then
+		local ok, res = pcall(require, mod)
+		if ok then
+			return res
+		end
+	end
+	return nil
+end
+
+------------------------------------------------------------------------
+-- КОНСТРУКТОРЫ
+------------------------------------------------------------------------
+local CUSTOM = { Parent = true, Radius = true, StrokeColor = true, StrokeThickness = true }
+
+local function new(class, props, children)
+	local o = Instance.new(class)
+	if props then
+		for k, v in pairs(props) do
+			if not CUSTOM[k] then
+				o[k] = v
+			end
+		end
+	end
+	if children then
+		for _, c in ipairs(children) do
+			c.Parent = o
+		end
+	end
+	if props and props.Parent then
+		o.Parent = props.Parent
+	end
+	return o
+end
+Kit.new = new
+
+-- копия props с значениями по умолчанию (исходную таблицу не трогаем)
+local function with(props, defaults)
+	local o = {}
+	for k, v in pairs(defaults) do
+		o[k] = v
+	end
+	if props then
+		for k, v in pairs(props) do
+			o[k] = v
+		end
+	end
+	return o
+end
+
+function Kit.corner(r)
+	return new("UICorner", { CornerRadius = UDim.new(0, r or 8) })
+end
+
+function Kit.stroke(color, th, transparency)
+	return new("UIStroke", {
+		Name = "Border",
+		Color = color or Theme.Accent,
+		Thickness = th or 2,
+		Transparency = transparency or 0,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	})
+end
+
+function Kit.textStroke(th)
+	return new("UIStroke", { Color = rgb(10, 0, 20), Thickness = th or 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual })
+end
+
+function Kit.pad(px)
+	local u = UDim.new(0, px or 0)
+	return new("UIPadding", { PaddingLeft = u, PaddingRight = u, PaddingTop = u, PaddingBottom = u })
+end
+
+local function tween(o, t, goal, style, dir)
+	local tw = TweenService:Create(o, TweenInfo.new(t, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), goal)
+	tw:Play()
+	return tw
+end
+Kit.tween = tween
+
+function Kit.panel(props)
+	props = props or {}
+	local p = with(props, { BackgroundColor3 = Theme.BG, BackgroundTransparency = 0.12 })
+	p.BorderSizePixel = 0
+	local parent = p.Parent
+	p.Parent = nil
+	local f = new("Frame", p)
+	Kit.corner(props.Radius or 10).Parent = f
+	Kit.stroke(props.StrokeColor or Theme.AccentDark, 2).Parent = f
+	f.Parent = parent
+	return f
+end
+
+function Kit.label(props)
+	props = props or {}
+	local p = with(props, { Font = Enum.Font.FredokaOne, TextColor3 = Theme.Text, TextScaled = true })
+	p.BackgroundTransparency = 1
+	local parent = p.Parent
+	p.Parent = nil
+	local l = new("TextLabel", p)
+	Kit.textStroke(props.StrokeThickness).Parent = l
+	l.Parent = parent
+	return l
+end
+
+-- анимация наведения/нажатия через UIScale
+local function hoverScale(b, over, down)
+	local sc = new("UIScale", { Parent = b })
+	b.MouseEnter:Connect(function()
+		tween(sc, 0.12, { Scale = over })
+	end)
+	b.MouseLeave:Connect(function()
+		tween(sc, 0.12, { Scale = 1 })
+	end)
+	b.MouseButton1Down:Connect(function()
+		tween(sc, 0.06, { Scale = down })
+	end)
+	b.MouseButton1Up:Connect(function()
+		tween(sc, 0.1, { Scale = 1.04 })
+	end)
+	return sc
+end
+
+function Kit.button(props, onClick)
+	props = props or {}
+	local p = with(props, { BackgroundColor3 = Theme.BG3, Font = Enum.Font.FredokaOne, TextColor3 = Theme.Text, TextScaled = true })
+	p.BorderSizePixel = 0
+	p.AutoButtonColor = false
+	local parent = p.Parent
+	p.Parent = nil
+	local b = new("TextButton", p)
+	Kit.corner(props.Radius or 8).Parent = b
+	Kit.stroke(props.StrokeColor or Theme.Accent, 2).Parent = b
+	Kit.textStroke().Parent = b
+	hoverScale(b, 1.06, 0.94)
+	if onClick then
+		b.Activated:Connect(onClick)
+	end
+	b.Parent = parent
+	return b
+end
+
+------------------------------------------------------------------------
+-- ИКОНКИ ИЗ ФИГУР
+------------------------------------------------------------------------
+-- фигура в долях контейнера: центр (x, y), размер (w, h), поворот, скругление (доля)
+local function shape(parent, x, y, w, h, color, rot, round, z, props)
+	local f = new("Frame", {
+		AnchorPoint = V2(0.5, 0.5),
+		Position = UDim2.fromScale(x, y),
+		Size = UDim2.fromScale(w, h),
+		BackgroundColor3 = color,
+		BorderSizePixel = 0,
+		Rotation = rot or 0,
+		ZIndex = z or 1,
+	})
+	if round then
+		new("UICorner", { Parent = f, CornerRadius = UDim.new(round, 0) })
+	end
+	if props then
+		for k, v in pairs(props) do
+			f[k] = v
+		end
+	end
+	f.Parent = parent
+	return f
+end
+Kit.shape = shape
+
+local function shade(f, top, bottom, rot)
+	return new("UIGradient", { Parent = f, Rotation = rot or 90, Color = ColorSequence.new(top, bottom) })
+end
+Kit.shade = shade
+
+local function edge(f, color, th)
+	new("UIStroke", { Parent = f, Color = color, Thickness = th })
+end
+
+local Icons = {}
+Kit.Icons = Icons
+
+-- кристалл: огранённый ромб с бликом
+function Icons.Gem(c, z)
+	local o = shape(c, 0.5, 0.52, 0.6, 0.6, WHITE, 45, 0.12, z)
+	shade(o, rgb(150, 210, 255), rgb(80, 70, 220), 45)
+	edge(o, rgb(20, 14, 50), 2)
+	shape(c, 0.5, 0.4, 0.28, 0.28, rgb(215, 240, 255), 45, 0.1, z + 1, { BackgroundTransparency = 0.15 })
+	shape(c, 0.38, 0.38, 0.08, 0.16, WHITE, 45, 0.5, z + 2, { BackgroundTransparency = 0.1 })
+end
+
+-- монета со знаком $
+function Icons.Coin(c, z)
+	local o = shape(c, 0.5, 0.5, 0.74, 0.74, WHITE, 0, 0.5, z)
+	shade(o, rgb(255, 225, 110), rgb(190, 120, 30))
+	edge(o, rgb(70, 40, 10), 2)
+	local i = shape(c, 0.5, 0.5, 0.5, 0.5, rgb(215, 150, 45), 0, 0.5, z + 1)
+	new("TextLabel", {
+		Parent = i,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Text = "$",
+		TextScaled = true,
+		Font = Enum.Font.FredokaOne,
+		TextColor3 = rgb(90, 50, 10),
+		ZIndex = z + 2,
+	})
+end
+
+-- шлем рыцаря Пустоты: рога, купол, гребень, Т-визор
+function Icons.Helmet(c, z)
+	local acc = rgb(196, 130, 255)
+	for _, sx in ipairs({ -1, 1 }) do
+		shape(c, 0.5 + 0.26 * sx, 0.26, 0.09, 0.3, rgb(215, 205, 190), 28 * sx, 0.3, z)
+	end
+	local h = shape(c, 0.5, 0.55, 0.54, 0.62, WHITE, 0, 0.22, z + 1)
+	shade(h, rgb(110, 106, 130), rgb(40, 36, 54))
+	edge(h, rgb(16, 12, 24), 2)
+	shape(c, 0.5, 0.2, 0.1, 0.18, rgb(90, 86, 110), 0, 0.3, z)
+	shape(c, 0.5, 0.48, 0.38, 0.07, acc, 0, 0.5, z + 2)
+	shape(c, 0.5, 0.6, 0.07, 0.24, acc, 0, 0.5, z + 2)
+end
+
+-- шестерёнка настроек: 8 зубцов, диск, отверстие
+function Icons.Gear(c, z)
+	local col = rgb(190, 186, 210)
+	for k = 0, 7 do
+		local a = k / 8 * math.pi * 2
+		shape(c, 0.5 + math.cos(a) * 0.3, 0.5 + math.sin(a) * 0.3, 0.16, 0.16, col, math.deg(a), 0.15, z)
+	end
+	shape(c, 0.5, 0.5, 0.6, 0.6, col, 0, 0.5, z + 1)
+	shape(c, 0.5, 0.5, 0.26, 0.26, rgb(34, 30, 48), 0, 0.5, z + 2)
+end
+
+-- стрелка «назад»
+function Icons.Back(c, z)
+	local col = rgb(255, 235, 240)
+	shape(c, 0.56, 0.5, 0.5, 0.12, col, 0, 0.5, z)
+	shape(c, 0.34, 0.37, 0.32, 0.12, col, -42, 0.5, z)
+	shape(c, 0.34, 0.63, 0.32, 0.12, col, 42, 0.5, z)
+end
+
+-- тыква: три дольки, хвостик, вырезанное лицо
+function Icons.Pumpkin(c, z)
+	for i, x in ipairs({ 0.3, 0.7, 0.5 }) do
+		local mid = i == 3
+		local o = shape(c, x, 0.58, mid and 0.42 or 0.38, 0.6, WHITE, 0, 0.45, z + (mid and 1 or 0))
+		shade(o, rgb(255, 165, 60), rgb(190, 80, 20))
+		edge(o, rgb(70, 25, 5), 1.5)
+	end
+	shape(c, 0.52, 0.22, 0.1, 0.18, rgb(80, 110, 40), 14, 0.3, z + 2)
+	local eye = rgb(255, 230, 120)
+	for _, x in ipairs({ 0.38, 0.62 }) do
+		shape(c, x, 0.52, 0.12, 0.12, eye, 45, 0.1, z + 3)
+	end
+	shape(c, 0.5, 0.7, 0.34, 0.08, eye, 0, 0.4, z + 3)
+end
+
+-- руна: камень-ромб с символом
+function Icons.Rune(c, z)
+	local o = shape(c, 0.5, 0.5, 0.62, 0.62, WHITE, 45, 0.15, z)
+	shade(o, rgb(255, 160, 60), rgb(120, 30, 40), 45)
+	edge(o, rgb(40, 10, 10), 2)
+	local glyph = rgb(255, 240, 200)
+	shape(c, 0.5, 0.5, 0.08, 0.42, glyph, 0, 0.5, z + 1)
+	shape(c, 0.5, 0.4, 0.3, 0.07, glyph, 30, 0.5, z + 1)
+	shape(c, 0.5, 0.6, 0.3, 0.07, glyph, -30, 0.5, z + 1)
+end
+
+-- квадратный контейнер с иконкой
+function Kit.icon(kind, parent, props)
+	props = props or {}
+	local z = props.ZIndex or 1
+	local c = new("Frame", {
+		Name = "Icon" .. tostring(kind),
+		BackgroundTransparency = 1,
+		Size = props.Size or UDim2.fromScale(1, 1),
+		Position = props.Position or UDim2.new(),
+		AnchorPoint = props.AnchorPoint or V2(0, 0),
+		ZIndex = z,
+	})
+	new("UIAspectRatioConstraint", { Parent = c })
+	local draw = Icons[kind]
+	if draw then
+		draw(c, z + 1)
+	else
+		warn("[UI.Kit] нет иконки " .. tostring(kind))
+	end
+	c.Parent = parent
+	return c
+end
+
+-- квадратная кнопка-иконка с подписью (панель справа)
+function Kit.iconButton(parent, order, kind, caption, top, bottom, edgeColor, onClick, size)
+	size = size or 76
+	local b = new("TextButton", {
+		Name = kind .. "Button",
+		LayoutOrder = order or 0,
+		Size = UDim2.fromOffset(size, size),
+		BackgroundColor3 = WHITE,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+	})
+	Kit.corner(16).Parent = b
+	Kit.stroke(edgeColor, 2).Parent = b
+	new("UIGradient", { Parent = b, Rotation = 90, Color = ColorSequence.new(top, bottom) })
+	-- мягкий блик сверху
+	local shine = new("Frame", {
+		Parent = b,
+		BackgroundColor3 = WHITE,
+		BackgroundTransparency = 0.9,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(4, 4),
+		Size = UDim2.new(1, -8, 0.4, 0),
+	})
+	Kit.corner(12).Parent = shine
+	Kit.icon(kind, b, { Size = UDim2.fromScale(0.72, 0.72), Position = UDim2.fromScale(0.5, 0.48), AnchorPoint = V2(0.5, 0.5), ZIndex = 2 })
+	local cap = Kit.label({
+		Parent = b,
+		AnchorPoint = V2(0.5, 0),
+		Position = UDim2.new(0.5, 0, 1, 3),
+		Size = UDim2.new(1, 16, 0, math.max(14, size * 0.2)),
+		Text = caption or "",
+		Font = Enum.Font.GothamBold,
+	})
+	hoverScale(b, 1.08, 0.93)
+	if onClick then
+		b.Activated:Connect(onClick)
+	end
+	b.Parent = parent
+	return b, cap
+end
+
+------------------------------------------------------------------------
+-- МОДАЛЬНЫЕ ОКНА
+------------------------------------------------------------------------
+local function rootFrame()
+	local ui = Kit.UI
+	return (ui and ui.Root) or Kit.Root
+end
+
+function Kit.modal(name, title, size, iconKind, parent)
+	local m = Kit.panel({
+		Name = "Modal_" .. tostring(name),
+		AnchorPoint = V2(0.5, 0.5),
+		Size = size,
+		Position = UDim2.fromScale(0.5, 0.5),
+		Visible = false,
+		BackgroundTransparency = 0.04,
+		ZIndex = 5,
+	})
+	new("UIScale", { Parent = m })
+	local x = 18
+	if iconKind then
+		Kit.icon(iconKind, m, { Size = UDim2.fromOffset(38, 38), Position = UDim2.fromOffset(16, 13), ZIndex = 6 })
+		x = 62
+	end
+	-- заголовок — прямой ребёнок окна (тесты ищут окно по нему)
+	Kit.label({
+		Parent = m,
+		Name = "Title",
+		Size = UDim2.new(1, -80 - x, 0, 44),
+		Position = UDim2.fromOffset(x, 10),
+		Text = title or "",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = Theme.Accent,
+	})
+	Kit.button({
+		Parent = m,
+		Name = "Close",
+		Size = UDim2.fromOffset(40, 40),
+		Position = UDim2.new(1, -52, 0, 12),
+		Text = "✕",
+		BackgroundColor3 = rgb(120, 30, 50),
+	}, function()
+		m.Visible = false
+	end)
+	Kit.Modals[name] = m
+	m.Parent = parent or rootFrame()
+	return m
+end
+
+------------------------------------------------------------------------
+-- 3D-ПРЕВЬЮ
+------------------------------------------------------------------------
+-- во ViewportFrame не рисуются частицы, свет, шлейфы — убираем, чтобы не тратить память
+local function strip(model)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("ParticleEmitter") or d:IsA("Light") or d:IsA("Trail") or d:IsA("Beam") or d:IsA("Fire") or d:IsA("Smoke") or d:IsA("Sparkles") then
+			d:Destroy()
+		end
+	end
+end
+Kit.StripModel = strip
+
+local function viewportFrame(parent, props, ambient, lightColor, lightDir)
+	props = props or {}
+	return new("ViewportFrame", {
+		Parent = parent,
+		BackgroundTransparency = 1,
+		Size = props.Size or UDim2.fromScale(1, 1),
+		Position = props.Position or UDim2.new(),
+		AnchorPoint = props.AnchorPoint or V2(0, 0),
+		Ambient = ambient,
+		LightColor = lightColor,
+		LightDirection = lightDir,
+		ZIndex = props.ZIndex or 1,
+	})
+end
+
+local function camera(vf, fov, cf)
+	local cam = Instance.new("Camera")
+	cam.FieldOfView = fov
+	cam.CFrame = cf
+	cam.Parent = vf
+	vf.CurrentCamera = cam
+	return cam
+end
+
+-- юнит: камера сбоку-спереди, дальше — чтобы оружие помещалось целиком
+function Kit.unitViewport(parent, unitId, level, props)
+	props = props or {}
+	local vf = viewportFrame(parent, props, rgb(150, 130, 185), rgb(255, 245, 255), V3(-0.6, -1, -0.8))
+	if props.Silhouette then
+		vf.ImageColor3 = rgb(0, 0, 0)
+		vf.ImageTransparency = 0.2
+	end
+	local UnitModels = models("UnitModels", "Units")
+	if not UnitModels or not UnitModels.Build then
+		return vf
+	end
+	local ok, rig = pcall(UnitModels.Build, unitId, level or 1)
+	if not ok or type(rig) ~= "table" or not rig.Model then
+		if not ok then
+			warn("[UI.Kit] превью " .. tostring(unitId) .. ": " .. tostring(rig))
+		end
+		return vf
+	end
+	strip(rig.Model)
+	rig.Model.Parent = vf
+	local s = rig.Scale or 1
+	local center = V3(0, -0.1 * s, 0)
+	camera(vf, 34, CFrame.lookAt(center + V3(5.6, 2.6, -14.5) * s, center))
+	return vf, rig
+end
+Kit.viewport = Kit.unitViewport
+
+-- враг (бестиарий): камера по высоте модели
+function Kit.enemyViewport(parent, enemyId, props)
+	local vf = viewportFrame(parent, props, rgb(150, 130, 160), rgb(255, 240, 230), V3(-0.5, -1, -0.8))
+	local EnemyModels = models("EnemyModels", "Enemies")
+	if not EnemyModels or not EnemyModels.Build then
+		return vf
+	end
+	local ok, rig = pcall(EnemyModels.Build, enemyId)
+	if not ok or type(rig) ~= "table" or not rig.Model then
+		if not ok then
+			warn("[UI.Kit] превью врага " .. tostring(enemyId) .. ": " .. tostring(rig))
+		end
+		return vf
+	end
+	strip(rig.Model)
+	rig.Model.Parent = vf
+	local h = rig.Height or 5
+	local c = V3(0, h * 0.5 - (rig.HipHeight or 0), 0)
+	camera(vf, 34, CFrame.lookAt(c + V3(h * 0.45, h * 0.25, -h * 1.7), c))
+	return vf, rig
+end
+
+-- руны медленно вращаются (Kit.StepSpins)
+local spins = {}
+
+function Kit.runeViewport(parent, runeId, props)
+	local vf = viewportFrame(parent, props, rgb(170, 140, 130), rgb(255, 240, 220), V3(-0.5, -1, -0.7))
+	local UnitModels = models("UnitModels", "Units")
+	if not UnitModels or not UnitModels.BuildRune then
+		return vf
+	end
+	local ok, r = pcall(UnitModels.BuildRune, runeId)
+	if not ok or type(r) ~= "table" or not r.Model then
+		if not ok then
+			warn("[UI.Kit] руна " .. tostring(runeId) .. ": " .. tostring(r))
+		end
+		return vf
+	end
+	strip(r.Model)
+	r.Model.Parent = vf
+	camera(vf, 30, CFrame.lookAt(V3(2.2, 1.4, -6.5), V3(0, 0, 0)))
+	vf:SetAttribute("Spin", true)
+	spins[#spins + 1] = { Model = r.Model, VF = vf, Vis = true, Next = 0 }
+	return vf, r
+end
+
+-- кейс: модель собирает CaseModels (части анимируются напрямую через CFrame)
+function Kit.caseViewport(parent, caseId, props)
+	local vf = viewportFrame(parent, props, rgb(160, 140, 190), rgb(255, 245, 255), V3(-0.5, -1, -0.7))
+	local CaseModels = models("CaseModels", "Cases")
+	local ok, r = false, nil
+	if CaseModels and CaseModels.Build then
+		ok, r = pcall(CaseModels.Build, caseId)
+	end
+	if not ok or type(r) ~= "table" or not r.Model then
+		if CaseModels then
+			warn("[UI.Kit] кейс " .. tostring(caseId) .. ": " .. tostring(r))
+		end
+		r = { Model = Instance.new("Model"), Base = {}, Shards = {}, Cracks = {}, Failed = true }
+	end
+	r.Base = r.Base or {}
+	r.Shards = r.Shards or {}
+	r.Cracks = r.Cracks or {}
+	r.Model.Parent = vf
+	camera(vf, 40, CFrame.lookAt(V3(0, 4.5, -13), V3(0, 2.6, 0)))
+	r.Viewport = vf
+	return r
+end
+
+------------------------------------------------------------------------
+-- РЕДКОСТЬ И ТЕГ СОБЫТИЯ
+------------------------------------------------------------------------
+function Kit.rarityColor(unitId)
+	local def = Config.Units and Config.Units[unitId]
+	local r = def and Config.Rarities and Config.Rarities[def.Rarity]
+	return (r and r.Color) or Theme.Dim
+end
+
+-- лёгкие оранжевые искры на карточках юнитов события (двигаются в Kit.StepSparks)
+local sparks = {}
+local SPARK = rgb(255, 160, 60)
+
+function Kit.eventSparks(parent, z, n)
+	for _ = 1, n or 4 do
+		local f = new("Frame", {
+			Name = "Spark",
+			BackgroundColor3 = SPARK,
+			BorderSizePixel = 0,
+			Size = UDim2.fromOffset(3, 3),
+			Rotation = 45,
+			ZIndex = z or 1,
+			BackgroundTransparency = 0.2,
+		})
+		local sp = { F = f, X = math.random(), P = math.random() * 3, S = 0.25 + math.random() * 0.25, Vis = true, Next = 0 }
+		f.Position = UDim2.fromScale(sp.X, 1)
+		f.Parent = parent
+		sparks[#sparks + 1] = sp
+	end
+end
+
+-- значок-тыква, подпись события и искры; рамка карточки остаётся цветом редкости
+function Kit.eventTag(parent, unitId, z, textPos, textSize)
+	local def = Config.Units and Config.Units[unitId]
+	local ev = def and def.Event and Config.Events and Config.Events[def.Event]
+	if not ev then
+		return nil
+	end
+	z = z or 1
+	local ic = Kit.icon("Pumpkin", parent, { Size = UDim2.fromOffset(22, 22), Position = UDim2.fromOffset(4, 4), ZIndex = z + 2 })
+	local tag
+	if textPos then
+		tag = Kit.label({
+			Parent = parent,
+			Name = "EventTag",
+			Size = textSize or UDim2.new(1, -8, 0, 13),
+			Position = textPos,
+			Text = ev.Tag,
+			TextColor3 = ev.Color,
+			Font = Enum.Font.GothamBold,
+			ZIndex = z + 1,
+		})
+	end
+	Kit.eventSparks(parent, z + 1, 4)
+	return ic, tag
+end
+
+------------------------------------------------------------------------
+-- ПОКАДРОВОЕ ОБНОВЛЕНИЕ
+------------------------------------------------------------------------
+-- виден ли элемент на экране (все GuiObject-предки Visible, есть ScreenGui/LayerCollector)
+local function onScreen(obj)
+	local o = obj
+	while o do
+		if o:IsA("LayerCollector") then
+			return o.Enabled ~= false
+		end
+		if o:IsA("GuiObject") and not o.Visible then
+			return false
+		end
+		o = o.Parent
+	end
+	return false
+end
+
+-- проверка видимости раз в 0.25 с, чтобы не обходить предков каждый кадр
+local function visibleCached(it, t)
+	if t >= it.Next then
+		it.Next = t + 0.25
+		it.Vis = onScreen(it.F or it.VF)
+	end
+	return it.Vis
+end
+
+function Kit.StepSpins(t)
+	t = t or os.clock()
+	local cf
+	for i = #spins, 1, -1 do
+		local it = spins[i]
+		if not it.VF.Parent or not it.Model.Parent then
+			spins[i] = spins[#spins]
+			spins[#spins] = nil
+		elseif visibleCached(it, t) then
+			cf = cf or (CFrame.new(0, math.sin(t * 1.6) * 0.08, 0) * CFrame.Angles(0, t * 0.9, 0))
+			it.Model:PivotTo(cf)
+		end
+	end
+end
+
+function Kit.StepSparks(t)
+	t = t or os.clock()
+	for i = #sparks, 1, -1 do
+		local sp = sparks[i]
+		local f = sp.F
+		if not f.Parent then
+			sparks[i] = sparks[#sparks]
+			sparks[#sparks] = nil
+		elseif visibleCached(sp, t) then
+			-- поднимаются снизу вверх, покачиваясь, и гаснут
+			local a = (t * sp.S + sp.P) % 1
+			f.Position = UDim2.fromScale(sp.X + math.sin(t * 2 + sp.P) * 0.04, 1 - a)
+			f.BackgroundTransparency = 0.2 + a * 0.8
+		end
+	end
+	Kit.StepSpins(t)
+end
+
+function Kit.Step(t)
+	Kit.StepSparks(t)
+end
+
+-- локальный игрок (для модулей UI)
+Kit.Player = Players.LocalPlayer
+
+return Kit
+]]></ProtectedString>
+						</Properties>
+					</Item>
 				</Item>
 			</Item>
 		</Item>
