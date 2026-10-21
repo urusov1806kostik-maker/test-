@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.Mth;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -78,7 +79,9 @@ public final class BikeAnimation {
             return false;
         }
         float[][] frames = channels[channel];
-        float t = this.loop && this.length > 0 ? time % this.length : Math.min(time, this.length);
+        float t = this.loop && this.length > 0
+                ? ((time % this.length) + this.length) % this.length
+                : Mth.clamp(time, 0.0F, this.length);
 
         int next = 0;
         while (next < frames.length && frames[next][0] <= t) {

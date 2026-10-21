@@ -16,6 +16,7 @@ public class PitbikeMod {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         ModEntities.ENTITIES.register(bus);
         ModItems.ITEMS.register(bus);
+        ModSounds.SOUNDS.register(bus);
         bus.addListener(this::onAttributes);
         bus.addListener(this::onCreativeTab);
     }

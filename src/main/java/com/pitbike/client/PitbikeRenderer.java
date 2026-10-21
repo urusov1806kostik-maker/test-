@@ -15,7 +15,7 @@ public class PitbikeRenderer extends EntityRenderer<PitbikeEntity> {
     private static final ResourceLocation TEXTURE = new ResourceLocation(PitbikeMod.MOD_ID, "textures/entity/pitbike.png");
     private static final ResourceLocation MODEL = new ResourceLocation(PitbikeMod.MOD_ID, "geo/pitbike.json");
     private static final ResourceLocation ANIMATIONS = new ResourceLocation(PitbikeMod.MOD_ID, "animations/pitbike.json");
-    /** Played while the bike is ridden and moving. "ride_forward" is intentionally left unused. */
+    /** Played while the bike is ridden, in step with its speed. "ride_forward" is intentionally left unused. */
     private static final String RIDE_ANIMATION = "ride";
 
     private final BikeModel model;
@@ -33,6 +33,7 @@ public class PitbikeRenderer extends EntityRenderer<PitbikeEntity> {
                        MultiBufferSource buffers, int light) {
         pose.pushPose();
         pose.mulPose(Axis.YP.rotationDegrees(-entityYaw));
+        pose.mulPose(Axis.ZP.rotationDegrees(bike.getLean(partialTick)));
         pose.scale(1.0F / 16.0F, 1.0F / 16.0F, 1.0F / 16.0F);
         int overlay = OverlayTexture.pack(OverlayTexture.u(0.0F), OverlayTexture.v(bike.hurtTime > 0));
         this.model.render(pose, buffers.getBuffer(RenderType.entityCutout(TEXTURE)), light, overlay,

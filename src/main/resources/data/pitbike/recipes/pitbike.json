@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "  S",
+    "PEP",
+    "I I"
+  ],
+  "key": {
+    "S": {"item": "minecraft:stick"},
+    "P": {"item": "minecraft:purple_dye"},
+    "E": {"item": "minecraft:piston"},
+    "I": {"item": "minecraft:iron_ingot"}
+  },
+  "result": {"item": "pitbike:pitbike"}
+}

@@ -1,0 +1,11 @@
+{
+  "engine": {
+    "subtitle": "subtitles.pitbike.engine",
+    "sounds": [
+      {
+        "name": "pitbike:engine",
+        "attenuation_distance": 24
+      }
+    ]
+  }
+}

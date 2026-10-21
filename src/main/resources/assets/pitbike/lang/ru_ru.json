@@ -1,4 +1,6 @@
 {
   "item.pitbike.pitbike": "Питбайк",
-  "entity.pitbike.pitbike": "Питбайк"
+  "entity.pitbike.pitbike": "Питбайк",
+  "subtitles.pitbike.engine": "Мотор питбайка",
+  "hud.pitbike.speed": "%s км/ч"
 }

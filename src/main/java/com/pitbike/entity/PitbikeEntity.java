@@ -1,6 +1,8 @@
 package com.pitbike.entity;
 
 import com.pitbike.ModItems;
+import com.pitbike.client.PitbikeClientHooks;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
@@ -20,7 +22,9 @@ import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.entity.PartEntity;
+import net.minecraftforge.fml.DistExecutor;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -53,14 +57,24 @@ public class PitbikeEntity extends Mob {
     private static final float COASTING = 0.025F;
     private static final float REVERSE_LIMIT = 0.3F;
     private static final float TURN_SPEED = 5.0F;
-    private static final float RIDE_ANIM_MIN_SPEED = 0.01F;
+    /** "ride" spins the wheels 1.5 turns per second, which rolls 4 blocks on a 0.425 block radius wheel. */
+    private static final float RIDE_ANIM_SECONDS_PER_BLOCK = 0.25F;
+    private static final float LEAN_PER_TURN = 6.0F;
+    private static final float MAX_LEAN = 30.0F;
+    /** Silencer outlet in model pixels. */
+    private static final Vec3 EXHAUST = new Vec3(-2.7, 19.3, -14.4).scale(1.0 / 16.0);
 
     private final PitbikePart[] parts;
     private float throttle;
     private float deltaYaw;
-    /** Client only: "ride" animation clock in seconds; it only runs while the bike is ridden and moving. */
+    // Client-only visual state.
+    /** "ride" animation clock in seconds; it follows the distance driven, so the wheels match the ground. */
     private float rideAnimTime;
     private float rideAnimTimeO;
+    /** Signed speed along the bike's facing, blocks per tick. */
+    private float drivingSpeed;
+    private float lean;
+    private float leanO;
 
     public PitbikeEntity(EntityType<? extends PitbikeEntity> type, Level level) {
         super(type, level);
@@ -129,12 +143,40 @@ public class PitbikeEntity extends Mob {
         this.updateParts();
 
         if (this.level().isClientSide) {
-            this.rideAnimTimeO = this.rideAnimTime;
-            double moved = Math.hypot(this.getX() - this.xo, this.getZ() - this.zo);
-            if (this.isVehicle() && moved > RIDE_ANIM_MIN_SPEED) {
-                this.rideAnimTime += 0.05F;
-            }
+            this.clientTick();
         }
+    }
+
+    private void clientTick() {
+        float yaw = this.getYRot() * Mth.DEG_TO_RAD;
+        double forward = -(this.getX() - this.xo) * Mth.sin(yaw) + (this.getZ() - this.zo) * Mth.cos(yaw);
+        this.drivingSpeed = Mth.lerp(0.5F, this.drivingSpeed, (float) forward);
+
+        this.rideAnimTimeO = this.rideAnimTime;
+        if (this.isVehicle()) {
+            this.rideAnimTime += this.drivingSpeed * RIDE_ANIM_SECONDS_PER_BLOCK;
+        }
+
+        this.leanO = this.lean;
+        float turn = Mth.wrapDegrees(this.getYRot() - this.yRotO);
+        float targetLean = this.isVehicle()
+                ? Mth.clamp(turn * Math.abs(this.drivingSpeed) * LEAN_PER_TURN, -MAX_LEAN, MAX_LEAN) : 0.0F;
+        this.lean = Mth.lerp(0.25F, this.lean, targetLean);
+
+        if (this.isVehicle()) {
+            this.spawnExhaustSmoke();
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> PitbikeClientHooks.tickBike(this));
+        }
+    }
+
+    private void spawnExhaustSmoke() {
+        if (this.random.nextFloat() > 0.3F + Math.abs(this.drivingSpeed)) {
+            return;
+        }
+        Vec3 pos = EXHAUST.yRot(-this.getYRot() * Mth.DEG_TO_RAD).add(this.position());
+        Vec3 back = new Vec3(0.0, 0.01, -0.04 - Math.max(this.drivingSpeed, 0.0F) * 0.2)
+                .yRot(-this.getYRot() * Mth.DEG_TO_RAD);
+        this.level().addParticle(ParticleTypes.SMOKE, pos.x, pos.y, pos.z, back.x, back.y, back.z);
     }
 
     private void updateParts() {
@@ -157,6 +199,16 @@ public class PitbikeEntity extends Mob {
 
     public float getRideAnimTime(float partialTick) {
         return Mth.lerp(partialTick, this.rideAnimTimeO, this.rideAnimTime);
+    }
+
+    /** Client only: roll angle in degrees, negative leans left. */
+    public float getLean(float partialTick) {
+        return Mth.lerp(partialTick, this.leanO, this.lean);
+    }
+
+    /** Client only: signed speed along the bike's facing, blocks per tick. */
+    public float getDrivingSpeed() {
+        return this.drivingSpeed;
     }
 
     // ---- Riding ----
