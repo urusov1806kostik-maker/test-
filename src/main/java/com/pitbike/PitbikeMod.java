@@ -1,6 +1,7 @@
 package com.pitbike;
 
 import com.pitbike.entity.PitbikeEntity;
+import com.pitbike.network.PitbikeNetwork;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
@@ -17,6 +18,7 @@ public class PitbikeMod {
         ModEntities.ENTITIES.register(bus);
         ModItems.ITEMS.register(bus);
         ModSounds.SOUNDS.register(bus);
+        PitbikeNetwork.register();
         bus.addListener(this::onAttributes);
         bus.addListener(this::onCreativeTab);
     }

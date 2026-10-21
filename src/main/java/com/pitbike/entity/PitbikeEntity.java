@@ -2,7 +2,10 @@ package com.pitbike.entity;
 
 import com.pitbike.ModItems;
 import com.pitbike.client.PitbikeClientHooks;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -69,6 +72,16 @@ public class PitbikeEntity extends Mob {
     private static final float WHEELIE_ANGLE = 35.0F;
     private static final EntityDataAccessor<Boolean> DATA_WHEELIE =
             SynchedEntityData.defineId(PitbikeEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> DATA_TRICK =
+            SynchedEntityData.defineId(PitbikeEntity.class, EntityDataSerializers.INT);
+    /** Leaving the ground after climbing this fast (blocks per tick) launches the bike. */
+    private static final float LAUNCH_MIN_CLIMB = 0.12F;
+    private static final float LAUNCH_FACTOR = 1.5F;
+    private static final float MAX_LAUNCH = 1.3F;
+    /** Horizontal speed kept per tick while airborne (vanilla mobs lose 9%). */
+    private static final double AIR_DRAG = 0.995;
+    /** A trick may still be finishing this many ticks when the bike lands. */
+    private static final int LANDING_GRACE = 3;
     /** Silencer outlet in model pixels. */
     private static final Vec3 EXHAUST = new Vec3(-2.7, 19.3, -14.4).scale(1.0 / 16.0);
 
@@ -85,6 +98,21 @@ public class PitbikeEntity extends Mob {
     private float leanO;
     private float wheelie;
     private float wheelieO;
+    @Nullable
+    private Trick clientTrick;
+    private int clientTrickTicks;
+
+    // Jump physics, on the side that moves the bike.
+    private float climb;
+    private boolean wasOnGround = true;
+
+    // Server-side trick state.
+    @Nullable
+    private Trick activeTrick;
+    private int trickTicks;
+    private int trickSequence;
+    private boolean airborne;
+    private final List<Trick> combo = new ArrayList<>();
 
     public PitbikeEntity(EntityType<? extends PitbikeEntity> type, Level level) {
         super(type, level);
@@ -105,6 +133,7 @@ public class PitbikeEntity extends Mob {
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_WHEELIE, false);
+        this.entityData.define(DATA_TRICK, 0);
     }
 
     private PitbikePart[] createParts() {
@@ -157,6 +186,9 @@ public class PitbikeEntity extends Mob {
         this.yBodyRot = this.getYRot();
         this.yHeadRot = this.getYRot();
         this.updateParts();
+        if (this.isControlledByLocalInstance()) {
+            this.tickLaunch();
+        }
 
         if (this.level().isClientSide) {
             this.clientTick();
@@ -164,7 +196,147 @@ public class PitbikeEntity extends Mob {
             // Space + forward = ride on the rear wheel.
             boolean wheelie = this.getControllingPassenger() instanceof Player rider && rider.jumping && rider.zza > 0;
             this.entityData.set(DATA_WHEELIE, wheelie);
+            this.tickTricks();
         }
+    }
+
+    /** Riding off the top of a ramp turns the climbing speed into a jump. */
+    private void tickLaunch() {
+        boolean onGround = this.onGround();
+        if (onGround) {
+            // Hold the climbing rate for a few ticks: the bike rolls a bit over the lip before it leaves the ground.
+            float rise = (float) Math.max(0.0, this.getY() - this.yo);
+            this.climb = rise > this.climb ? Mth.lerp(0.5F, this.climb, rise) : this.climb * 0.9F;
+        } else if (this.wasOnGround) {
+            // Ground friction keeps the stored motion well below the real speed; carry the real speed into the air.
+            Vec3 motion = this.getDeltaMovement();
+            double up = motion.y;
+            if (this.climb > LAUNCH_MIN_CLIMB) {
+                up = Math.max(up, Math.min(this.climb * LAUNCH_FACTOR, MAX_LAUNCH));
+            }
+            // Stepping up the last stair slows the measured move, so use the smoothed riding speed.
+            double moved = Math.hypot(this.getX() - this.xo, this.getZ() - this.zo);
+            double speed = Math.max(moved, this.drivingSpeed);
+            Vec3 forward = Vec3.directionFromRotation(0.0F, this.getYRot()).scale(speed);
+            this.setDeltaMovement(forward.x, up, forward.z);
+            this.climb = 0.0F;
+        }
+        this.wasOnGround = onGround;
+    }
+
+    @Override
+    public void travel(Vec3 input) {
+        if (!this.isControlledByLocalInstance() || !this.isVehicle() || this.onGround() || this.isInWater()) {
+            super.travel(input);
+            return;
+        }
+        // Keep momentum in the air so jumps actually carry the bike.
+        Vec3 before = this.getDeltaMovement();
+        super.travel(input);
+        if (!this.horizontalCollision) {
+            this.setDeltaMovement(before.x * AIR_DRAG, this.getDeltaMovement().y, before.z * AIR_DRAG);
+        }
+    }
+
+    // ---- Tricks ----
+
+    /** Server: called when the rider presses a trick key. */
+    public void tryStartTrick(Player player, Trick trick) {
+        if (this.getControllingPassenger() != player || this.onGround() || this.trickTicks > 0) {
+            return;
+        }
+        this.activeTrick = trick;
+        this.trickTicks = trick.duration;
+        this.combo.add(trick);
+        this.syncTrick(trick);
+    }
+
+    private void syncTrick(@Nullable Trick trick) {
+        // The sequence number makes the same trick twice in a row still count as a change.
+        this.trickSequence = (this.trickSequence + 1) & 0xFFFFFF;
+        this.entityData.set(DATA_TRICK, this.trickSequence << 4 | (trick == null ? 0 : trick.networkId()));
+    }
+
+    private void tickTricks() {
+        if (this.trickTicks > 0 && --this.trickTicks == 0) {
+            this.activeTrick = null;
+        }
+        if (!this.isVehicle()) {
+            if (this.activeTrick != null || !this.combo.isEmpty()) {
+                this.resetTricks();
+            }
+            this.airborne = false;
+            return;
+        }
+        if (!this.onGround()) {
+            this.airborne = true;
+        } else if (this.airborne) {
+            this.airborne = false;
+            this.land();
+        }
+    }
+
+    private void land() {
+        Player rider = this.getControllingPassenger() instanceof Player p ? p : null;
+        if (rider != null && this.activeTrick != null && this.trickTicks > LANDING_GRACE) {
+            Trick failed = this.activeTrick;
+            this.resetTricks();
+            this.bail(rider, failed);
+            return;
+        }
+        if (rider != null && !this.combo.isEmpty()) {
+            int points = 0;
+            MutableComponent names = Component.empty();
+            for (int i = 0; i < this.combo.size(); i++) {
+                Trick trick = this.combo.get(i);
+                points += trick.points;
+                names.append(i == 0 ? Component.empty() : Component.literal(" + ")).append(trick.displayName());
+            }
+            points *= this.combo.size();
+            rider.displayClientMessage(Component.translatable("trick.pitbike.landed", names, points)
+                    .withStyle(ChatFormatting.GOLD), true);
+        }
+        this.resetTricks();
+    }
+
+    private void bail(Player rider, Trick failed) {
+        this.ejectPassengers();
+        Vec3 forward = Vec3.directionFromRotation(0.0F, this.getYRot());
+        rider.setDeltaMovement(forward.x * 0.6, 0.35, forward.z * 0.6);
+        rider.hurtMarked = true;
+        rider.hurt(this.damageSources().fall(), 4.0F);
+        rider.displayClientMessage(Component.translatable("trick.pitbike.bail", failed.displayName())
+                .withStyle(ChatFormatting.RED), true);
+    }
+
+    private void resetTricks() {
+        this.combo.clear();
+        this.trickTicks = 0;
+        if (this.activeTrick != null) {
+            this.activeTrick = null;
+            this.syncTrick(null);
+        }
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (DATA_TRICK.equals(key) && this.level().isClientSide) {
+            this.clientTrick = Trick.byNetworkId(this.entityData.get(DATA_TRICK) & 0xF);
+            this.clientTrickTicks = 0;
+        }
+    }
+
+    /** Client only: the trick being shown, or null. */
+    @Nullable
+    public Trick getClientTrick() {
+        return this.clientTrick;
+    }
+
+    /** Client only: 0..1 through the current trick. */
+    public float getTrickProgress(float partialTick) {
+        return this.clientTrick == null ? 0.0F
+                : Mth.clamp((this.clientTrickTicks + partialTick) / this.clientTrick.duration, 0.0F, 1.0F);
     }
 
     private void clientTick() {
@@ -186,6 +358,10 @@ public class PitbikeEntity extends Mob {
         this.wheelieO = this.wheelie;
         boolean wheelie = this.entityData.get(DATA_WHEELIE) && this.drivingSpeed > 0.05F;
         this.wheelie = Mth.lerp(wheelie ? 0.2F : 0.3F, this.wheelie, wheelie ? WHEELIE_ANGLE : 0.0F);
+
+        if (this.clientTrick != null && ++this.clientTrickTicks > this.clientTrick.duration) {
+            this.clientTrick = null;
+        }
 
         if (this.isVehicle()) {
             this.spawnExhaustSmoke();

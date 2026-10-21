@@ -4,6 +4,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.pitbike.PitbikeMod;
 import com.pitbike.entity.PitbikeEntity;
+import com.pitbike.entity.Trick;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraftforge.api.distmarker.Dist;
@@ -12,9 +14,12 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/** Tilts the rider together with the bike when it leans into a turn or pulls a wheelie. */
+/** Moves the rider together with the bike (lean, wheelie, flips) and strikes trick poses. */
 @Mod.EventBusSubscriber(modid = PitbikeMod.MOD_ID, value = Dist.CLIENT)
 public final class RiderLeanHandler {
+    /** Top of the seat in blocks; Superman stretches out from here. */
+    private static final float SEAT_TOP = 22.2F / 16.0F;
+
     private RiderLeanHandler() {
     }
 
@@ -27,17 +32,33 @@ public final class RiderLeanHandler {
         }
         float partialTick = event.getPartialTick();
         float yaw = Mth.rotLerp(partialTick, bike.yRotO, bike.getYRot());
-        // Roll around the bike's own ground line, so the rider stays on the seat.
         double height = Mth.lerp(partialTick, rider.yo, rider.getY()) - Mth.lerp(partialTick, bike.yo, bike.getY());
         PoseStack pose = event.getPoseStack();
         pose.pushPose();
         pose.translate(0.0, -height, 0.0);
         pose.mulPose(Axis.YP.rotationDegrees(-yaw));
-        pose.mulPose(Axis.ZP.rotationDegrees(bike.getLean(partialTick)));
-        PitbikeRenderer.applyWheelie(pose, bike.getWheelie(partialTick),
-                PitbikeEntity.REAR_CONTACT_Z - (float) PitbikeEntity.SEAT_Z);
+        BikePose.apply(pose, bike, partialTick, -(float) PitbikeEntity.SEAT_Z);
+        if (bike.getClientTrick() == Trick.SUPERMAN) {
+            float amount = BikePose.pulse(bike.getTrickProgress(partialTick));
+            pose.translate(0.0F, SEAT_TOP + 0.35F * amount, 0.0F);
+            pose.mulPose(Axis.XP.rotationDegrees(75.0F * amount));
+            pose.translate(0.0F, -SEAT_TOP, 0.0F);
+        }
         pose.mulPose(Axis.YP.rotationDegrees(yaw));
         pose.translate(0.0, height, 0.0);
+
+        // The posed arms are drawn by RiderTrickLayer.
+        if (event.getRenderer().getModel() instanceof PlayerModel<?> model) {
+            RiderTrickLayer.Arms arms = RiderTrickLayer.armsFor(bike.getClientTrick());
+            if (arms.right()) {
+                model.rightArm.visible = false;
+                model.rightSleeve.visible = false;
+            }
+            if (arms.left()) {
+                model.leftArm.visible = false;
+                model.leftSleeve.visible = false;
+            }
+        }
     }
 
     @SubscribeEvent

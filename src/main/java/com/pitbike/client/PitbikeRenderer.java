@@ -33,23 +33,13 @@ public class PitbikeRenderer extends EntityRenderer<PitbikeEntity> {
                        MultiBufferSource buffers, int light) {
         pose.pushPose();
         pose.mulPose(Axis.YP.rotationDegrees(-entityYaw));
-        pose.mulPose(Axis.ZP.rotationDegrees(bike.getLean(partialTick)));
-        PitbikeRenderer.applyWheelie(pose, bike.getWheelie(partialTick), PitbikeEntity.REAR_CONTACT_Z);
+        BikePose.apply(pose, bike, partialTick, 0.0F);
         pose.scale(1.0F / 16.0F, 1.0F / 16.0F, 1.0F / 16.0F);
         int overlay = OverlayTexture.pack(OverlayTexture.u(0.0F), OverlayTexture.v(bike.hurtTime > 0));
         this.model.render(pose, buffers.getBuffer(RenderType.entityCutout(TEXTURE)), light, overlay,
                 this.rideAnimation, bike.getRideAnimTime(partialTick));
         pose.popPose();
         super.render(bike, entityYaw, partialTick, pose, buffers, light);
-    }
-
-    /** Pitches the front up around the rear wheel contact, {@code pivotZ} blocks along the bike. */
-    static void applyWheelie(PoseStack pose, float degrees, float pivotZ) {
-        if (degrees > 0.01F) {
-            pose.translate(0.0F, 0.0F, pivotZ);
-            pose.mulPose(Axis.XP.rotationDegrees(-degrees));
-            pose.translate(0.0F, 0.0F, -pivotZ);
-        }
     }
 
     @Override

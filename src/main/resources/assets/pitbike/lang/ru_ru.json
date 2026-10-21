@@ -2,5 +2,19 @@
   "item.pitbike.pitbike": "Питбайк",
   "entity.pitbike.pitbike": "Питбайк",
   "subtitles.pitbike.engine": "Мотор питбайка",
-  "hud.pitbike.speed": "%s км/ч"
+  "hud.pitbike.speed": "%s км/ч",
+  "key.categories.pitbike": "Трюки на питбайке",
+  "key.pitbike.one_hander": "Ванхенд",
+  "key.pitbike.no_hander": "Ноухенд",
+  "key.pitbike.superman": "Супермен",
+  "key.pitbike.backflip": "Бэкфлип",
+  "key.pitbike.spin": "360",
+  "trick.pitbike.one_hander": "Ванхенд",
+  "trick.pitbike.no_hander": "Ноухенд",
+  "trick.pitbike.superman": "Супермен",
+  "trick.pitbike.backflip": "Бэкфлип",
+  "trick.pitbike.spin": "360",
+  "trick.pitbike.landed": "%s  +%s",
+  "trick.pitbike.bail": "Упал! Не докрутил: %s",
+  "command.pitbike.city": "Стант-город построен. Жми W к мега-рампе, в воздухе — клавиши трюков."
 }

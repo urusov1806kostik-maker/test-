@@ -2,5 +2,19 @@
   "item.pitbike.pitbike": "Pitbike",
   "entity.pitbike.pitbike": "Pitbike",
   "subtitles.pitbike.engine": "Pitbike engine",
-  "hud.pitbike.speed": "%s km/h"
+  "hud.pitbike.speed": "%s km/h",
+  "key.categories.pitbike": "Pitbike tricks",
+  "key.pitbike.one_hander": "One-hander",
+  "key.pitbike.no_hander": "No-hander",
+  "key.pitbike.superman": "Superman",
+  "key.pitbike.backflip": "Backflip",
+  "key.pitbike.spin": "360",
+  "trick.pitbike.one_hander": "One-hander",
+  "trick.pitbike.no_hander": "No-hander",
+  "trick.pitbike.superman": "Superman",
+  "trick.pitbike.backflip": "Backflip",
+  "trick.pitbike.spin": "360",
+  "trick.pitbike.landed": "%s  +%s",
+  "trick.pitbike.bail": "Bailed! %s not finished",
+  "command.pitbike.city": "Stunt city built. Hold W towards the mega ramp, press trick keys in the air."
 }
