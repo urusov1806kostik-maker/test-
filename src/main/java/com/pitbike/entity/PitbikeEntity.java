@@ -3,6 +3,9 @@ package com.pitbike.entity;
 import com.pitbike.ModItems;
 import com.pitbike.client.PitbikeClientHooks;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
@@ -51,7 +54,7 @@ public class PitbikeEntity extends Mob {
     private static final double MIN_BOX = 4.0;
 
     private static final double SEAT_HEIGHT = 1.02;
-    private static final double SEAT_Z = -0.45;
+    public static final double SEAT_Z = -0.45;
     private static final float ACCELERATION = 0.04F;
     private static final float BRAKING = 0.12F;
     private static final float COASTING = 0.025F;
@@ -61,6 +64,11 @@ public class PitbikeEntity extends Mob {
     private static final float RIDE_ANIM_SECONDS_PER_BLOCK = 0.25F;
     private static final float LEAN_PER_TURN = 6.0F;
     private static final float MAX_LEAN = 30.0F;
+    /** Rear wheel ground contact (blocks, along the bike); the wheelie pivots here. */
+    public static final float REAR_CONTACT_Z = -12.6F / 16.0F;
+    private static final float WHEELIE_ANGLE = 35.0F;
+    private static final EntityDataAccessor<Boolean> DATA_WHEELIE =
+            SynchedEntityData.defineId(PitbikeEntity.class, EntityDataSerializers.BOOLEAN);
     /** Silencer outlet in model pixels. */
     private static final Vec3 EXHAUST = new Vec3(-2.7, 19.3, -14.4).scale(1.0 / 16.0);
 
@@ -75,6 +83,8 @@ public class PitbikeEntity extends Mob {
     private float drivingSpeed;
     private float lean;
     private float leanO;
+    private float wheelie;
+    private float wheelieO;
 
     public PitbikeEntity(EntityType<? extends PitbikeEntity> type, Level level) {
         super(type, level);
@@ -89,6 +99,12 @@ public class PitbikeEntity extends Mob {
                 .add(Attributes.MAX_HEALTH, 20.0)
                 .add(Attributes.MOVEMENT_SPEED, 0.3)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 1.0);
+    }
+
+    @Override
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.entityData.define(DATA_WHEELIE, false);
     }
 
     private PitbikePart[] createParts() {
@@ -144,6 +160,10 @@ public class PitbikeEntity extends Mob {
 
         if (this.level().isClientSide) {
             this.clientTick();
+        } else {
+            // Space + forward = ride on the rear wheel.
+            boolean wheelie = this.getControllingPassenger() instanceof Player rider && rider.jumping && rider.zza > 0;
+            this.entityData.set(DATA_WHEELIE, wheelie);
         }
     }
 
@@ -162,6 +182,10 @@ public class PitbikeEntity extends Mob {
         float targetLean = this.isVehicle()
                 ? Mth.clamp(turn * Math.abs(this.drivingSpeed) * LEAN_PER_TURN, -MAX_LEAN, MAX_LEAN) : 0.0F;
         this.lean = Mth.lerp(0.25F, this.lean, targetLean);
+
+        this.wheelieO = this.wheelie;
+        boolean wheelie = this.entityData.get(DATA_WHEELIE) && this.drivingSpeed > 0.05F;
+        this.wheelie = Mth.lerp(wheelie ? 0.2F : 0.3F, this.wheelie, wheelie ? WHEELIE_ANGLE : 0.0F);
 
         if (this.isVehicle()) {
             this.spawnExhaustSmoke();
@@ -204,6 +228,11 @@ public class PitbikeEntity extends Mob {
     /** Client only: roll angle in degrees, negative leans left. */
     public float getLean(float partialTick) {
         return Mth.lerp(partialTick, this.leanO, this.lean);
+    }
+
+    /** Client only: how far the front wheel is lifted, in degrees. */
+    public float getWheelie(float partialTick) {
+        return Mth.lerp(partialTick, this.wheelieO, this.wheelie);
     }
 
     /** Client only: signed speed along the bike's facing, blocks per tick. */

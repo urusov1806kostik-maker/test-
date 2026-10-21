@@ -12,7 +12,7 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/** Tilts the rider together with the bike when it leans into a turn. */
+/** Tilts the rider together with the bike when it leans into a turn or pulls a wheelie. */
 @Mod.EventBusSubscriber(modid = PitbikeMod.MOD_ID, value = Dist.CLIENT)
 public final class RiderLeanHandler {
     private RiderLeanHandler() {
@@ -34,6 +34,8 @@ public final class RiderLeanHandler {
         pose.translate(0.0, -height, 0.0);
         pose.mulPose(Axis.YP.rotationDegrees(-yaw));
         pose.mulPose(Axis.ZP.rotationDegrees(bike.getLean(partialTick)));
+        PitbikeRenderer.applyWheelie(pose, bike.getWheelie(partialTick),
+                PitbikeEntity.REAR_CONTACT_Z - (float) PitbikeEntity.SEAT_Z);
         pose.mulPose(Axis.YP.rotationDegrees(yaw));
         pose.translate(0.0, height, 0.0);
     }
