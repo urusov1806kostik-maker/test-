@@ -48,10 +48,7 @@ public final class ModuleCatalog {
 		modules.register(new ServerInfoHud(client));
 
 		// Visual
-		modules.register(new dev.shadowvisuals.modules.visual.PlayerEsp(client));
 		modules.register(new dev.shadowvisuals.modules.visual.NameTags(client));
-		modules.register(new dev.shadowvisuals.modules.visual.ItemEsp(client));
-		modules.register(new dev.shadowvisuals.modules.visual.ContainerVisuals());
 		modules.register(new dev.shadowvisuals.modules.visual.BlockOutline());
 		modules.register(new dev.shadowvisuals.modules.visual.GlintColor());
 		modules.register(new dev.shadowvisuals.modules.visual.MusicLyrics(client));

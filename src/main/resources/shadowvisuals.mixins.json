@@ -8,7 +8,6 @@
 		"ChatBackgroundMixin",
 		"ChatComponentMixin",
 		"ClientLevelDataMixin",
-		"EntityRendererMixin",
 		"FogRendererMixin",
 		"GameRendererMixin",
 		"GuiOverlayMixin",
