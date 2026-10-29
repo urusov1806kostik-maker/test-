@@ -1,4 +1,4 @@
-# Shadow Visuals
+# NyxveraVisuals
 
 Клиентский визуальный мод для **Minecraft 1.21.11 (Fabric)**: собственный ClickGUI, HUD с редактором, визуальные модули, камера, интерфейс и FunTime Helper. Всё работает только на клиенте и ничего не меняет на сервере.
 
@@ -15,7 +15,7 @@
 ## Установка
 
 1. Установите Fabric Loader и Fabric API для 1.21.11.
-2. Положите `shadow-visuals-<версия>.jar` в папку `mods`.
+2. Положите `nyxvera-visuals-<версия>.jar` в папку `mods`.
 3. В игре нажмите **Right Shift**, чтобы открыть меню. Клавишу можно поменять в разделе «Настройки».
 
 ## Возможности
@@ -26,7 +26,7 @@
 - **Visual**: Name Tags, Block Outline (обводка и заливка), Glint Color, FullBright, Fire Overlay, Overlay Control, Particles.
 - **Music Lyrics**: показывает текст песни, которая играет в Windows (Spotify, браузер, Яндекс Музыка и другие), объёмными 3D-строками вокруг игрока.
   - Режимы размещения: Around, Left/Right, Top, Dynamic.
-  - Тексты берутся из LRCLIB (синхронизированные по времени) и lyrics.ovh и кешируются в `config/shadowvisuals/lyrics/`.
+  - Тексты берутся из LRCLIB (синхронизированные по времени) и lyrics.ovh и кешируются в `config/nyxveravisuals/lyrics/`.
   - Если текст не найден, показывается «Lyrics not found».
   - Кнопка «Предпросмотр» показывает демо-строки, чтобы настроить вид без музыки.
 - **Player**: Jump Circle, Trails, Hit Particles, Hit Sound, Hit Color, View Model, Swing Animation.
@@ -41,7 +41,7 @@
 
 ## Конфигурация
 
-Файлы лежат в `.minecraft/config/shadowvisuals/`:
+Файлы лежат в `.minecraft/config/nyxveravisuals/`:
 
 | Файл | Содержимое |
 |---|---|
@@ -78,9 +78,9 @@ export JAVA_HOME=/path/to/jdk-25
 ## Структура
 
 ```
-dev.shadowvisuals
-├── ShadowVisuals        точка входа Fabric, регистрация колбэков
-├── ShadowClient         контейнер сервисов и жизненный цикл
+dev.nyxveravisuals
+├── NyxveraVisuals        точка входа Fabric, регистрация колбэков
+├── NyxveraClient         контейнер сервисов и жизненный цикл
 ├── core                 настройки клиента, сессия, логирование, звуки
 ├── event                шина событий и события (tick, render 2D/3D, ввод, мир)
 ├── module               Module, ModuleManager, категории
@@ -102,9 +102,9 @@ dev.shadowvisuals
 2. Объявите настройки через `settings().add(...)`, подпишитесь на события через `on(Event.class, handler)`. Подписки активны только пока модуль включён.
 3. Если модуль меняет состояние игры, верните его в `onDisable()`.
 4. Зарегистрируйте модуль в `modules/ModuleCatalog`.
-5. Добавьте строки `module.<id>.name`, `module.<id>.description` и `setting.<id>` во все файлы `assets/shadowvisuals/i18n/*.json`. Тест `shippedLanguagesDefineTheSameKeys` проверяет, что набор ключей во всех языках совпадает.
+5. Добавьте строки `module.<id>.name`, `module.<id>.description` и `setting.<id>` во все файлы `assets/nyxveravisuals/i18n/*.json`. Тест `shippedLanguagesDefineTheSameKeys` проверяет, что набор ключей во всех языках совпадает.
 
 ### Как добавить язык
 
-1. Добавьте файл `assets/shadowvisuals/i18n/<код>.json` с теми же ключами, что в `en_us.json`.
+1. Добавьте файл `assets/nyxveravisuals/i18n/<код>.json` с теми же ключами, что в `en_us.json`.
 2. Добавьте константу в `Localization.Language`. Недостающие строки берутся из английского.

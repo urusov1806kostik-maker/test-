@@ -28,7 +28,7 @@ fabricApi {
 	// Client game tests: real game launches (headless via Xvfb in CI) that drive the GUI and take screenshots.
 	configureTests {
 		createSourceSet = true
-		modId = "shadowvisuals-gametest"
+		modId = "nyxveravisuals-gametest"
 		enableGameTests = false
 		enableClientGameTests = true
 		eula = true
@@ -36,12 +36,12 @@ fabricApi {
 }
 
 loom {
-	accessWidenerPath = file("src/main/resources/shadowvisuals.accesswidener")
+	accessWidenerPath = file("src/main/resources/nyxveravisuals.accesswidener")
 
 	runs {
 		client {
 			client()
-			configName = "Shadow Visuals Client"
+			configName = "NyxveraVisuals Client"
 			ideConfigGenerated true
 		}
 	}

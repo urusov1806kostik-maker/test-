@@ -1,4 +1,4 @@
-# Shadow Visuals — состояние проекта
+# NyxveraVisuals — состояние проекта
 
 Ветка: `claude/modest-davinci-s2z7ta` (запушено). Fabric 1.21.11, Mojang mappings, Loom 1.18 (`net.fabricmc.fabric-loom-remap`), Fabric API 0.141.6+1.21.11, Loader 0.19.5.
 
@@ -9,12 +9,12 @@
 - Живой тест: `xvfb-run -a -s "-screen 0 1920x1080x24" ./gradlew --no-daemon runClientGameTest`; скриншоты в `build/run/clientGameTest/screenshots/`.
 - Исходники MC 1.21.11: `/home/user/ref/mc`, Fabric API: `/home/user/ref/fabric`.
 - Переводы: scratchpad `.../scratchpad/i18n/` (`*.py` — dict `T` key:(en,ru); `uk_ua.txt` — key=uk); `python3 gen.py` пишет en_us/ru_ru/uk_ua.json и сообщает о недостающих uk-ключах.
-- `shadowvisuals.mixins.json` (client) перегенерировать из файлов `dev/shadowvisuals/mixin/*.java`.
+- `nyxveravisuals.mixins.json` (client) перегенерировать из файлов `dev/nyxveravisuals/mixin/*.java`.
 - Без `cd` в bash — абсолютные пути.
 
 ## Готово
 - Ядро: EventBus, Module/ModuleManager, Settings (все типы), ConfigManager (debounce, бэкапы, миграции), ProfileManager, ClientPreferences, Localization (en/ru, uk готов архитектурно), Friends, Waypoints, Notifications, анимации, ThemeManager (5 пресетов), CombatTracker, UiSounds.
-- Рендер: Renderer2D (SDF шейдеры), SDF-шрифт Inter (FreeType), полигоны, WorldRenderer3D, WorldProjection, ShadowPipelines.
+- Рендер: Renderer2D (SDF шейдеры), SDF-шрифт Inter (FreeType), полигоны, WorldRenderer3D, WorldProjection, NyxveraPipelines.
 - UI: все компоненты, оверлеи, ClickGUI (все страницы), HudEditor, ScreenManager.
 - HUD: Watermark, ActiveModules, Keybinds, FPS, Ping, Coordinates, BPS, Compass, PotionEffects, Armor, Inventory, ItemCounter, TargetHud, SessionInfo, ServerInfo; FunTime: CooldownHud, WarningsHud; NotificationRenderer; VanillaHudOverrides.
 - Модули: RecordingMode; visual: FullBright, HitColor, ViewModel, SwingAnimation, FireOverlay, OverlayControl, ParticleModifier; world: TimeChanger, WeatherControl, FogControl, WorldColor, SkyColor, AmbientColor; camera: Zoom, FreeLook, CameraSettings, HurtCamera, ViewBobbing, FovControl; iface: CustomCrosshair/Hotbar/Scoreboard/Tab/BossBar, ChatVisuals, CustomTooltips.

@@ -1,23 +1,23 @@
 {
 	"schemaVersion": 1,
-	"id": "shadowvisuals",
+	"id": "nyxveravisuals",
 	"version": "${version}",
-	"name": "Shadow Visuals",
+	"name": "NyxveraVisuals",
 	"description": "A modern client-side visual enhancement suite: HUD, interface, rendering and quality-of-life visuals.",
 	"authors": [
-		"Shadow Visuals Team"
+		"NyxveraVisuals Team"
 	],
 	"license": "All-Rights-Reserved",
-	"icon": "assets/shadowvisuals/icon.png",
+	"icon": "assets/nyxveravisuals/icon.png",
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"dev.shadowvisuals.ShadowVisuals"
+			"dev.nyxveravisuals.NyxveraVisuals"
 		]
 	},
-	"accessWidener": "shadowvisuals.accesswidener",
+	"accessWidener": "nyxveravisuals.accesswidener",
 	"mixins": [
-		"shadowvisuals.mixins.json"
+		"nyxveravisuals.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.19.5",

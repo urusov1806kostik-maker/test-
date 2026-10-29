@@ -1,0 +1,34 @@
+{
+	"required": true,
+	"package": "dev.nyxveravisuals.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"AvatarRendererMixin",
+		"CameraMixin",
+		"ChatBackgroundMixin",
+		"ChatComponentMixin",
+		"ClientLevelDataMixin",
+		"FogRendererMixin",
+		"GameRendererMixin",
+		"GuiOverlayMixin",
+		"ItemInHandRendererMixin",
+		"KeyboardHandlerMixin",
+		"LevelMixin",
+		"LevelRendererMixin",
+		"LightTextureMixin",
+		"LivingEntityMixin",
+		"MouseHandlerMixin",
+		"MouseTurnMixin",
+		"ParticleEngineMixin",
+		"RenderTypesMixin",
+		"ScreenEffectRendererMixin",
+		"SkyRendererMixin",
+		"TooltipRenderUtilMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}
