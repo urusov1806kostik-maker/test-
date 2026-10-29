@@ -47,6 +47,9 @@ local function onBegan(input, gp)
 	local t = input.UserInputType
 	if t == UIT.Keyboard then
 		local k = input.KeyCode
+		if gp and k ~= KC.Escape then
+			return -- печать в чате / текстовом поле
+		end
 		local slot = SLOT_KEYS[k]
 		if slot then
 			local id = UI.EquippedAt(slot)

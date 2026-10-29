@@ -10,6 +10,8 @@ failed=()
 step() { echo "== $*"; "$@" || failed+=("$*"); }
 step luau run_config.luau
 step luau smoke.luau
+step luau run_server.luau
+step luau run_halloween.luau
 if [ ${#failed[@]} -gt 0 ]; then
 	echo "FAILED: ${failed[*]}"
 	exit 1
