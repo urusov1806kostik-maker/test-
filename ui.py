@@ -11,8 +11,8 @@ from rich.text import Text
 console = Console(highlight=False)
 
 ACCENT = "#22c55e"   # зелёный «деньги»
-GOLD = "#facc15"
-DIM = "grey50"
+GOLD = "#4ade80"   # светло-зелёный (всё в зелёном стиле)
+DIM = "#6b8f71"    # приглушённый зелёный
 
 COMMANDS = {
     "/tiktok": "TikTok: тренды, идеи, сценарии, видео, заработок",
@@ -71,8 +71,8 @@ def logo() -> None:
     lines = [x.ljust(w) for x in lines]  # одинаковая ширина — логотип не «едет» при центрировании
     n = len(lines)
     for i, line in enumerate(lines):
-        # градиент зелёный → золотой
-        c = ACCENT if i < n / 2 else GOLD
+        # градиент: тёмно-зелёный сверху → светло-зелёный снизу
+        c = ["#15803d", "#16a34a", "#22c55e", "#22c55e", "#4ade80", "#86efac"][min(i, 5)] if n > 4 else ACCENT
         pad = " " * max(0, (console.width - w) // 2)
         console.print(Text(pad + line, style=f"bold {c}"), overflow="crop", no_wrap=True)
     console.print(Text("твой ИИ-агент для компа, Инсты и TikTok", style=DIM), justify="center")
