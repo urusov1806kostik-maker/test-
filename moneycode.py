@@ -16,8 +16,11 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
+import urllib.error
+
 import anthropic
 
+import local
 import tools
 import ui
 from tools import BASE, HANDLERS, TOOLS, load_knowledge, load_lessons, load_memory
@@ -38,8 +41,19 @@ def save_config(cfg: dict) -> None:
 
 
 cfg = load_config()
-MODEL = cfg.get("model", DEFAULT_MODEL)
+MODEL = cfg.get("model", DEFAULT_MODEL)          # облачный мозг
+LOCAL_MODEL = cfg.get("local_model", local.DEFAULT_LOCAL)  # свой мозг на компе
 client = None
+
+
+def brain() -> str:
+    return cfg.get("brain", "local")
+
+
+def brain_name() -> str:
+    if brain() == "local":
+        return local.LOCAL_MODELS.get(LOCAL_MODEL, LOCAL_MODEL).split(" —")[0]
+    return ui.MODELS.get(MODEL, MODEL).split(" —")[0]
 
 # Веб-поиск (выполняется на сервере)
 ALL_TOOLS = TOOLS + [{"type": "web_search_20260209", "name": "web_search"}]
@@ -93,6 +107,123 @@ def system_prompt() -> list:
             {"type": "text", "text": dynamic}]
 
 
+# ---------- Свой мозг (локальный) ----------
+KNOWLEDGE_PARTS = local.split_knowledge(load_knowledge())
+LOCAL_SKIP = {"screenshot", "mouse"}  # локальная модель не видит картинки — работает через browser/команды
+LOCAL_EXTRA = [
+    {"name": "web_search", "description": "Поиск в интернете. Возвращает ссылки и кратко.",
+     "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
+    {"name": "knowledge", "description": "Найти в своей базе знаний инструкцию по теме (instagram, tiktok, сайт, видео, windows, код, заработок...). Вызывай перед незнакомой задачей.",
+     "input_schema": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}},
+]
+LOCAL_HANDLERS = dict(HANDLERS, web_search=local.web_search,
+                      knowledge=lambda inp: [{"type": "text", "text": local.knowledge_search(KNOWLEDGE_PARTS, inp["topic"])}])
+
+
+def local_prompt() -> str:
+    mem = "\n".join(f"{i}. {m}" for i, m in enumerate(load_memory())) or "(пока пусто)"
+    topics = ", ".join(t for t, _ in KNOWLEDGE_PARTS[:80])
+    return f"""Ты — Moneycode, личный ИИ-помощник пользователя на его компьютере ({platform.system()}). Твоё имя — Moneycode.
+Говори по-русски, коротко и по делу. Оформляй ответы в Markdown.
+
+Ты можешь вызывать инструменты: run_command (команды Windows), read_file/write_file, browser (сайты, Instagram, TikTok),
+keyboard, open_app, clipboard, wait, make_video, make_image, web_search, memory, learn, knowledge.
+Правила:
+- Перед незнакомой задачей вызови knowledge с темой — там пошаговые инструкции.
+- Делай по шагам и проверяй результат (browser read, dir, чтение файла).
+- Пароли не спрашивай: если нужен вход — пусть пользователь войдёт сам в окне браузера.
+- Пиши людям и публикуй только после «да» пользователя. Никакого спама, накруток и обмана.
+- Ничего не удаляй без прямой просьбы.
+- Важное о пользователе сохраняй через memory, полезный опыт — через learn.
+
+Темы базы знаний: {topics}
+
+Память о пользователе:
+{mem}
+
+Уроки из опыта:
+{load_lessons()[-3000:] or "(пока нет)"}"""
+
+
+def ask_local(messages: list) -> None:
+    tools_spec = local.to_ollama_tools(TOOLS + LOCAL_EXTRA, skip=LOCAL_SKIP)
+    for _ in range(30):  # защита от зацикливания
+        with ui.console.status("[bold #22c55e]думаю…[/]", spinner="dots"):
+            msg = local.chat(LOCAL_MODEL, [{"role": "system", "content": local_prompt()}] + messages, tools_spec)
+        calls = msg.get("tool_calls") or []
+        entry = {"role": "assistant", "content": msg.get("content", "")}
+        if calls:
+            entry["tool_calls"] = calls
+        messages.append(entry)
+        text = local.strip_think(msg.get("content"))
+        if text:
+            ui.agent_says(text)
+        if not calls:
+            return
+        for c in calls:
+            fn = c.get("function", {})
+            name, args = fn.get("name", ""), fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {}
+            ui.tool_call(name, json.dumps(args, ensure_ascii=False))
+            try:
+                if name in LOCAL_SKIP or name not in LOCAL_HANDLERS:
+                    raise ValueError(f"нет инструмента {name}")
+                out = LOCAL_HANDLERS[name](args)
+                res = "\n".join(b["text"] if b["type"] == "text" else "(картинка не передана)" for b in out)
+            except Exception as e:
+                res = f"Ошибка: {e}"
+            messages.append({"role": "tool", "content": res[:8000], "tool_name": name})
+    ui.info("(слишком много шагов — остановился. Напиши «продолжай», если надо)")
+
+
+def prepare_brain() -> bool:
+    """Готовит выбранный мозг. False — не получилось."""
+    global client
+    if brain() == "cloud":
+        if client is None:
+            client = anthropic.Anthropic(api_key=get_api_key())
+        return True
+    from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
+    with Progress(TextColumn("[#22c55e]{task.description}"), BarColumn(complete_style="#22c55e"),
+                  DownloadColumn(), console=ui.console, transient=True) as prog:
+        task = prog.add_task("подготовка", total=None)
+
+        def on_progress(j):
+            prog.update(task, description=j.get("status", "")[:40],
+                        total=j.get("total") or None, completed=j.get("completed") or 0)
+        err = local.ensure_ready(LOCAL_MODEL, tools.confirm, ui.info, on_progress)
+    if err:
+        ui.error(err)
+        return False
+    return True
+
+
+def choose_brain(first=False) -> bool:
+    """Выбор мозга. True — мозг поменялся."""
+    global MODEL, LOCAL_MODEL
+    opts = [(("local", m), "🏠 " + d) for m, d in local.LOCAL_MODELS.items()]
+    opts += [(("cloud", m), "☁  " + d + " (нужен ключ)") for m, d in ui.MODELS.items()]
+    cur = ("local", LOCAL_MODEL) if brain() == "local" else ("cloud", MODEL)
+    title = "выбери мозг Moneycode (потом можно сменить в Настройках)" if first else "мозг Moneycode"
+    k = ui.pick(title, opts, default=cur if not first else ("local", local.DEFAULT_LOCAL))
+    if not k:
+        if first:
+            cfg["brain"] = "local"
+            save_config(cfg)
+        return False
+    cfg["brain"] = k[0]
+    if k[0] == "local":
+        LOCAL_MODEL = cfg["local_model"] = k[1]
+    else:
+        MODEL = cfg["model"] = k[1]
+    save_config(cfg)
+    return k != cur
+
+
 def call_model(messages: list):
     kwargs = dict(
         model=MODEL,
@@ -116,6 +247,8 @@ def call_model(messages: list):
 
 def ask(messages: list) -> None:
     """Агентный цикл: модель думает → вызывает инструменты → получает результат → снова думает."""
+    if brain() == "local":
+        return ask_local(messages)
     while True:
         resp = call_model(messages)
         messages.append({"role": "assistant", "content": resp.content})
@@ -164,6 +297,8 @@ def safe_ask(messages: list, question: str) -> None:
         ui.error(f"Ошибка API {e.status_code}: {e.message}")
     except anthropic.APIConnectionError:
         ui.error("Нет связи с сервером.")
+    except (urllib.error.URLError, ConnectionError, RuntimeError, TimeoutError) as e:
+        ui.error(f"Свой мозг не отвечает: {e}. Перезапусти Moneycode (движок запустится сам).")
     del messages[start:]
 
 
@@ -228,7 +363,7 @@ def train(n: int) -> None:
 
 
 def status() -> str:
-    m = ui.MODELS.get(MODEL, MODEL).split(" —")[0]
+    m = brain_name()
     safe = "🛡 безопасно" if tools.SAFE_MODE else "⚡ без подтверждений"
     lessons = load_lessons().count("\n- ")
     return f"💸 {m} │ {safe} │ память {len(load_memory())} │ уроки {lessons} │ / команды │ Ctrl+C меню"
@@ -243,29 +378,29 @@ def run_menu(title: str, menu: list, messages: list) -> bool:
     return True
 
 
-def settings_menu() -> None:
-    global MODEL
+def settings_menu() -> bool:
+    """Настройки. True — сменился мозг (диалог надо начать заново)."""
+    global client
+    changed = False
     while True:
-        k = ui.pick("настройки", [
-            ("model", f"🧠 Мозг: {ui.MODELS[MODEL].split(' —')[0]}"),
-            ("safe", "🛡 Подтверждения: " + ("включены" if tools.SAFE_MODE else "выключены")),
-            ("key", "🔑 Сменить API-ключ"),
-            (None, "← назад"),
-        ])
+        opts = [("brain", f"🧠 Мозг: {brain_name()}"),
+                ("safe", "🛡 Подтверждения: " + ("включены" if tools.SAFE_MODE else "выключены"))]
+        if brain() == "cloud":
+            opts.append(("key", "🔑 Сменить API-ключ"))
+        opts.append((None, "← назад"))
+        k = ui.pick("настройки", opts)
         if k is None:
-            return
-        if k == "model":
-            m = ui.pick("мозг Moneycode", [(n, d) for n, d in ui.MODELS.items()], default=MODEL)
-            if m:
-                MODEL = m
-                cfg["model"] = m
-                save_config(cfg)
+            return changed
+        if k == "brain":
+            if choose_brain():
+                changed = True
+                client = None if brain() == "local" else client
+                prepare_brain()
         elif k == "safe":
             tools.SAFE_MODE = not tools.SAFE_MODE
         elif k == "key":
             cfg.pop("api_key", None)
             save_config(cfg)
-            global client
             client = anthropic.Anthropic(api_key=get_api_key())
 
 
@@ -303,6 +438,8 @@ def selftest() -> None:
     import pyperclip  # noqa: F401
     assert "TikTok" in load_knowledge() and "САЙТЫ" in load_knowledge(), "knowledge.md не вшит"
     assert Path(imageio_ffmpeg.get_ffmpeg_exe()).exists(), "нет ffmpeg"
+    assert len(KNOWLEDGE_PARTS) > 20 and "TikTok" in local.knowledge_search(KNOWLEDGE_PARTS, "tiktok хуки")
+    assert local.to_ollama_tools(TOOLS + LOCAL_EXTRA, skip=LOCAL_SKIP)
     out = Path(tempfile.mkdtemp()) / "t.mp4"
     r = tools.make_video({"slides": [{"text": "Тест", "seconds": 1}, {"text": "Ещё", "seconds": 1}], "output": str(out)})
     assert out.exists() and out.stat().st_size > 1000, r
@@ -344,7 +481,9 @@ def chat(inp, messages: list) -> list:
             tools.SAFE_MODE = not tools.SAFE_MODE
             ui.info("Подтверждения " + ("включены 🛡" if tools.SAFE_MODE else "выключены ⚡ — осторожно"))
         elif cmd == "/model":
-            settings_menu()
+            if settings_menu():
+                messages = []
+                ui.info("Мозг сменён — новый диалог.")
         elif cmd == "/train":
             train(int(arg) if arg.strip().isdigit() else len(TRAINING))
         elif cmd == "/tiktok":
@@ -365,7 +504,12 @@ def main():
         return selftest()
     ui.console.clear()
     ui.logo_only()
-    client = anthropic.Anthropic(api_key=get_api_key())
+    if "brain" not in cfg:  # первый запуск — выбрать мозг
+        choose_brain(first=True)
+    while not prepare_brain():
+        if not choose_brain():
+            ui.info("Без мозга Moneycode не работает. Пока!")
+            return
     inp = ui.Input(BASE / ".moneycode_history", status)
     messages = []
     menus = {"tiktok": ("TikTok", ui.TIKTOK_MENU), "video": ("видео", ui.VIDEO_MENU), "site": ("сайты", ui.SITE_MENU)}
@@ -387,7 +531,8 @@ def main():
                               + "\n\n**Уроки:**\n" + (load_lessons() or "пока нет — запусти тренировку"))
                 ui.console.input("[#6b8f71]Enter — в меню[/]")
             elif k == "settings":
-                settings_menu()
+                if settings_menu():
+                    messages = []
     except SystemExit:
         pass
     ui.info("Пока! 💸")
