@@ -1,0 +1,53 @@
+name: Build Moneycode.exe
+
+on:
+  push:
+    branches: [moneycode]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build exe
+        run: >
+          pyinstaller --noconfirm --onefile --console --name Moneycode
+          --add-data "knowledge.md;."
+          --collect-all playwright
+          --hidden-import pyautogui --hidden-import pyperclip
+          moneycode.py
+
+      - name: Self-test exe
+        shell: cmd
+        run: dist\Moneycode.exe --selftest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Moneycode
+          path: dist/Moneycode.exe
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: moneycode-v${{ github.run_number }}
+          name: Moneycode v${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: dist/Moneycode.exe
+          body: |
+            Скачай Moneycode.exe и запусти. При первом запуске он попросит API-ключ Anthropic (console.anthropic.com).
+            Тренировка: напиши /train 10 (или /train 0 — бесконечно, Ctrl+C — стоп).
