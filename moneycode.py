@@ -41,7 +41,7 @@ cfg = load_config()
 MODEL = cfg.get("model", DEFAULT_MODEL)
 client = None
 
-# Серверный веб-поиск (работает на стороне Anthropic)
+# Веб-поиск (выполняется на сервере)
 ALL_TOOLS = TOOLS + [{"type": "web_search_20260209", "name": "web_search"}]
 
 
@@ -51,8 +51,8 @@ def get_api_key() -> str:
         return os.environ["ANTHROPIC_API_KEY"]
     if cfg.get("api_key"):
         return cfg["api_key"]
-    ui.info("Первый запуск. Нужен API-ключ Anthropic (console.anthropic.com → API Keys).")
-    key = ui.console.input("[bold]Вставь ключ: [/]").strip()
+    ui.info("Первый запуск. Нужен API-ключ (начинается на sk-ant-). Где взять — в README на GitHub.")
+    key = ui.console.input("[bold #22c55e]Вставь ключ: [/]").strip()
     cfg["api_key"] = key
     save_config(cfg)
     ui.info(f"Сохранил в {CONFIG}\n")
@@ -62,6 +62,8 @@ def get_api_key() -> str:
 def system_prompt() -> list:
     # Неизменная часть (правила + база знаний) — первым блоком: так она кэшируется и стоит дешевле.
     static = f"""Ты — Moneycode, личный ИИ-помощник пользователя. Работаешь прямо на его компьютере ({platform.system()}).
+Твоё имя — Moneycode. Это собственный ИИ-проект пользователя. Не рассказывай, на какой модели или у какой компании
+ты работаешь, и не называй сторонние ИИ-бренды как своё имя; если спросят «кто ты» — ты Moneycode.
 Говоришь по-русски, коротко и по делу, как человек. Ответы оформляй в Markdown (списки, **жирный**), без воды.
 
 Что умеешь: видеть экран (screenshot), кликать и печатать (mouse, keyboard), открывать программы (open_app),
@@ -226,16 +228,67 @@ def train(n: int) -> None:
 
 
 def status() -> str:
-    m = MODEL.replace("claude-", "").replace("-5-5", " 5.5")
+    m = ui.MODELS.get(MODEL, MODEL).split(" —")[0]
     safe = "🛡 безопасно" if tools.SAFE_MODE else "⚡ без подтверждений"
     lessons = load_lessons().count("\n- ")
-    return f"💸 Moneycode │ {m} │ {safe} │ память {len(load_memory())} │ уроки {lessons} │ / меню │ Ctrl+C стоп"
+    return f"💸 {m} │ {safe} │ память {len(load_memory())} │ уроки {lessons} │ / команды │ Ctrl+C меню"
 
 
-def run_menu(title: str, menu: list, messages: list) -> None:
-    i = ui.choose(title, [name for name, _ in menu])
-    if i is not None:
-        safe_ask(messages, menu[i][1])
+def run_menu(title: str, menu: list, messages: list) -> bool:
+    """Подменю задач. True — задача запущена (дальше можно продолжить в чате)."""
+    i = ui.pick(title, [(k, name) for k, (name, _) in enumerate(menu)] + [(None, "← назад")])
+    if i is None:
+        return False
+    safe_ask(messages, menu[i][1])
+    return True
+
+
+def settings_menu() -> None:
+    global MODEL
+    while True:
+        k = ui.pick("настройки", [
+            ("model", f"🧠 Мозг: {ui.MODELS[MODEL].split(' —')[0]}"),
+            ("safe", "🛡 Подтверждения: " + ("включены" if tools.SAFE_MODE else "выключены")),
+            ("key", "🔑 Сменить API-ключ"),
+            (None, "← назад"),
+        ])
+        if k is None:
+            return
+        if k == "model":
+            m = ui.pick("мозг Moneycode", [(n, d) for n, d in ui.MODELS.items()], default=MODEL)
+            if m:
+                MODEL = m
+                cfg["model"] = m
+                save_config(cfg)
+        elif k == "safe":
+            tools.SAFE_MODE = not tools.SAFE_MODE
+        elif k == "key":
+            cfg.pop("api_key", None)
+            save_config(cfg)
+            global client
+            client = anthropic.Anthropic(api_key=get_api_key())
+
+
+def train_menu() -> None:
+    n = ui.pick("тренировка", [(10, "10 заданий"), (len(TRAINING), f"все {len(TRAINING)} заданий"),
+                               (0, "♾ бесконечно (Ctrl+C — стоп)"), (None, "← назад")])
+    if n is not None:
+        train(n)
+
+
+def main_menu() -> str | None:
+    ui.console.clear()
+    ui.logo_only()
+    return ui.pick("что делаем?", [
+        ("chat", "💬  Чат — просто напиши задачу"),
+        ("tiktok", "🎵  TikTok — тренды, видео, заработок"),
+        ("video", "🎬  Видео — ролики с озвучкой, обложки"),
+        ("site", "🌐  Сайты — сделать и выложить"),
+        ("train", "🧠  Тренировка — учить Moneycode"),
+        ("mem", "📒  Память и уроки"),
+        ("settings", "⚙   Настройки"),
+        ("exit", "🚪  Выход"),
+    ])
 
 
 def selftest() -> None:
@@ -259,50 +312,39 @@ def selftest() -> None:
     print("SELFTEST OK")
 
 
-def main():
-    global client, MODEL
-    if "--selftest" in sys.argv:
-        return selftest()
-    ui.console.clear()
-    ui.logo()
-    client = anthropic.Anthropic(api_key=get_api_key())
-    inp = ui.Input(BASE / ".moneycode_history", status)
-    messages = []
+def chat(inp, messages: list) -> list:
+    """Чат-режим. Возврат в меню — /menu или Ctrl+C на пустой строке."""
+    ui.info("Пиши задачу. «/» — команды, Ctrl+C — главное меню.")
     while True:
         try:
             q = inp.read().strip()
         except KeyboardInterrupt:
-            continue
+            return messages
         except EOFError:
-            break
+            raise SystemExit
         if not q:
             continue
         cmd, _, arg = q.partition(" ")
         if cmd == "/exit":
-            break
+            raise SystemExit
+        elif cmd == "/menu":
+            return messages
         elif cmd == "/help":
             ui.help_table()
         elif cmd == "/clear":
             ui.console.clear()
-            ui.logo()
         elif cmd == "/new":
             messages = []
             ui.info("Новый диалог.")
         elif cmd == "/mem":
             ui.agent_says("\n".join(f"{i}. {m}" for i, m in enumerate(load_memory())) or "Память пуста")
         elif cmd == "/lessons":
-            ui.agent_says(load_lessons() or "Уроков пока нет — запусти /train")
+            ui.agent_says(load_lessons() or "Уроков пока нет — запусти тренировку")
         elif cmd == "/safe":
             tools.SAFE_MODE = not tools.SAFE_MODE
             ui.info("Подтверждения " + ("включены 🛡" if tools.SAFE_MODE else "выключены ⚡ — осторожно"))
         elif cmd == "/model":
-            names = list(ui.MODELS)
-            i = ui.choose("модель", [("● " if n == MODEL else "  ") + ui.MODELS[n] for n in names])
-            if i is not None:
-                MODEL = names[i]
-                cfg["model"] = MODEL
-                save_config(cfg)
-                ui.info(f"Модель: {ui.MODELS[MODEL]}")
+            settings_menu()
         elif cmd == "/train":
             train(int(arg) if arg.strip().isdigit() else len(TRAINING))
         elif cmd == "/tiktok":
@@ -312,9 +354,43 @@ def main():
         elif cmd == "/video":
             run_menu("видео", ui.VIDEO_MENU, messages)
         elif cmd.startswith("/"):
-            ui.error(f"Нет команды {cmd}. Набери / для меню.")
+            ui.error(f"Нет команды {cmd}. Набери / для списка.")
         else:
             safe_ask(messages, q)
+
+
+def main():
+    global client
+    if "--selftest" in sys.argv:
+        return selftest()
+    ui.console.clear()
+    ui.logo_only()
+    client = anthropic.Anthropic(api_key=get_api_key())
+    inp = ui.Input(BASE / ".moneycode_history", status)
+    messages = []
+    menus = {"tiktok": ("TikTok", ui.TIKTOK_MENU), "video": ("видео", ui.VIDEO_MENU), "site": ("сайты", ui.SITE_MENU)}
+    try:
+        while True:
+            k = main_menu()
+            if k in (None, "exit"):
+                break
+            if k == "chat":
+                messages = chat(inp, messages)
+            elif k in menus:
+                if run_menu(*menus[k], messages):
+                    messages = chat(inp, messages)  # после задачи — можно продолжить разговор
+            elif k == "train":
+                train_menu()
+                ui.console.input("[#6b8f71]Enter — в меню[/]")
+            elif k == "mem":
+                ui.agent_says("**Память:**\n" + ("\n".join(f"{i}. {m}" for i, m in enumerate(load_memory())) or "пусто")
+                              + "\n\n**Уроки:**\n" + (load_lessons() or "пока нет — запусти тренировку"))
+                ui.console.input("[#6b8f71]Enter — в меню[/]")
+            elif k == "settings":
+                settings_menu()
+    except SystemExit:
+        pass
+    ui.info("Пока! 💸")
 
 
 if __name__ == "__main__":

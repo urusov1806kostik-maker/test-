@@ -19,6 +19,7 @@ COMMANDS = {
     "/site": "сайты: лендинг, портфолио, выложить в интернет",
     "/video": "видео: ролик с озвучкой, обложка, сценарий",
     "/train": "тренировка: /train 10, /train 0 — бесконечно",
+    "/menu": "главное меню (или Ctrl+C)",
     "/new": "новый диалог",
     "/model": "выбрать модель (умнее / дешевле)",
     "/safe": "вкл/выкл подтверждение опасных действий",
@@ -30,9 +31,9 @@ COMMANDS = {
 }
 
 MODELS = {
-    "claude-opus-5-5": "Opus 5.5 — самый умный (по умолчанию)",
-    "claude-sonnet-5-5": "Sonnet 5.5 — быстрее и в 2 раза дешевле",
-    "claude-haiku-5-5": "Haiku 5.5 — самый дешёвый, для простых задач",
+    "claude-opus-5-5": "Moneycode Max — самый умный (по умолчанию)",
+    "claude-sonnet-5-5": "Moneycode Pro — быстрее и в 2 раза дешевле",
+    "claude-haiku-5-5": "Moneycode Lite — самый дешёвый, для простых задач",
 }
 
 TIKTOK_MENU = [
@@ -65,7 +66,7 @@ VIDEO_MENU = [
 ]
 
 
-def logo() -> None:
+def logo_only() -> None:
     lines = LOGO_BIG if console.width >= 84 else LOGO_SMALL
     w = max(len(x) for x in lines)
     lines = [x.ljust(w) for x in lines]  # одинаковая ширина — логотип не «едет» при центрировании
@@ -77,6 +78,10 @@ def logo() -> None:
         console.print(Text(pad + line, style=f"bold {c}"), overflow="crop", no_wrap=True)
     console.print(Text("твой ИИ-агент для компа, Инсты и TikTok", style=DIM), justify="center")
     console.print()
+
+
+def logo() -> None:
+    logo_only()
     t = Table.grid(padding=(0, 2))
     t.add_column(style=f"bold {ACCENT}", justify="right")
     t.add_column(style=DIM)
@@ -124,6 +129,29 @@ def choose(title: str, items: list) -> int | None:
     if ans.isdigit() and 1 <= int(ans) <= len(items):
         return int(ans) - 1
     return None
+
+
+PICK_STYLE = None
+
+
+def pick(title: str, options: list, default=None):
+    """Меню со стрелками ↑↓ и Enter. options = [(значение, текст)]. Esc/Ctrl+C — None."""
+    global PICK_STYLE
+    try:
+        from prompt_toolkit.shortcuts import choice
+        from prompt_toolkit.styles import Style
+        PICK_STYLE = PICK_STYLE or Style.from_dict({
+            "frame.border": ACCENT, "selected-option": f"bold {ACCENT}", "number": DIM,
+            "bottom-toolbar": "noreverse #6b8f71",
+        })
+        return choice(message=[("bold " + ACCENT, title)], options=options, default=default,
+                      style=PICK_STYLE, symbol="❯", show_frame=True,
+                      bottom_toolbar=" ↑↓ выбрать · Enter ок · Ctrl+C назад")
+    except KeyboardInterrupt:
+        return None
+    except Exception:
+        i = choose(title, [str(t) for _, t in options])  # запасной вариант — по номеру
+        return None if i is None else options[i][0]
 
 
 class Input:

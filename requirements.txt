@@ -4,5 +4,5 @@ pyperclip
 pillow
 playwright
 rich
-prompt_toolkit
+prompt_toolkit>=3.0.52
 imageio-ffmpeg
