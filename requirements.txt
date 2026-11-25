@@ -3,3 +3,6 @@ pyautogui
 pyperclip
 pillow
 playwright
+rich
+prompt_toolkit
+imageio-ffmpeg

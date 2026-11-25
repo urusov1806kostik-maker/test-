@@ -13,6 +13,9 @@ pip install -r requirements.txt pyinstaller || (echo Ошибка установ
 pyinstaller --noconfirm --onefile --console --name Moneycode ^
   --add-data "knowledge.md;." ^
   --collect-all playwright ^
+  --collect-all rich ^
+  --collect-all imageio_ffmpeg ^
+  --collect-all prompt_toolkit ^
   --hidden-import pyautogui --hidden-import pyperclip ^
   moneycode.py || (echo Ошибка сборки & pause & exit /b 1)
 

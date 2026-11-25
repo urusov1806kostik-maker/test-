@@ -28,6 +28,9 @@ jobs:
           pyinstaller --noconfirm --onefile --console --name Moneycode
           --add-data "knowledge.md;."
           --collect-all playwright
+          --collect-all rich
+          --collect-all imageio_ffmpeg
+          --collect-all prompt_toolkit
           --hidden-import pyautogui --hidden-import pyperclip
           moneycode.py
 
@@ -50,4 +53,4 @@ jobs:
           files: dist/Moneycode.exe
           body: |
             Скачай Moneycode.exe и запусти. При первом запуске он попросит API-ключ Anthropic (console.anthropic.com).
-            Тренировка: напиши /train 10 (или /train 0 — бесконечно, Ctrl+C — стоп).
+            Набери / — откроется меню: /tiktok, /site, /video, /train. Тренировка: /train 10 (или /train 0 — бесконечно, Ctrl+C — стоп).
