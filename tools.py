@@ -195,6 +195,39 @@ def memory(inp):
     return text("Память:\n" + "\n".join(f"{i}. {m}" for i, m in enumerate(mem)))
 
 
+# ---------- Мелочи: ожидание, буфер, запуск программ ----------
+def wait(inp):
+    import time
+    time.sleep(min(float(inp.get("seconds", 2)), 60))
+    return text("ok")
+
+
+def clipboard(inp):
+    import pyperclip
+    if inp.get("text") is not None:
+        pyperclip.copy(inp["text"])
+        return text("Скопировано в буфер")
+    return text(pyperclip.paste() or "(буфер пуст)")
+
+
+def open_app(inp):
+    """Открыть программу через поиск Пуска (работает для любых установленных программ)."""
+    import time
+    import pyautogui
+    pyautogui.press("win")
+    time.sleep(0.8)
+    try:
+        import pyperclip
+        pyperclip.copy(inp["name"])
+        pyautogui.hotkey("ctrl", "v")
+    except Exception:
+        pyautogui.write(inp["name"], interval=0.03)
+    time.sleep(1.2)
+    pyautogui.press("enter")
+    time.sleep(2)
+    return text(f"Запускаю «{inp['name']}». Сделай screenshot, чтобы проверить.")
+
+
 # ---------- Самообучение: уроки из опыта ----------
 def load_lessons() -> str:
     try:
@@ -216,12 +249,18 @@ def load_knowledge() -> str:
     return ""
 
 
-HANDLERS = {"learn": learn, "screenshot": screenshot, "mouse": mouse, "keyboard": keyboard, "run_command": run_command,
+HANDLERS = {"wait": wait, "clipboard": clipboard, "open_app": open_app, "learn": learn, "screenshot": screenshot, "mouse": mouse, "keyboard": keyboard, "run_command": run_command,
             "read_file": read_file, "write_file": write_file, "browser": browser, "memory": memory}
 
 S = lambda props, req: {"type": "object", "properties": props, "required": req}  # noqa: E731
 
 TOOLS = [
+    {"name": "open_app", "description": "Открыть любую программу по названию через Пуск (Telegram, Блокнот, Chrome, Word...).",
+     "input_schema": S({"name": {"type": "string"}}, ["name"])},
+    {"name": "wait", "description": "Подождать N секунд (до 60), например пока грузится программа.",
+     "input_schema": S({"seconds": {"type": "number"}}, [])},
+    {"name": "clipboard", "description": "Буфер обмена: без text — прочитать, с text — скопировать.",
+     "input_schema": S({"text": {"type": "string"}}, [])},
     {"name": "learn", "description": (
         "Записать урок из опыта, чтобы в следующий раз сделать лучше: что сработало, что нет, "
         "какой селектор/кнопка/команда правильная. Вызывай после задачи, если узнал что-то полезное."),
